@@ -1,0 +1,103 @@
+<div class="chat-container">
+  <app-sidebar></app-sidebar>
+  
+  <div class="chat-main">
+    <div class="chat-header">
+      <div class="header-content">
+        <h2>AI Chatbot</h2>
+        <p>Ask me anything</p>
+      </div>
+    </div>
+
+    @if (currentConversation()) {
+      <div class="messages-container" #messagesContainer>
+        @if (currentConversation()!.messages.length === 0) {
+          <div class="empty-chat">
+            <div class="welcome-message">
+              <svg class="welcome-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
+                <path d="M2 17L12 22L22 17V7L12 12L2 7V17Z"/>
+              </svg>
+              <h3>Welcome to AI Chatbot!</h3>
+              <p>Start a conversation by typing a message below</p>
+              
+              <div class="suggestions">
+                <button 
+                  class="suggestion-chip" 
+                  (click)="messageText.set('What can you help me with?'); sendMessage()"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  What can you help me with?
+                </button>
+                
+                <button 
+                  class="suggestion-chip"
+                  (click)="messageText.set('Explain artificial intelligence in simple terms'); sendMessage()"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
+                    <path d="M2 17L12 22L22 17V7L12 12L2 7V17Z"/>
+                  </svg>
+                  Explain AI
+                </button>
+                
+                <button 
+                  class="suggestion-chip"
+                  (click)="messageText.set('How do I use this chatbot effectively?'); sendMessage()"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 16 16 12 12 8"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                  </svg>
+                  How to use this?
+                </button>
+              </div>
+            </div>
+          </div>
+        } @else {
+          <div class="messages-list">
+            @for (message of currentConversation()!.messages; track message.id) {
+              <app-message-bubble [message]="message"></app-message-bubble>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="input-area">
+        <div class="input-container">
+          <textarea
+            #messageInput
+            [value]="messageText()"
+            (input)="messageText.set($any($event.target).value)"
+            (keydown)="onKeyDown($event)"
+            placeholder="Type your message here..."
+            rows="1"
+            class="message-input"
+          ></textarea>
+          
+          <button 
+            class="send-button" 
+            (click)="sendMessage()"
+            [disabled]="!messageText().trim()"
+            title="Send message (Enter)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="input-footer">
+          <p>Press Enter to send, Shift+Enter for new line</p>
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
