@@ -74,6 +74,29 @@ class ConversationStorage:
     def generate_id(self) -> str:
         return uuid4().hex
 
+    def update_message_feedback(self, conversation_id: str, message_id: str, feedback: str) -> Message:
+        conversations = self.list_conversations()
+        updated_conversations: List[Conversation] = []
+        updated_message: Optional[Message] = None
+
+        for conv in conversations:
+            if conv.id == conversation_id:
+                for message in conv.messages:
+                    if message.id == message_id:
+                        message.feedback = feedback  # type: ignore[assignment]
+                        conv.updated_at = datetime.now(timezone.utc)
+                        updated_message = message
+                        break
+                if updated_message is None:
+                    raise ValueError('Message not found')
+            updated_conversations.append(conv)
+
+        if updated_message is None:
+            raise ValueError('Conversation not found')
+
+        self._write_data({"conversations": [conv.dict(by_alias=True) for conv in updated_conversations]})
+        return updated_message
+
     def _create_empty_conversation_dict(self, title: Optional[str] = None, intro_message: Optional[str] = None) -> Dict:
         now = datetime.now(timezone.utc)
         conversation_dict = {

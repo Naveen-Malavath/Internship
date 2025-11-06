@@ -16,7 +16,7 @@
     
     <div class="message-content">
       <div class="message-header">
-        <span class="message-role">{{ message.role === 'user' ? 'You' : 'AI Assistant' }}</span>
+        <span class="message-role">{{ message.role === 'user' ? 'You' : 'Agent‑1' }}</span>
         <span class="message-time">{{ message.timestamp | date:'short' }}</span>
       </div>
       
@@ -30,10 +30,31 @@
         </div>
       } @else {
         <div class="message-text">{{ message.content }}</div>
+        @if (message.role === 'assistant') {
+          <div class="feedback-buttons">
+            <button
+              type="button"
+              class="feedback-button"
+              [class.active]="message.feedback === 'up'"
+              (click)="onFeedback('up')"
+              [disabled]="message.isLoading"
+              title="Thumbs up"
+            >
+              👍
+            </button>
+            <button
+              type="button"
+              class="feedback-button"
+              [class.active]="message.feedback === 'down'"
+              (click)="onFeedback('down')"
+              [disabled]="message.isLoading"
+              title="Thumbs down"
+            >
+              👎
+            </button>
+          </div>
+        }
       }
     </div>
   </div>
 </div>
-
-
-

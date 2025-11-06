@@ -4,6 +4,7 @@ export interface Message {
   role: 'user' | 'assistant';
   timestamp: string;
   isLoading?: boolean;
+  feedback?: 'up' | 'down';
 }
 
 export interface Conversation {

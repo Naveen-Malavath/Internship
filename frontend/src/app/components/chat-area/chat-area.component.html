@@ -62,7 +62,11 @@
         } @else {
           <div class="messages-list">
             @for (message of currentConversation()!.messages; track message.id) {
-              <app-message-bubble [message]="message"></app-message-bubble>
+              <app-message-bubble
+                [conversationId]="currentConversation()!.id"
+                [message]="message"
+                (feedback)="handleFeedback($event)"
+              ></app-message-bubble>
             }
           </div>
         }

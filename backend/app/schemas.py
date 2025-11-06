@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Callable, List, Optional
+from typing import Callable, List, Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -36,8 +36,10 @@ class LoginResponse(CamelModel):
 class Message(CamelModel):
     id: str
     content: str
-    role: str = Field(regex="^(user|assistant)$")
+    role: Literal['user', 'assistant']
     timestamp: datetime
+    is_loading: bool | None = Field(default=None, alias="isLoading")
+    feedback: Optional[Literal['up', 'down']] = None
 
 
 class MessageCreate(BaseModel):
@@ -54,6 +56,10 @@ class Conversation(CamelModel):
 
 class ConversationCreate(BaseModel):
     title: Optional[str] = None
+
+
+class FeedbackRequest(BaseModel):
+    feedback: Literal['up', 'down']
 
 
 class ConversationList(CamelModel):

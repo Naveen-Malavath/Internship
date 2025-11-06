@@ -51,6 +51,11 @@ export class ChatAreaComponent {
     }
   }
 
+  async handleFeedback(event: { conversationId: string; messageId: string; feedback: 'up' | 'down' }): Promise<void> {
+    console.debug('[Agent1] Feedback click', event);
+    await this.chatService.sendFeedback(event.conversationId, event.messageId, event.feedback);
+  }
+
   onKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();

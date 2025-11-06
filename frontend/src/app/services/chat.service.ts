@@ -16,17 +16,20 @@ export class ChatService {
   currentConversation = this.currentConversationSignal.asReadonly();
 
   constructor(private http: HttpClient) {
+    console.debug('[Agent1] Initialising chat service');
     this.refreshConversations().catch(error => {
       console.error('Failed to load conversations', error);
     });
   }
 
   async refreshConversations(selectConversationId?: string): Promise<void> {
+    console.debug('[Agent1] Refreshing conversations');
     const conversations = await firstValueFrom(
       this.http.get<Conversation[]>(`${API_BASE_URL}/conversations`)
     );
 
     this.conversationsSignal.set(conversations);
+    console.debug('[Agent1] Conversations loaded', conversations.length);
 
     if (conversations.length === 0) {
       this.currentConversationSignal.set(null);
@@ -40,6 +43,7 @@ export class ChatService {
 
   async createNewConversation(title?: string): Promise<void> {
     try {
+      console.debug('[Agent1] Creating new conversation');
       const conversation = await firstValueFrom(
         this.http.post<Conversation>(`${API_BASE_URL}/conversations`, title ? { title } : {})
       );
@@ -50,6 +54,7 @@ export class ChatService {
   }
 
   selectConversation(conversationId: string): void {
+    console.debug('[Agent1] Selecting conversation', conversationId);
     const conversation = this.conversationsSignal().find(conv => conv.id === conversationId);
     if (conversation) {
       this.currentConversationSignal.set(conversation);
@@ -59,8 +64,11 @@ export class ChatService {
   async sendMessage(content: string): Promise<void> {
     const current = this.currentConversationSignal();
     if (!current) {
+      console.warn('[Agent1] Cannot send message without an active conversation');
       return;
     }
+
+    console.debug('[Agent1] Sending prompt', content);
 
     const userMessage: Message = {
       id: `temp-user-${Date.now()}`,
@@ -86,6 +94,7 @@ export class ChatService {
           { content }
         )
       );
+      console.debug('[Agent1] Received features response', updatedConversation.id);
       this.replaceConversation(updatedConversation);
     } catch (error) {
       console.error('Failed to send message', error);
@@ -94,8 +103,24 @@ export class ChatService {
     }
   }
 
+  async sendFeedback(conversationId: string, messageId: string, feedback: 'up' | 'down'): Promise<void> {
+    console.debug('[Agent1] Sending feedback', { conversationId, messageId, feedback });
+    try {
+      const updatedConversation = await firstValueFrom(
+        this.http.post<Conversation>(
+          `${API_BASE_URL}/conversations/${conversationId}/messages/${messageId}/feedback`,
+          { feedback }
+        )
+      );
+      this.replaceConversation(updatedConversation);
+    } catch (error) {
+      console.error('Failed to send feedback', error);
+    }
+  }
+
   async deleteConversation(conversationId: string): Promise<void> {
     try {
+      console.debug('[Agent1] Deleting conversation', conversationId);
       await firstValueFrom(this.http.delete<void>(`${API_BASE_URL}/conversations/${conversationId}`));
       const remainingConversations = this.conversationsSignal().filter(conv => conv.id !== conversationId);
       this.conversationsSignal.set(remainingConversations);
@@ -110,10 +135,12 @@ export class ChatService {
 
   async clearAllConversations(): Promise<void> {
     try {
+      console.debug('[Agent1] Clearing all conversations');
       const conversation = await firstValueFrom(
         this.http.delete<Conversation>(`${API_BASE_URL}/conversations`)
       );
       await this.refreshConversations(conversation.id);
+      console.debug('[Agent1] Conversations cleared');
     } catch (error) {
       console.error('Failed to clear conversations', error);
     }
@@ -150,6 +177,7 @@ export class ChatService {
   }
 
   private replaceConversation(conversation: Conversation): void {
+    console.debug('[Agent1] Updating active conversation', conversation.id);
     this.conversationsSignal.update(conversations => {
       const filtered = conversations.filter(conv => conv.id !== conversation.id);
       return [conversation, ...filtered];
