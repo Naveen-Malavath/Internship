@@ -1,6 +1,7 @@
 import { Component, ElementRef, ViewChild, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+
 import { ChatService } from '../../services/chat.service';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { MessageBubbleComponent } from '../message-bubble/message-bubble.component';
@@ -18,9 +19,9 @@ export class ChatAreaComponent {
 
   currentConversation = this.chatService.currentConversation;
   messageText = signal('');
+  isSending = signal(false);
 
   constructor(private chatService: ChatService) {
-    // Auto-scroll when messages change
     effect(() => {
       const conversation = this.currentConversation();
       if (conversation) {
@@ -29,13 +30,25 @@ export class ChatAreaComponent {
     });
   }
 
-  sendMessage(): void {
+  async sendMessage(): Promise<void> {
     const text = this.messageText().trim();
-    if (!text) return;
+    if (!text || this.isSending()) {
+      return;
+    }
 
-    this.chatService.sendMessage(text);
+    this.isSending.set(true);
     this.messageText.set('');
-    this.messageInput.nativeElement.focus();
+
+    try {
+      await this.chatService.sendMessage(text);
+    } catch (error) {
+      console.error('Failed to send message', error);
+    } finally {
+      this.isSending.set(false);
+      if (this.messageInput) {
+        this.messageInput.nativeElement.focus();
+      }
+    }
   }
 
   onKeyDown(event: KeyboardEvent): void {
@@ -52,6 +65,3 @@ export class ChatAreaComponent {
     }
   }
 }
-
-
-

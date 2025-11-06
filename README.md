@@ -1,226 +1,122 @@
-# AI Chatbot Application
+# AI Chatbot (Angular + FastAPI)
 
-A modern, feature-rich AI chatbot application built with Angular 17. This application provides a beautiful user interface for conversing with an AI assistant, complete with user authentication, conversation management, and a responsive design.
+This project pairs a modern **Angular 17** chat frontend with a lightweight **FastAPI** backend. The frontend provides a polished chat experience, while the backend persists conversations to disk and simulates AI responses. The codebase is ready for you to replace the placeholder AI logic with calls to your preferred LLM provider (OpenAI, Anthropic, Azure AI, etc.).
 
-## Features
-
-### 🔐 Authentication
-- **Email/Password Login**: Secure login with email validation
-- **Password Visibility Toggle**: Show/hide password for better UX
-- **Google Sign-In Ready**: UI prepared for Google OAuth integration
-- **Persistent Sessions**: User sessions saved in localStorage
-
-### 💬 Chat Interface
-- **Real-time Messaging**: Smooth, instant message delivery
-- **Conversation History**: All conversations saved and accessible
-- **Multiple Conversations**: Create and manage multiple chat sessions
-- **Message Timestamps**: Track when messages were sent
-- **Loading Indicators**: Visual feedback while AI is "thinking"
-- **Auto-scroll**: Automatically scrolls to latest messages
-
-### 🎨 Modern UI/UX
-- **Beautiful Gradient Design**: Eye-catching purple gradient theme
-- **Responsive Layout**: Works perfectly on desktop, tablet, and mobile
-- **Smooth Animations**: Polished animations throughout the app
-- **Dark Sidebar**: Professional dark-themed navigation
-- **Collapsible Sidebar**: Save screen space when needed
-- **Suggestion Chips**: Quick start prompts for new conversations
-
-### 📱 User Experience
-- **Keyboard Shortcuts**: Enter to send, Shift+Enter for new line
-- **Empty States**: Helpful guidance when no messages exist
-- **User Profile Display**: Shows current user information
-- **Conversation Titles**: Auto-generated from first message
-- **Delete Conversations**: Remove unwanted conversations
-- **Clear All**: Quickly reset all conversations
-
-## Screenshots
-
-### Login Page
-Beautiful login interface with email authentication and Google sign-in option.
-
-### Chat Interface
-Modern chat UI with sidebar navigation and message history.
-
-## Installation
-
-### Prerequisites
-- Node.js (v18 or higher)
-- npm or yarn
-
-### Setup Steps
-
-1. **Clone or navigate to the project directory**
-   ```bash
-   cd Internship
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Start the development server**
-   ```bash
-   npm start
-   ```
-
-4. **Open your browser**
-   Navigate to `http://localhost:4200`
-
-## Usage
-
-### First Time Login
-1. Open the application in your browser
-2. Enter any valid email address (e.g., `user@example.com`)
-3. Enter a password (minimum 6 characters)
-4. Click "Sign In" to access the chat
-
-### Starting a Conversation
-1. After logging in, you'll see the chat interface
-2. Click on any suggestion chip or type your message in the input box
-3. Press Enter or click the send button to send your message
-4. The AI will respond with a simulated message
-
-### Managing Conversations
-- **New Chat**: Click the "New Chat" button in the sidebar
-- **Switch Chats**: Click on any conversation in the sidebar
-- **Delete Chat**: Hover over a conversation and click the trash icon
-- **Clear All**: Use the "Clear all chats" button at the bottom of the sidebar
-
-### Logging Out
-Click the logout icon in the user profile section at the bottom of the sidebar.
-
-## Project Structure
+## Architecture Overview
 
 ```
 Internship/
-├── src/
+├── backend/
 │   ├── app/
-│   │   ├── components/
-│   │   │   ├── chat-area/          # Main chat interface
-│   │   │   ├── login/              # Login page
-│   │   │   ├── message-bubble/     # Individual message display
-│   │   │   └── sidebar/            # Navigation sidebar
-│   │   ├── guards/
-│   │   │   └── auth.guard.ts       # Route protection
-│   │   ├── models/
-│   │   │   └── message.model.ts    # Data models
-│   │   ├── services/
-│   │   │   ├── auth.service.ts     # Authentication logic
-│   │   │   └── chat.service.ts     # Chat management
-│   │   ├── app.component.ts        # Root component
-│   │   ├── app.config.ts           # App configuration
-│   │   └── app.routes.ts           # Routing configuration
-│   ├── assets/                     # Static assets
-│   ├── index.html                  # HTML entry point
-│   ├── main.ts                     # Application bootstrap
-│   └── styles.css                  # Global styles
-├── angular.json                    # Angular configuration
-├── package.json                    # Dependencies
-└── tsconfig.json                   # TypeScript configuration
+│   │   ├── __init__.py
+│   │   ├── main.py              # FastAPI entrypoint
+│   │   ├── schemas.py           # Pydantic models / validators
+│   │   └── storage.py           # JSON persistence helpers
+│   ├── data/
+│   │   └── conversations.json   # Conversation store
+│   └── requirements.txt         # Backend dependencies
+└── src/
+    └── app/
+        ├── components/
+        │   ├── chat-area/
+        │   ├── login/
+        │   ├── message-bubble/
+        │   └── sidebar/
+        ├── config/api.config.ts # Frontend → backend base URL
+        ├── guards/auth.guard.ts
+        ├── models/message.model.ts
+        └── services/
+            ├── auth.service.ts
+            └── chat.service.ts
 ```
 
-## Technology Stack
+## Key Features
 
-- **Framework**: Angular 17 (Standalone Components)
-- **Language**: TypeScript 5.2
-- **Styling**: CSS3 with custom properties
-- **State Management**: Angular Signals
-- **Routing**: Angular Router with Guards
-- **Storage**: localStorage for persistence
-- **Fonts**: Google Fonts (Inter)
+### Frontend
+- Angular 17 standalone components with Signals
+- Email/password login, collapsible sidebar, multiple conversations
+- Message timestamps, loading indicators, keyboard shortcuts
+- Responsive layout with custom styling
 
-## Key Features Explained
+### Backend
+- FastAPI application with CORS enabled for Angular dev server
+- Endpoints for login, CRUD conversations, and message exchange
+- JSON file persistence (`backend/data/conversations.json`)
+- Deterministic simulated assistant response (easy to replace with real AI call)
 
-### Authentication Service
-The `AuthService` handles user authentication with simple email/password validation. In a production environment, this should be connected to a real backend API.
+## Prerequisites
 
-### Chat Service
-The `ChatService` manages all chat functionality:
-- Creates and manages conversations
-- Handles message sending and receiving
-- Persists data to localStorage
-- Simulates AI responses (ready for real API integration)
+- **Node.js** 18+
+- **Python** 3.10+
 
-### Route Guards
-The `authGuard` protects the chat routes, ensuring only authenticated users can access the chat interface.
+## Quick Start
 
-## Customization
-
-### Connecting to a Real AI API
-
-To connect this chatbot to a real AI service (OpenAI, Anthropic, Google AI, etc.):
-
-1. Open `src/app/services/chat.service.ts`
-2. Find the `generateResponse()` method
-3. Replace the simulated response with an actual API call:
-
-```typescript
-private async generateResponse(userMessage: string): Promise<string> {
-  const response = await fetch('YOUR_AI_API_ENDPOINT', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer YOUR_API_KEY'
-    },
-    body: JSON.stringify({
-      message: userMessage,
-      // Add other required parameters
-    })
-  });
-  
-  const data = await response.json();
-  return data.response;
-}
-```
-
-### Styling Customization
-
-The application uses CSS custom properties for easy theming. Key colors can be modified in the component stylesheets:
-
-- Primary gradient: `#667eea` → `#764ba2`
-- Secondary gradient: `#f093fb` → `#f5576c`
-- Background: `#f7fafc`
-- Dark background: `#1a202c`
-
-## Building for Production
-
+### 1. Clone & Install Frontend Dependencies
 ```bash
-npm run build
+cd Internship
+npm install
 ```
 
-The build artifacts will be stored in the `dist/` directory.
+### 2. Create Python Virtual Environment & Install Backend Dependencies
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate       # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-## Browser Support
+### 3. Start the FastAPI Backend
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+Backend runs at `http://localhost:8000` with API routes under `/api/*`.
 
-- Chrome (latest)
-- Firefox (latest)
-- Safari (latest)
-- Edge (latest)
+### 4. Start the Angular Frontend
+```bash
+cd ..
+npm start
+```
+Frontend runs at `http://localhost:4200` and talks to the backend via the base URL defined in `src/app/config/api.config.ts`.
 
-## Contributing
+## API Endpoints
 
-Feel free to submit issues and enhancement requests!
+| Method | Endpoint                                     | Description                           |
+|--------|----------------------------------------------|---------------------------------------|
+| GET    | `/api/health`                                | Health check                          |
+| POST   | `/api/auth/login`                            | Email/password login (mock)           |
+| GET    | `/api/conversations`                         | List conversations                    |
+| POST   | `/api/conversations`                         | Create new conversation               |
+| GET    | `/api/conversations/{conversationId}`        | Retrieve conversation + messages      |
+| POST   | `/api/conversations/{conversationId}/messages` | Add user message (backend simulates assistant reply) |
+| DELETE | `/api/conversations/{conversationId}`        | Delete conversation                   |
+| DELETE | `/api/conversations`                         | Delete all conversations (creates default chat) |
+
+## Replacing the Mock AI Response
+
+`backend/app/main.py` currently calls `_generate_response()` to craft a deterministic reply. To hook up a real AI service, replace the contents of that function with your API integration and return the generated text.
+
+## Frontend Integration Details
+
+- `AuthService` now calls `POST /api/auth/login` and stores the returned user in Signals + localStorage.
+- `ChatService` calls the FastAPI endpoints to load conversations, send messages, create/delete chats, and keeps Signals in sync.
+- `api.config.ts` centralizes the backend base URL.
+- Components (login, chat area, sidebar) await asynchronous service methods and show loading states where appropriate.
+
+## Development Tips
+
+- Update `API_BASE_URL` if you expose the backend on a different host/port.
+- The backend stores data in JSON—delete `backend/data/conversations.json` to reset.
+- Use your preferred process manager or containerize both apps for production.
+
+## Scripts
+
+| Command                           | Description                             |
+|-----------------------------------|-----------------------------------------|
+| `npm start`                       | Start Angular dev server                 |
+| `npm run build`                   | Build production bundle                  |
+| `uvicorn app.main:app --reload`   | Start FastAPI with auto-reload           |
+| `pip install -r requirements.txt` | Install backend dependencies             |
 
 ## License
 
-This project is available for educational and personal use.
-
-## Support
-
-For questions or issues, please refer to the documentation files:
-- `SETUP_GUIDE.md` - Detailed setup instructions
-- `FEATURES.md` - Complete feature documentation
-- `CHANGELOG.md` - Version history and updates
-
-## Acknowledgments
-
-- Built with Angular 17
-- Icons: Custom SVG icons
-- Fonts: Inter by Google Fonts
-- Inspiration: Modern AI chat interfaces
-
----
-
-**Made with ❤️ using Angular**
+This repository is provided for educational and prototyping purposes. Integrate authentication, authorization, and secure AI provider calls before using in production.

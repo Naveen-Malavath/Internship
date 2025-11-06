@@ -83,13 +83,21 @@
           <button 
             class="send-button" 
             (click)="sendMessage()"
-            [disabled]="!messageText().trim()"
+            [disabled]="!messageText().trim() || isSending()"
             title="Send message (Enter)"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
+            @if (isSending()) {
+              <span class="sending-indicator">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="20"/>
+                </svg>
+              </span>
+            } @else {
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            }
           </button>
         </div>
         
@@ -100,6 +108,3 @@
     }
   </div>
 </div>
-
-
-

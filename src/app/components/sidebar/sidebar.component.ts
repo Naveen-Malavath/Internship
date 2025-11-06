@@ -1,5 +1,6 @@
-import { Component, computed } from '@angular/core';
+import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
+
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 import { Conversation } from '../../models/message.model';
@@ -15,7 +16,7 @@ export class SidebarComponent {
   conversations = this.chatService.conversations;
   currentConversation = this.chatService.currentConversation;
   currentUser = this.authService.currentUser;
-  
+
   isCollapsed = false;
 
   constructor(
@@ -23,24 +24,24 @@ export class SidebarComponent {
     private authService: AuthService
   ) {}
 
-  newChat(): void {
-    this.chatService.createNewConversation();
+  async newChat(): Promise<void> {
+    await this.chatService.createNewConversation();
   }
 
   selectConversation(conversation: Conversation): void {
     this.chatService.selectConversation(conversation.id);
   }
 
-  deleteConversation(event: Event, conversationId: string): void {
+  async deleteConversation(event: Event, conversationId: string): Promise<void> {
     event.stopPropagation();
     if (confirm('Are you sure you want to delete this conversation?')) {
-      this.chatService.deleteConversation(conversationId);
+      await this.chatService.deleteConversation(conversationId);
     }
   }
 
-  clearAllChats(): void {
+  async clearAllChats(): Promise<void> {
     if (confirm('Are you sure you want to delete all conversations? This action cannot be undone.')) {
-      this.chatService.clearAllConversations();
+      await this.chatService.clearAllConversations();
     }
   }
 
@@ -54,6 +55,3 @@ export class SidebarComponent {
     this.isCollapsed = !this.isCollapsed;
   }
 }
-
-
-

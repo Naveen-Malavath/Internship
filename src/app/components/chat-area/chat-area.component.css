@@ -263,3 +263,26 @@
 
 
 
+.sending-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.sending-indicator svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

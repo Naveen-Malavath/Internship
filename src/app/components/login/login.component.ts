@@ -1,6 +1,8 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { finalize } from 'rxjs/operators';
+
 import { AuthService } from '../../services/auth.service';
 
 @Component({
@@ -15,12 +17,13 @@ export class LoginComponent {
   password = signal('');
   error = signal('');
   showPassword = signal(false);
+  isSubmitting = signal(false);
 
   constructor(private authService: AuthService) {}
 
   onSubmit(): void {
     this.error.set('');
-    
+
     if (!this.email() || !this.password()) {
       this.error.set('Please fill in all fields');
       return;
@@ -36,11 +39,20 @@ export class LoginComponent {
       return;
     }
 
-    const success = this.authService.login(this.email(), this.password());
-    
-    if (!success) {
-      this.error.set('Login failed. Please try again.');
-    }
+    this.isSubmitting.set(true);
+
+    this.authService
+      .login(this.email(), this.password())
+      .pipe(finalize(() => this.isSubmitting.set(false)))
+      .subscribe({
+        next: () => {
+          // Successful login is handled in the service (navigation + state)
+        },
+        error: (err) => {
+          console.error('Login failed', err);
+          this.error.set('Login failed. Please check your credentials and try again.');
+        }
+      });
   }
 
   private isValidEmail(email: string): boolean {
@@ -52,6 +64,3 @@ export class LoginComponent {
     this.showPassword.set(!this.showPassword());
   }
 }
-
-
-
