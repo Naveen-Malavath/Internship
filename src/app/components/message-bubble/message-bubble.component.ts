@@ -13,3 +13,5 @@ export class MessageBubbleComponent {
   @Input({ required: true }) message!: Message;
 }
 
+
+
