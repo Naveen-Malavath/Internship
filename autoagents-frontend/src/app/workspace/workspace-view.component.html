@@ -1,0 +1,286 @@
+<section class="workspace">
+  <header class="workspace__header">
+    <div class="workspace__title">
+      <h1>Project Workspace</h1>
+      <p class="workspace__subtitle">
+        Stay on top of project health, feature approvals, and story progress.
+      </p>
+    </div>
+    <div class="workspace__actions">
+      <button type="button" class="workspace__action workspace__action--ghost" (click)="onExit()">
+        Open chat
+      </button>
+    </div>
+  </header>
+
+  <section class="workspace__project-hero" *ngIf="project as activeProject">
+    <div>
+      <h2>{{ activeProject.details.name }}</h2>
+      <p>{{ activeProject.details.description || 'Project description will appear here.' }}</p>
+      <div class="project-hero__meta">
+        <span class="project-pill">
+          <strong>Key</strong>
+          {{ activeProject.details.key || '—' }}
+        </span>
+        <span class="project-pill">
+          <strong>Industry</strong>
+          {{ activeProject.details.industry }}
+        </span>
+        <span class="project-pill">
+          <strong>Methodology</strong>
+          {{ activeProject.details.methodology | titlecase }}
+        </span>
+        <span class="project-pill">
+          <strong>Team Size</strong>
+          {{ activeProject.details.teamSize || 'TBD' }}
+        </span>
+      </div>
+    </div>
+    <div class="project-hero__ai" *ngIf="activeProject.aiSummary as summary">
+      <h3>Executive Summary</h3>
+      <p>{{ summary.executiveSummary }}</p>
+      <div *ngIf="summary.epicIdeas?.length">
+        <h4>Epic Ideas</h4>
+        <ul>
+          <li *ngFor="let epic of summary.epicIdeas">{{ epic }}</li>
+        </ul>
+      </div>
+      <div *ngIf="summary.riskNotes?.length">
+        <h4>Risks</h4>
+        <ul>
+          <li *ngFor="let risk of summary.riskNotes">{{ risk }}</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <ng-container *ngIf="project || features.length || stories.length; else emptyWorkspace">
+    <section class="workspace__dashboard">
+      <div class="dashboard__grid">
+        <article class="dashboard-card">
+          <header>
+            <h3>Project Metrics</h3>
+          </header>
+          <div class="dashboard-metrics">
+            <div>
+              <span class="metric-value">{{ features.length }}</span>
+              <span class="metric-label">Features</span>
+            </div>
+            <div>
+              <span class="metric-value">{{ stories.length }}</span>
+              <span class="metric-label">Stories</span>
+            </div>
+            <div>
+              <span class="metric-value">{{ mermaidInput.split('\n').length }}</span>
+              <span class="metric-label">Diagram Lines</span>
+            </div>
+          </div>
+        </article>
+        <article class="dashboard-card" *ngIf="prompt">
+          <header>
+            <h3>Prompt Overview</h3>
+          </header>
+          <p>{{ prompt }}</p>
+        </article>
+        <ng-container *ngIf="visualizationData?.callouts as callouts">
+          <article class="dashboard-card" *ngIf="callouts.length">
+            <header>
+              <h3>Agent Callouts</h3>
+            </header>
+            <ul>
+              <li *ngFor="let callout of callouts">{{ callout }}</li>
+            </ul>
+          </article>
+        </ng-container>
+      </div>
+
+      <div class="dashboard__columns">
+        <section class="dashboard-panel">
+          <header>
+            <h2>Features & Linked Stories</h2>
+          </header>
+          <p *ngIf="!features.length" class="empty-hint">No features captured yet.</p>
+          <div class="dashboard-scroll" *ngIf="features.length">
+            <article class="feature-chip" *ngFor="let feature of features">
+              <header>
+                <h3>{{ feature.title }}</h3>
+                <p>{{ feature.description }}</p>
+              </header>
+              <ul *ngIf="feature.acceptanceCriteria?.length">
+                <li *ngFor="let criterion of feature.acceptanceCriteria">{{ criterion }}</li>
+              </ul>
+              <ng-container *ngIf="feature.detail as detail">
+                <div class="feature-chip__meta">
+                  <p><span>Problem:</span> {{ detail.problemStatement }}</p>
+                  <p><span>Objective:</span> {{ detail.businessObjective }}</p>
+                  <p><span>Persona:</span> {{ detail.userPersona }}</p>
+                  <p><span>Priority:</span> {{ detail.priority | titlecase }}</p>
+                </div>
+              </ng-container>
+
+              <div class="feature-chip__stories" *ngIf="storiesForFeature(feature.title).length">
+                <div class="feature-chip__story" *ngFor="let story of storiesForFeature(feature.title)">
+                  <p class="feature-chip__story-title">{{ story.userStory }}</p>
+                  <div *ngIf="story.acceptanceCriteria?.length">
+                    <h5>Acceptance Criteria</h5>
+                    <ul>
+                      <li *ngFor="let criterion of story.acceptanceCriteria">{{ criterion }}</li>
+                    </ul>
+                  </div>
+                  <div *ngIf="story.implementationNotes?.length">
+                    <h5>Implementation Notes</h5>
+                    <ul>
+                      <li *ngFor="let note of story.implementationNotes">{{ note }}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="dashboard-panel">
+          <header>
+            <h2>Latest Stories</h2>
+          </header>
+          <p *ngIf="!stories.length" class="empty-hint">Approve stories to populate the dashboard.</p>
+          <div class="dashboard-scroll" *ngIf="stories.length">
+            <article class="story-chip" *ngFor="let story of stories">
+              <header>
+                <h3>{{ story.featureTitle }}</h3>
+                <p>{{ story.userStory }}</p>
+              </header>
+
+              <div *ngIf="story.acceptanceCriteria?.length">
+                <h4>Acceptance Criteria</h4>
+                <ul>
+                  <li *ngFor="let criterion of story.acceptanceCriteria">{{ criterion }}</li>
+                </ul>
+              </div>
+
+              <div *ngIf="story.implementationNotes?.length">
+                <h4>Implementation Notes</h4>
+                <ol>
+                  <li *ngFor="let note of story.implementationNotes">{{ note }}</li>
+                </ol>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+
+      <section class="workspace__studio">
+        <div class="studio-grid">
+          <article class="studio-panel studio-panel--editor">
+            <header class="studio-panel__header">
+              <div>
+                <h2>Mermaid Diagram</h2>
+                <p>Edit the Mermaid definition. Changes render instantly.</p>
+              </div>
+              <div class="studio-panel__controls">
+                <button
+                  type="button"
+                  class="workspace__action workspace__action--ghost"
+                  (click)="onMermaidReset()"
+                  [disabled]="mermaidSaving || !mermaidEditorContent"
+                >
+                  Reset
+                </button>
+                <button type="button" class="workspace__action workspace__action--outline" (click)="onMermaidCopy()">
+                  {{ isMermaidCopied ? 'Copied!' : 'Copy' }}
+                </button>
+                <button
+                  type="button"
+                  class="workspace__action workspace__action--primary"
+                  (click)="onMermaidSave()"
+                  [disabled]="mermaidSaving"
+                >
+                  {{ mermaidSaving ? 'Saving…' : 'Save' }}
+                </button>
+              </div>
+            </header>
+
+            <div class="studio-panel__body">
+              <textarea
+                class="studio-panel__textarea"
+                [ngModel]="mermaidInput"
+                (ngModelChange)="onMermaidInput($event)"
+                spellcheck="false"
+                placeholder="graph TD&#10;  prompt[&quot;Prompt&quot;] --> feature[&quot;Feature&quot;]"
+              ></textarea>
+              <p *ngIf="mermaidError" class="studio-panel__error">{{ mermaidError }}</p>
+            </div>
+
+            <footer class="studio-panel__footer">
+              <span>{{ mermaidInput.split('\n').length }} lines</span>
+              <span>{{ mermaidInput.length }} characters</span>
+              <span class="studio-badge studio-badge--ghost" *ngIf="isMermaidCopied">Copied to clipboard</span>
+            </footer>
+          </article>
+
+          <article class="studio-panel studio-panel--preview">
+            <header class="studio-panel__header">
+              <div>
+                <h2>Live Preview</h2>
+                <p>The diagram reflects edits in real time.</p>
+              </div>
+              <div class="studio-panel__controls">
+                <span class="studio-badge">Theme: {{ previewTheme }}</span>
+                <button type="button" class="workspace__action workspace__action--outline" (click)="togglePreviewTheme()">
+                  Switch to {{ previewTheme === 'dark' ? 'light' : 'dark' }} mode
+                </button>
+              </div>
+            </header>
+
+            <div class="studio-panel__preview" [class.light]="previewTheme === 'light'">
+              <div class="preview-canvas" #mermaidContainer></div>
+              <p *ngIf="!mermaidInput.trim()" class="preview-placeholder">
+                Enter Mermaid code to render a diagram.
+              </p>
+            </div>
+
+            <div class="studio-panel__insights" *ngIf="visualizationData as viz">
+              <section class="preview-summary">
+                <h3>Summary</h3>
+                <p>{{ viz.summary }}</p>
+              </section>
+
+              <section *ngIf="viz.callouts?.length" class="preview-callouts">
+                <h3>Callouts</h3>
+                <ul>
+                  <li *ngFor="let item of viz.callouts">{{ item }}</li>
+                </ul>
+              </section>
+
+              <section class="preview-dot">
+                <header>
+                  <h3>DOT Diagram</h3>
+                  <button type="button" class="workspace__action workspace__action--outline" (click)="copyVisualizationDot(viz.diagrams.dot)">
+                    {{ isDotCopied ? 'Copied!' : 'Copy DOT' }}
+                  </button>
+                </header>
+                <textarea [value]="viz.diagrams.dot" readonly rows="8" spellcheck="false"></textarea>
+              </section>
+            </div>
+          </article>
+        </div>
+      </section>
+    </section>
+  </ng-container>
+
+<ng-template #noFeatures>
+  <p class="empty-hint">No features captured yet.</p>
+</ng-template>
+
+<ng-template #noStories>
+  <p class="empty-hint">Generate or approve stories to see them here.</p>
+</ng-template>
+
+<ng-template #emptyWorkspace>
+  <div class="workspace__empty">
+    <h2>No items yet</h2>
+    <p>Add features, upload project assets, or generate stories to populate the workspace.</p>
+    <button type="button" class="workspace__action" (click)="onExit()">← Back to chat</button>
+  </div>
+</ng-template>
+

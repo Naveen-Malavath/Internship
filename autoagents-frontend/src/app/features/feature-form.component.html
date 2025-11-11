@@ -1,0 +1,313 @@
+<ng-container *ngIf="open">
+  <div class="feature-form-backdrop" role="presentation" (click)="onCancel()"></div>
+
+  <section class="feature-form-shell" role="dialog" aria-modal="true" aria-labelledby="featureFormTitle">
+    <header class="feature-form-header">
+      <div>
+        <h1 id="featureFormTitle">Capture Feature Details</h1>
+        <p>
+          Record the problem, goals, and delivery expectations so Agent 2 & 3 receive a complete brief.
+        </p>
+      </div>
+      <button type="button" class="feature-form-close" (click)="onCancel()" aria-label="Close feature form">
+        ✕
+      </button>
+    </header>
+
+    <form class="feature-form-body" (submit)="$event.preventDefault(); onSubmit()">
+      <section class="form-section">
+        <h2>Overview</h2>
+        <div class="form-grid">
+          <label>
+            Feature summary
+            <input
+              type="text"
+              [(ngModel)]="detail.summary"
+              name="summary"
+              required
+              minlength="3"
+              placeholder="Streamlined onboarding for SMEs"
+              (blur)="onSummaryBlur()"
+            />
+          </label>
+
+          <label>
+            Feature key
+            <input
+              type="text"
+              [(ngModel)]="detail.key"
+              name="featureKey"
+              placeholder="SME-ONB"
+              maxlength="8"
+            />
+          </label>
+
+          <label>
+            Status
+            <input
+              type="text"
+              [(ngModel)]="detail.status"
+              name="status"
+              placeholder="Draft"
+            />
+          </label>
+
+          <label>
+            Team / Squad
+            <input
+              type="text"
+              [(ngModel)]="detail.team"
+              name="team"
+              placeholder="Growth Platform"
+            />
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <label class="col-span-2">
+            Problem statement
+            <textarea
+              rows="3"
+              [(ngModel)]="detail.problemStatement"
+              name="problemStatement"
+              required
+              minlength="10"
+              placeholder="SME owners struggle to activate accounts without guided onboarding, causing churn..."
+            ></textarea>
+          </label>
+
+          <label class="col-span-2">
+            Business objective / KPI
+            <textarea
+              rows="3"
+              [(ngModel)]="detail.businessObjective"
+              name="businessObjective"
+              required
+              minlength="5"
+              placeholder="Improve 30-day activation from 55% to 75% while reducing support tickets by 20%..."
+            ></textarea>
+          </label>
+        </div>
+
+        <label>
+          Primary user persona / segment
+          <input
+            type="text"
+            [(ngModel)]="detail.userPersona"
+            name="userPersona"
+            required
+            placeholder="SME business owner seeking digital banking"
+          />
+        </label>
+
+        <label>
+          Detailed description / narrative
+          <textarea
+            rows="4"
+            [(ngModel)]="detail.description"
+            name="description"
+            required
+            minlength="20"
+            placeholder="Outline the end-to-end flow, scope boundaries, and interaction model..."
+          ></textarea>
+        </label>
+      </section>
+
+      <section class="form-section">
+        <h2>Acceptance & Success</h2>
+        <div class="list-field">
+          <div class="list-header">
+            <h3>Acceptance criteria</h3>
+            <button type="button" class="ghost" (click)="addAcceptanceCriterion()">+ Add</button>
+          </div>
+          <div *ngFor="let criterion of detail.acceptanceCriteria; let idx = index" class="list-item">
+            <input
+              type="text"
+              [value]="criterion"
+              (input)="updateAcceptanceCriterion(idx, $any($event.target).value)"
+              placeholder="Given ... When ... Then ..."
+              required
+            />
+            <button type="button" class="ghost ghost--danger" (click)="removeAcceptanceCriterion(idx)">
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <div class="list-field">
+          <div class="list-header">
+            <h3>Success metrics</h3>
+            <button type="button" class="ghost" (click)="addSuccessMetric()">+ Add</button>
+          </div>
+          <div *ngFor="let metric of detail.successMetrics; let idx = index" class="list-item">
+            <input
+              type="text"
+              [value]="metric"
+              (input)="updateSuccessMetric(idx, $any($event.target).value)"
+              placeholder="e.g. Activation rate > 75%"
+              required
+            />
+            <button type="button" class="ghost ghost--danger" (click)="removeSuccessMetric(idx)">
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <div class="inline-grid">
+          <label>
+            Target release / milestone
+            <input
+              type="text"
+              [(ngModel)]="detail.targetRelease"
+              name="targetRelease"
+              required
+              placeholder="2025-Q1 release train"
+            />
+          </label>
+
+          <label>
+            Priority / impact
+            <select [(ngModel)]="detail.priority" name="priority">
+              <option *ngFor="let priority of priorityOptions" [value]="priority">
+                {{ priority | titlecase }}
+              </option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h2>Collaboration & Delivery</h2>
+        <div class="list-field">
+          <div class="list-header">
+            <h3>Stakeholders / Owners</h3>
+            <button type="button" class="ghost" (click)="addStakeholder()">+ Add</button>
+          </div>
+          <div *ngFor="let stakeholder of detail.stakeholders; let idx = index" class="list-item">
+            <input
+              type="text"
+              [value]="stakeholder"
+              (input)="updateStakeholder(idx, $any($event.target).value)"
+              placeholder="Name – Role"
+              required
+            />
+            <button type="button" class="ghost ghost--danger" (click)="removeStakeholder(idx)">
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <div class="list-field">
+          <div class="list-header">
+            <h3>Dependencies</h3>
+            <button type="button" class="ghost" (click)="addDependency()">+ Add</button>
+          </div>
+          <div *ngFor="let dependency of detail.dependencies; let idx = index" class="list-item">
+            <input
+              type="text"
+              [value]="dependency"
+              (input)="updateDependency(idx, $any($event.target).value)"
+              placeholder="Platform integration, vendor contract..."
+            />
+            <button type="button" class="ghost ghost--danger" (click)="removeDependency(idx)">
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <div class="list-field">
+          <div class="list-header">
+            <h3>Constraints</h3>
+            <button type="button" class="ghost" (click)="addConstraint()">+ Add</button>
+          </div>
+          <div *ngFor="let constraint of detail.constraints; let idx = index" class="list-item">
+            <input
+              type="text"
+              [value]="constraint"
+              (input)="updateConstraint(idx, $any($event.target).value)"
+              placeholder="Regulatory, technical or budget limits"
+            />
+            <button type="button" class="ghost ghost--danger" (click)="removeConstraint(idx)">
+              Remove
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h2>Risks & Non-functionals</h2>
+        <div class="list-field">
+          <div class="list-header">
+            <h3>Risks & mitigations</h3>
+            <button type="button" class="ghost" (click)="addRisk()">+ Add</button>
+          </div>
+          <div *ngFor="let risk of detail.risks; let idx = index" class="risk-item">
+            <input
+              type="text"
+              [value]="risk.description"
+              (input)="updateRisk(idx, { description: $any($event.target).value })"
+              placeholder="Risk description"
+            />
+            <input
+              type="text"
+              [value]="risk.mitigation"
+              (input)="updateRisk(idx, { mitigation: $any($event.target).value })"
+              placeholder="Mitigation / owner"
+            />
+            <button type="button" class="ghost ghost--danger" (click)="removeRisk(idx)">
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <div class="list-field">
+          <div class="list-header">
+            <h3>Non-functional requirements</h3>
+            <button type="button" class="ghost" (click)="addNonFunctionalRequirement()">+ Add</button>
+          </div>
+          <div
+            *ngFor="let requirement of detail.nonFunctionalRequirements; let idx = index"
+            class="list-item"
+          >
+            <input
+              type="text"
+              [value]="requirement"
+              (input)="updateNonFunctionalRequirement(idx, $any($event.target).value)"
+              placeholder="Performance, accessibility, security..."
+            />
+            <button
+              type="button"
+              class="ghost ghost--danger"
+              (click)="removeNonFunctionalRequirement(idx)"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <div class="upload-field">
+          <h3>Supporting documents</h3>
+          <p class="upload-hint">Attach any brief, design, or compliance files. All formats supported.</p>
+          <label class="upload-input">
+            <input type="file" multiple (change)="onFilesSelected($event)" />
+            <span>Select files</span>
+          </label>
+          <ul class="upload-list" *ngIf="selectedFiles.length">
+            <li *ngFor="let file of selectedFiles; let idx = index">
+              <span>{{ file.name }}</span>
+              <button type="button" class="ghost ghost--danger" (click)="removeFile(idx)">Remove</button>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </form>
+
+    <footer class="feature-form-footer">
+      <button type="button" class="ghost" (click)="onCancel()" [disabled]="saving">Cancel</button>
+      <button type="button" class="primary" (click)="onSubmit()" [disabled]="saving || !isValid()">
+        {{ saving ? 'Saving…' : 'Save feature' }}
+      </button>
+    </footer>
+  </section>
+</ng-container>
+

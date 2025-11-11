@@ -1,0 +1,12 @@
+digraph BankingPlatform {
+    node [shape=box];
+    User -> Authentication;
+    Authentication -> BiometricVerification;
+    Authentication -> TwoFactorVerification;
+    User -> Dashboard;
+    Dashboard -> SpendingAnalytics;
+    Dashboard -> InvestmentTracking;
+    User -> PaymentGateway;
+    PaymentGateway -> TransactionProcessing;
+    PaymentGateway -> NetworkIntegration;
+}

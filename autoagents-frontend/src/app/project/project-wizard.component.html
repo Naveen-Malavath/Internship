@@ -1,0 +1,563 @@
+<ng-container *ngIf="open">
+  <div class="wizard-backdrop" role="presentation" (click)="onCancel()"></div>
+
+  <section class="wizard-shell" role="dialog" aria-modal="true" aria-labelledby="wizardTitle">
+    <header class="wizard-header">
+      <div>
+        <h1 id="wizardTitle">Create New Project</h1>
+        <p class="wizard-subtitle">
+          Configure a Jira-style workspace with templates, workflows, and AI-assisted briefs.
+        </p>
+      </div>
+      <button type="button" class="wizard-close" (click)="onCancel()" aria-label="Close wizard">
+        ✕
+      </button>
+    </header>
+
+    <ol class="wizard-steps" aria-label="Project wizard steps">
+      <li
+        *ngFor="let step of steps; let idx = index"
+        [class.active]="idx === stepIndex"
+        [attr.aria-current]="idx === stepIndex ? 'step' : null"
+      >
+        <span class="wizard-step__index">{{ idx + 1 }}</span>
+        <span class="wizard-step__label">{{ step }}</span>
+      </li>
+    </ol>
+
+    <div class="wizard-body">
+      <!-- Step 0: Template selection -->
+      <div *ngIf="stepIndex === 0" class="wizard-step wizard-step--templates">
+        <h2>Select a starting template</h2>
+        <p class="wizard-step__hint">
+          Templates align workflows, focus areas, and AI prompts for the industry you are targeting.
+        </p>
+
+        <div class="template-grid">
+          <button
+            type="button"
+            class="template-card"
+            *ngFor="let template of templates"
+            [class.active]="template.id === selectedTemplateId"
+            (click)="onSelectTemplate(template)"
+          >
+            <header>
+              <h3>{{ template.name }}</h3>
+              <span class="tag">{{ template.industry }}</span>
+              <span class="tag tag--method">{{ template.methodology | uppercase }}</span>
+            </header>
+            <p class="template-summary">{{ template.summary }}</p>
+            <ul class="template-focus">
+              <li *ngFor="let focus of template.focusAreas">{{ focus }}</li>
+            </ul>
+            <footer>
+              <span>Personas:</span>
+              <span class="template-personas">
+                {{ template.personaHints.join(', ') }}
+              </span>
+            </footer>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 1: Project details -->
+      <form *ngIf="stepIndex === 1" class="wizard-step wizard-step--details" (submit)="$event.preventDefault()">
+        <h2>Project basics</h2>
+        <p class="wizard-step__hint">
+          Name your project, capture the elevator pitch, and pick the right workflow to start.
+        </p>
+
+        <div class="form-grid">
+          <label>
+            Project name
+            <input
+              type="text"
+              name="projectName"
+              [(ngModel)]="details.name"
+              (blur)="onNameBlur()"
+              required
+              minlength="3"
+              placeholder="Digital Banking 2.0"
+            />
+          </label>
+
+          <label>
+            Project key
+            <input
+              type="text"
+              name="projectKey"
+              [(ngModel)]="details.key"
+              maxlength="5"
+              required
+              placeholder="DB2"
+            />
+          </label>
+
+          <label>
+            Industry
+            <input
+              type="text"
+              name="industry"
+              [(ngModel)]="details.industry"
+              required
+              placeholder="Financial Services"
+            />
+          </label>
+
+          <label>
+            Methodology
+            <select name="methodology" [(ngModel)]="details.methodology" required>
+              <option value="scrum">Scrum</option>
+              <option value="kanban">Kanban</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </label>
+
+          <label>
+            Timezone
+            <select name="timezone" [(ngModel)]="details.timezone" required>
+              <option *ngFor="let zone of timezones" [value]="zone">{{ zone }}</option>
+            </select>
+          </label>
+
+          <label>
+            Team size
+            <select name="teamSize" [(ngModel)]="details.teamSize">
+              <option [ngValue]="null">Not sure yet</option>
+              <option *ngFor="let size of teamSizes" [value]="size">{{ size }} people</option>
+            </select>
+          </label>
+
+          <label>
+            Kick-off date
+            <input type="date" name="startDate" [(ngModel)]="details.startDate" />
+          </label>
+
+          <label>
+            Target launch
+            <input type="date" name="targetLaunch" [(ngModel)]="details.targetLaunch" />
+          </label>
+        </div>
+
+        <label class="description-field">
+          Elevator pitch
+          <textarea
+            name="description"
+            rows="4"
+            [(ngModel)]="details.description"
+            required
+            minlength="10"
+            placeholder="Describe the value this project unlocks for your customers..."
+          ></textarea>
+        </label>
+
+        <section class="workflow-picker">
+          <h3>Preferred workflow</h3>
+          <div class="workflow-options">
+            <button
+              type="button"
+              class="workflow-card"
+              *ngFor="let workflow of workflows"
+              [class.active]="workflow.id === selectedWorkflow?.id"
+              (click)="onSelectWorkflow(workflow)"
+            >
+              <header>
+                <h4>{{ workflow.name }}</h4>
+                <span class="tag tag--board">{{ workflow.defaultBoard | titlecase }}</span>
+              </header>
+              <p>{{ workflow.description }}</p>
+              <ul>
+                <li *ngFor="let type of workflow.issueTypes">{{ type }}</li>
+              </ul>
+              <span *ngIf="workflow.recommendedSprintLength">
+                {{ workflow.recommendedSprintLength }}-day cadence recommended
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <section class="wizard-upload">
+          <header>
+            <h3>Project attachments</h3>
+            <p>Include briefs, design artifacts, or compliance files. All formats supported.</p>
+          </header>
+          <label class="upload-input">
+            <input type="file" multiple (change)="onProjectFilesSelected($event)" />
+            <span>Select files</span>
+          </label>
+          <ul class="upload-list" *ngIf="projectFiles.length">
+            <li *ngFor="let file of projectFiles; let idx = index">
+              <span>{{ file.name }}</span>
+              <button type="button" class="upload-remove" (click)="removeProjectFile(idx)">
+                Remove
+              </button>
+            </li>
+          </ul>
+        </section>
+      </form>
+
+      <!-- Step 2: AI assist -->
+      <div *ngIf="stepIndex === 2" class="wizard-step wizard-step--ai">
+        <div class="wizard-step__header">
+          <div>
+            <h2>AI-assisted brief</h2>
+            <p class="wizard-step__hint">
+              Use AI prompts to refine your executive summary, epic ideas, and risk register before the build kicks off.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="ghost"
+            (click)="onRequestAISummary()"
+            [disabled]="aiSummaryLoading"
+          >
+            {{ aiSummaryLoading ? 'Generating…' : 'Ask AI for help' }}
+          </button>
+        </div>
+
+        <div class="ai-prompts">
+          <article *ngFor="let prompt of aiPrompts" class="ai-prompt">
+            <header>
+              <h3>{{ prompt.title }}</h3>
+              <span class="tag">{{ prompt.category }}</span>
+            </header>
+            <p>{{ prompt.prompt }}</p>
+            <pre *ngIf="prompt.sampleOutput">{{ prompt.sampleOutput }}</pre>
+          </article>
+        </div>
+
+        <div class="ai-inputs">
+          <label>
+            Executive summary
+            <textarea
+              rows="4"
+              [(ngModel)]="aiSummary.executiveSummary"
+              placeholder="Summarise the initiative, stakeholders, and customer impact..."
+            ></textarea>
+          </label>
+
+          <div class="list-input">
+            <div class="list-input__header">
+              <h3>Epic ideas</h3>
+              <button type="button" class="ghost" (click)="onAddEpicIdea()">+ Add epic</button>
+            </div>
+            <div *ngIf="!aiSummary.epicIdeas.length" class="empty-state">
+              Add a few epics you want to track. You can reorder these later in the roadmap.
+            </div>
+            <div *ngFor="let idea of aiSummary.epicIdeas; let idx = index" class="list-input__item">
+              <input
+                type="text"
+                [value]="idea"
+                (input)="onEpicIdeaChange(idx, $any($event.target).value)"
+                placeholder="Epic {{ idx + 1 }} description"
+              />
+              <button type="button" class="ghost ghost--danger" (click)="onRemoveEpicIdea(idx)">
+                Remove
+              </button>
+            </div>
+          </div>
+
+          <div class="list-input">
+            <div class="list-input__header">
+              <h3>Risk highlights</h3>
+              <button type="button" class="ghost" (click)="onAddRiskNote()">+ Add risk</button>
+            </div>
+            <div *ngIf="!aiSummary.riskNotes.length" class="empty-state">
+              Track the top delivery or compliance risks so teams can mitigate them early.
+            </div>
+            <div *ngFor="let risk of aiSummary.riskNotes; let idx = index" class="list-input__item">
+              <input
+                type="text"
+                [value]="risk"
+                (input)="onRiskNoteChange(idx, $any($event.target).value)"
+                placeholder="Risk {{ idx + 1 }}"
+              />
+              <button type="button" class="ghost ghost--danger" (click)="onRemoveRiskNote(idx)">
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Feature approvals -->
+      <div *ngIf="stepIndex === 3" class="wizard-step wizard-step--features">
+        <div class="wizard-step__header">
+          <div>
+            <h2>Approve Agent 1 features</h2>
+            <p class="wizard-step__hint">
+              Review the AI recommendations, approve the ones you like, and add any gaps manually.
+            </p>
+          </div>
+          <div class="wizard-actions">
+            <button type="button" class="ghost" (click)="onRefreshFeatureRecommendations()" [disabled]="featureRecommendationsLoading">
+              {{ featureRecommendationsLoading ? 'Refreshing…' : 'Refresh suggestions' }}
+            </button>
+            <button type="button" class="ghost" (click)="onAddFeature()">+ Add feature manually</button>
+          </div>
+        </div>
+
+        <div class="feature-recommendations" *ngIf="wizardFeatures.length; else noFeatureSuggestions">
+          <article
+            *ngFor="let feature of wizardFeatures; let idx = index"
+            class="feature-card"
+            [class.feature-card--recommended]="feature.source === 'recommended'"
+          >
+            <header>
+              <div>
+                <h3>{{ feature.detail.summary }}</h3>
+                <p class="feature-card__meta">
+                  <span class="feature-pill" *ngIf="feature.source === 'recommended'">AI suggestion</span>
+                  <span class="feature-pill" *ngIf="feature.source === 'manual'">Manual</span>
+                  <span class="feature-pill" [class.feature-pill--on]="feature.approved">
+                    {{ feature.approved ? 'Approved' : 'Pending approval' }}
+                  </span>
+                </p>
+              </div>
+              <div class="feature-card__actions">
+                <button type="button" class="ghost" (click)="onEditFeature(idx)">Edit</button>
+                <button type="button" class="ghost ghost--danger" (click)="onRemoveFeature(idx)">
+                  {{ feature.source === 'recommended' ? 'Dismiss' : 'Remove' }}
+                </button>
+              </div>
+            </header>
+
+            <p class="feature-card__description">{{ feature.detail.description }}</p>
+
+            <div class="feature-card__lists" *ngIf="feature.detail.acceptanceCriteria.length">
+              <h4>Acceptance Criteria</h4>
+              <ul>
+                <li *ngFor="let criterion of feature.detail.acceptanceCriteria">{{ criterion }}</li>
+              </ul>
+            </div>
+
+            <footer class="feature-card__footer">
+              <button
+                type="button"
+                class="primary"
+                [class.primary--outline]="!feature.approved"
+                (click)="onToggleFeatureApproval(idx, !feature.approved)"
+              >
+                {{ feature.approved ? 'Unapprove' : 'Approve feature' }}
+              </button>
+            </footer>
+          </article>
+        </div>
+
+        <ng-template #noFeatureSuggestions>
+          <div class="empty-state">
+            <p>No feature suggestions yet. Refresh Agent 1 recommendations or add one manually.</p>
+            <div class="empty-state__actions">
+              <button type="button" class="ghost" (click)="onRefreshFeatureRecommendations()">
+                Request suggestions
+              </button>
+              <button type="button" class="ghost" (click)="onAddFeature()">Add feature manually</button>
+            </div>
+          </div>
+        </ng-template>
+      </div>
+
+      <!-- Step 4: Story approvals -->
+      <div *ngIf="stepIndex === 4" class="wizard-step wizard-step--stories">
+        <div class="wizard-step__header">
+          <div>
+            <h2>Approve Agent 2 stories</h2>
+            <p class="wizard-step__hint">
+              Agent 2 drafts stories for each approved feature. Approve at least one story per feature to continue.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="ghost"
+            (click)="onRefreshStoryRecommendations()"
+            [disabled]="storyRecommendationsLoading"
+          >
+            {{ storyRecommendationsLoading ? 'Refreshing…' : 'Refresh stories' }}
+          </button>
+        </div>
+
+        <div class="story-grid">
+          <article *ngFor="let feature of wizardFeatures; let fIdx = index" class="story-card" [class.story-card--inactive]="!feature.approved">
+            <header>
+              <div>
+                <h3>{{ feature.detail.summary }}</h3>
+                <p class="story-card__subtitle">
+                  {{ feature.approved ? 'Approved feature' : 'Awaiting feature approval' }}
+                </p>
+              </div>
+            </header>
+
+            <ng-container *ngIf="feature.approved; else featureNotApproved">
+              <div *ngIf="feature.stories.length; else noStories">
+                <div *ngFor="let story of feature.stories; let sIdx = index" class="story-approval">
+                  <label>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      [checked]="story.approved"
+                      (change)="onToggleStoryApproval(fIdx, sIdx)"
+                    />
+                    <span class="story-approval__label">Approve story</span>
+                  </label>
+                  <p class="story-approval__story">{{ story.spec.userStory }}</p>
+                  <div class="story-approval__lists" *ngIf="story.spec.acceptanceCriteria.length">
+                    <h4>Acceptance Criteria</h4>
+                    <ul>
+                      <li *ngFor="let criterion of story.spec.acceptanceCriteria">{{ criterion }}</li>
+                    </ul>
+                  </div>
+                  <div class="story-approval__lists" *ngIf="story.spec.implementationNotes.length">
+                    <h4>Implementation Notes</h4>
+                    <ul>
+                      <li *ngFor="let note of story.spec.implementationNotes">{{ note }}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <ng-template #noStories>
+                <div class="empty-state empty-state--subtle">
+                  <p>No stories yet. Refresh Agent 2 suggestions.</p>
+                </div>
+              </ng-template>
+            </ng-container>
+
+            <ng-template #featureNotApproved>
+              <div class="empty-state empty-state--subtle">
+                <p>Approve this feature first to unlock story drafting.</p>
+              </div>
+            </ng-template>
+          </article>
+        </div>
+      </div>
+
+      <!-- Step 5: Review -->
+      <div *ngIf="stepIndex === 5" class="wizard-step wizard-step--review">
+        <h2>Review & confirm</h2>
+        <p class="wizard-step__hint">
+          Double-check the essentials. You can always tweak details inside the workspace later.
+        </p>
+
+        <section class="review-grid">
+          <article>
+            <h3>Overview</h3>
+            <dl>
+              <div>
+                <dt>Project name</dt>
+                <dd>{{ details.name }}</dd>
+              </div>
+              <div>
+                <dt>Key</dt>
+                <dd>{{ details.key }}</dd>
+              </div>
+              <div>
+                <dt>Industry</dt>
+                <dd>{{ details.industry }}</dd>
+              </div>
+              <div>
+                <dt>Methodology</dt>
+                <dd>{{ details.methodology | titlecase }}</dd>
+              </div>
+              <div>
+                <dt>Workflow</dt>
+                <dd>{{ selectedWorkflow?.name }}</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article>
+            <h3>Timeline & team</h3>
+            <dl>
+              <div>
+                <dt>Kick-off</dt>
+                <dd>{{ details.startDate || 'Not set' }}</dd>
+              </div>
+              <div>
+                <dt>Target launch</dt>
+                <dd>{{ details.targetLaunch || 'Not set' }}</dd>
+              </div>
+              <div>
+                <dt>Team size</dt>
+                <dd>{{ details.teamSize || 'Not set' }}</dd>
+              </div>
+              <div>
+                <dt>Timezone</dt>
+                <dd>{{ details.timezone }}</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article class="col-span-2">
+            <h3>Executive summary</h3>
+            <p>{{ aiSummary.executiveSummary }}</p>
+          </article>
+
+          <article class="col-span-2" *ngIf="aiSummary.epicIdeas.length">
+            <h3>Epic ideas</h3>
+            <ul>
+              <li *ngFor="let idea of aiSummary.epicIdeas">{{ idea }}</li>
+            </ul>
+          </article>
+
+          <article class="col-span-2" *ngIf="aiSummary.riskNotes.length">
+            <h3>Risk highlights</h3>
+            <ul>
+              <li *ngFor="let note of aiSummary.riskNotes">{{ note }}</li>
+            </ul>
+          </article>
+
+          <article class="col-span-2" *ngIf="wizardFeatures.length">
+            <h3>Approved features & stories</h3>
+            <div class="review-features">
+              <div *ngFor="let feature of wizardFeatures" class="review-feature-card" [class.review-feature-card--inactive]="!feature.approved">
+                <div>
+                  <h4>{{ feature.detail.summary }}</h4>
+                  <span class="tag" [class.tag--success]="feature.approved" [class.tag--danger]="!feature.approved">
+                    {{ feature.approved ? 'Approved' : 'Pending' }}
+                  </span>
+                </div>
+                <ul *ngIf="feature.stories.length">
+                  <li *ngFor="let story of feature.stories" [class.story-approved]="story.approved">
+                    {{ story.spec.userStory }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </article>
+        </section>
+      </div>
+    </div>
+
+    <footer class="wizard-footer">
+      <button type="button" class="ghost" (click)="onCancel()" [disabled]="saving">Cancel</button>
+      <button type="button" class="secondary" (click)="onPrevious()" [disabled]="stepIndex === 0 || saving">
+        ← Previous
+      </button>
+      <button
+        type="button"
+        class="primary"
+        (click)="onNext()"
+        *ngIf="stepIndex < steps.length - 1"
+        [disabled]="!canProceed() || saving"
+      >
+        Next →
+      </button>
+      <button
+        type="button"
+        class="primary"
+        (click)="onSubmit()"
+        *ngIf="stepIndex === steps.length - 1"
+        [disabled]="!canSubmit() || saving"
+      >
+        {{ saving ? 'Creating project…' : 'Create project' }}
+      </button>
+    </footer>
+
+    <feature-form
+      [open]="isFeatureFormOpen"
+      [preset]="featurePreset"
+      (cancel)="onFeatureFormCancel()"
+      (submit)="onFeatureFormSubmit($event)"
+    ></feature-form>
+  </section>
+</ng-container>
+

@@ -1,0 +1,11 @@
+.chat-page {
+  min-height: 100vh;
+  display: flex;
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+}
+
+:host ::ng-deep app-root {
+  flex: 1;
+  min-height: 100vh;
+}
+

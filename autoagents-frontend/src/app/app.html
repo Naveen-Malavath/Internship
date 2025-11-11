@@ -1,0 +1,268 @@
+<div class="app-shell" [class.chat-open]="isChatDrawerOpen()">
+  <header class="app-header">
+    <div class="app-brand">
+      <h1>AutoAgents Workspace</h1>
+      <p class="app-subtitle">
+        <ng-container *ngIf="workspaceProject() as project; else noProject">
+          Active project · {{ project.details.name }} ({{ project.details.key }})
+        </ng-container>
+      </p>
+      <ng-template #noProject>
+        <p class="app-subtitle">No active project yet. Launch a new project to get started.</p>
+      </ng-template>
+    </div>
+    <div class="app-actions">
+      <span class="status-indicator" [attr.aria-label]="'Backend status: ' + rightNowStatus()">
+        {{ rightNowStatus() }}
+      </span>
+      <button type="button" class="ghost" (click)="openProjectWizard()">New Project</button>
+      <button type="button" class="ghost" (click)="openFeatureForm()" [disabled]="!workspaceProject()">
+        Add Feature
+      </button>
+      <button type="button" class="ghost" (click)="toggleChatDrawer()">
+        {{ isChatDrawerOpen() ? 'Hide Chat' : 'Open Chat' }}
+      </button>
+    </div>
+  </header>
+
+  <main class="app-body">
+    <section class="workspace-panel">
+      <workspace-view
+        [prompt]="workspacePrompt()"
+        [features]="workspaceFeatures()"
+        [stories]="workspaceStories()"
+        [visualization]="workspaceVisualization()"
+        [project]="workspaceProject()"
+        [mermaidEditorContent]="workspaceMermaid()"
+        [mermaidSaving]="workspaceMermaidSaving()"
+        [mermaidUpdatedAt]="workspaceMermaidUpdatedLabel()"
+        [mermaidSaveMessage]="workspaceMermaidSaveMessage()"
+        (mermaidChange)="onWorkspaceMermaidChange($event)"
+        (mermaidSave)="onWorkspaceMermaidSave($event)"
+        (exit)="onWorkspaceExit()"
+      ></workspace-view>
+    </section>
+
+    <aside class="chat-panel" [class.chat-panel--open]="isChatDrawerOpen()" aria-label="Agent conversation">
+      <div class="chat-panel__inner">
+        <section class="chat-shell" aria-live="polite" [class.full-screen]="isFullScreen()">
+          <aside class="history-panel">
+            <div class="history-header">
+              <h3>History</h3>
+              <button type="button" class="history-new" (click)="onNewChat()" [disabled]="isSending()">
+                + New chat
+              </button>
+            </div>
+            <div class="history-entries" *ngIf="conversationHistory().length; else emptyHistory">
+              <button
+                type="button"
+                class="history-entry"
+                *ngFor="let session of conversationHistory()"
+                (click)="onHistorySelect(session.id)"
+                [class.active]="activeConversationId() === session.id"
+              >
+                <span class="history-title">{{ session.title }}</span>
+                <span class="history-time">{{ formatTimestamp(session.createdAt) }}</span>
+              </button>
+            </div>
+            <ng-template #emptyHistory>
+              <p class="history-empty">No previous chats yet.</p>
+            </ng-template>
+          </aside>
+
+          <div class="chat-main">
+            <header class="chat-header">
+              <div>
+                <h2>
+                  {{
+                    agentStage() === 'agent1'
+                      ? 'Agent 1 · Feature Ideation'
+                      : 'Agent 2 · Story Builder'
+                  }}
+                </h2>
+                <span class="subtitle">
+                  {{
+                    agentStage() === 'agent1'
+                      ? 'Translating business prompts into feature concepts'
+                      : 'Drafting user stories from approved features'
+                  }}
+                </span>
+              </div>
+              <div class="chat-actions">
+                <button type="button" class="ghost" (click)="toggleFullScreen()">
+                  {{ isFullScreen() ? 'Exit Full View' : 'Full View' }}
+                </button>
+                <button type="button" class="ghost" (click)="toggleChatDrawer()">Close</button>
+              </div>
+            </header>
+
+            <div class="chat-messages">
+              <div
+                *ngFor="let message of chatMessages(); let idx = index"
+                class="chat-bubble"
+                [class.user]="message.sender === 'user'"
+                [class.assistant]="message.sender === 'assistant'"
+                [class.agent2]="message.agent === 'agent2'"
+              >
+                <span class="speaker" *ngIf="message.sender === 'assistant'">
+                  {{ message.agent === 'agent2' ? 'Agent 2' : 'Agent 1' }}
+                </span>
+                <span class="speaker" *ngIf="message.sender === 'user'">You</span>
+                <p>{{ message.text }}</p>
+
+                <div class="feature-list" *ngIf="message.features?.length">
+                  <article class="feature-card" *ngFor="let feature of message.features">
+                    <h3>{{ feature.title }}</h3>
+                    <p>{{ feature.description }}</p>
+                    <ul *ngIf="feature.acceptanceCriteria?.length">
+                      <li *ngFor="let criterion of feature.acceptanceCriteria">{{ criterion }}</li>
+                    </ul>
+                    <ng-container *ngIf="feature.detail as detail">
+                      <div class="feature-detail">
+                        <p class="feature-detail__line">
+                          <span>Problem:</span>
+                          {{ detail.problemStatement }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Objective:</span>
+                          {{ detail.businessObjective }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Persona:</span>
+                          {{ detail.userPersona }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Metrics:</span>
+                          {{ detail.successMetrics.join(', ') }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Stakeholders:</span>
+                          {{ detail.stakeholders.join(', ') }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Dependencies:</span>
+                          {{ detail.dependencies.join(', ') }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Constraints:</span>
+                          {{ detail.constraints.join(', ') }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Risks:</span>
+                          <span *ngFor="let risk of detail.risks" class="risk-chip">
+                            {{ risk.description }} (Mitigation: {{ risk.mitigation }})
+                          </span>
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Release:</span>
+                          {{ detail.targetRelease }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>Priority:</span>
+                          {{ detail.priority | titlecase }}
+                        </p>
+                        <p class="feature-detail__line">
+                          <span>NFRs:</span>
+                          {{ detail.nonFunctionalRequirements.join(', ') }}
+                        </p>
+                      </div>
+                    </ng-container>
+                  </article>
+                </div>
+
+                <div class="story-list" *ngIf="message.stories?.length">
+                  <article class="story-card" *ngFor="let story of message.stories">
+                    <h3>{{ story.featureTitle }}</h3>
+                    <p>{{ story.userStory }}</p>
+                    <div class="story-section" *ngIf="story.acceptanceCriteria?.length">
+                      <h4>Acceptance Criteria</h4>
+                      <ul>
+                        <li *ngFor="let criterion of story.acceptanceCriteria">{{ criterion }}</li>
+                      </ul>
+                    </div>
+                    <div class="story-section" *ngIf="story.implementationNotes?.length">
+                      <h4>Implementation Notes</h4>
+                      <ul>
+                        <li *ngFor="let note of story.implementationNotes">{{ note }}</li>
+                      </ul>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </div>
+
+            <div class="decision-bar" *ngIf="agentStage() === 'agent1' && agent1AwaitingDecision()">
+              <span class="decision-label">Are these the right features?</span>
+              <div class="decision-actions">
+                <button type="button" class="secondary" (click)="onAgent1Decision('again')" [disabled]="isSending()">
+                  Again
+                </button>
+                <button type="button" class="secondary" (click)="onAgent1Decision('keep_all')" [disabled]="isSending()">
+                  Keep All
+                </button>
+                <button type="button" class="primary" (click)="onAgent1Decision('keep')" [disabled]="isSending()">
+                  Keep
+                </button>
+              </div>
+            </div>
+
+            <div class="decision-bar" *ngIf="agentStage() === 'agent2' && agent2AwaitingDecision()">
+              <span class="decision-label">Do these stories look right?</span>
+              <div class="decision-actions">
+                <button type="button" class="secondary" (click)="onAgent2Decision('again')" [disabled]="isSending()">
+                  Again
+                </button>
+                <button type="button" class="primary" (click)="onAgent2Decision('keep')" [disabled]="isSending()">
+                  Keep
+                </button>
+              </div>
+            </div>
+
+            <form class="chat-input" (submit)="onChatSubmit($event)">
+              <textarea
+                #chatBox
+                rows="1"
+                placeholder="Ask AutoAgents anything..."
+                [value]="chatInput()"
+                (input)="onChatInput(chatBox.value)"
+                [disabled]="isSending()"
+              ></textarea>
+              <button type="submit" [disabled]="isSending() || !chatInput().trim()">
+                {{ isSending() ? 'Sending...' : 'Send' }}
+              </button>
+            </form>
+          </div>
+        </section>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<project-wizard
+  [open]="isProjectWizardOpen()"
+  [templates]="projectWizardTemplates"
+  [workflows]="projectWizardWorkflows"
+  [timezones]="projectWizardTimezones"
+  [teamSizes]="projectWizardTeamSizes"
+  [saving]="projectWizardSaving()"
+  [aiSummaryLoading]="projectWizardAiLoading()"
+  [aiSummaryDraft]="projectWizardSummaryDraft()"
+  [featureRecommendations]="projectWizardFeatureRecommendations()"
+  [featureRecommendationsLoading]="projectWizardFeaturesLoading()"
+  [storyRecommendations]="projectWizardStoryRecommendations()"
+  [storyRecommendationsLoading]="projectWizardStoriesLoading()"
+  (cancel)="onProjectWizardCancel()"
+  (complete)="onProjectWizardComplete($event)"
+  (requestAISummary)="onProjectWizardRequestAI($event)"
+  (requestFeatureRecommendations)="onProjectWizardRequestFeatures($event)"
+  (requestStoryRecommendations)="onProjectWizardRequestStories($event)"
+></project-wizard>
+
+<feature-form
+  [open]="isFeatureFormOpen()"
+  [saving]="featureFormSaving()"
+  [preset]="featureFormDraft()"
+  (cancel)="onFeatureFormCancel()"
+  (submit)="onFeatureFormSubmit($event)"
+></feature-form>
+

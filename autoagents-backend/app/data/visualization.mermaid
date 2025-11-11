@@ -1,0 +1,11 @@
+graph TD
+    A[User] -->|Login| B{Multi-Factor Authentication}
+    B -->|Biometric| C[Fingerprint/Facial Recognition]
+    B -->|Two-Factor| D[SMS/Authenticator App]
+    A -->|Access| E[Personal Financial Dashboard]
+    E -->|Visualize| F[Spending Patterns]
+    E -->|Analyze| G[Investment Insights]
+    A -->|Initiate Payment| H[Mobile Payment Gateway]
+    H -->|Process Transaction| I[Payment Network APIs]
+    H -->|Track| J[Real-time Transaction Status]
+    E -->|Generate| K[Personalized Recommendations]
