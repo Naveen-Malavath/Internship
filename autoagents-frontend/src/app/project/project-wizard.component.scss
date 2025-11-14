@@ -773,13 +773,19 @@
   border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
+.story-approval__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .story-approval label {
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 0.8rem;
   color: rgba(191, 219, 254, 0.72);
 }
 
@@ -788,10 +794,18 @@
   height: 1.35rem;
 }
 
-.story-approval__story {
-  margin: 0;
-  line-height: 1.55;
+.story-approval__label {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
   color: rgba(226, 232, 240, 0.85);
+}
+
+.story-approval__summary {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.55;
+  color: rgba(226, 232, 240, 0.92);
 }
 
 .story-approval__lists {

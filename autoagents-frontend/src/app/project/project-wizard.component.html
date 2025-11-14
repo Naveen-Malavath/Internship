@@ -236,6 +236,15 @@
             ></textarea>
           </label>
 
+          <label>
+            Agent 1 guidance (optional)
+            <textarea
+              rows="3"
+              [(ngModel)]="aiSummary.customPrompt"
+              placeholder="Provide extra direction for feature generation — constraints, success metrics, exclusions..."
+            ></textarea>
+          </label>
+
           <div class="list-input">
             <div class="list-input__header">
               <h3>Epic ideas</h3>
@@ -286,10 +295,18 @@
           <div>
             <h2>Approve Agent 1 features</h2>
             <p class="wizard-step__hint">
-              Review the AI recommendations, approve the ones you like, and add any gaps manually.
+              Review the AI recommendations, approve the ones you need, and add any gaps manually. Select at least one feature to continue.
             </p>
           </div>
           <div class="wizard-actions">
+            <button
+              type="button"
+              class="ghost"
+              (click)="approveAllFeatures()"
+              [disabled]="!wizardFeatures.length"
+            >
+              Approve all
+            </button>
             <button type="button" class="ghost" (click)="onRefreshFeatureRecommendations()" [disabled]="featureRecommendationsLoading">
               {{ featureRecommendationsLoading ? 'Refreshing…' : 'Refresh suggestions' }}
             </button>
@@ -363,17 +380,27 @@
           <div>
             <h2>Approve Agent 2 stories</h2>
             <p class="wizard-step__hint">
-              Agent 2 drafts stories for each approved feature. Approve at least one story per feature to continue.
+              Agent 2 drafts stories for your approved features. Pick the stories you want to move forward with—select at least one to continue.
             </p>
           </div>
-          <button
-            type="button"
-            class="ghost"
-            (click)="onRefreshStoryRecommendations()"
-            [disabled]="storyRecommendationsLoading"
-          >
-            {{ storyRecommendationsLoading ? 'Refreshing…' : 'Refresh stories' }}
-          </button>
+          <div class="wizard-actions">
+            <button
+              type="button"
+              class="ghost"
+              (click)="approveAllFeaturesAndStories()"
+              [disabled]="!wizardFeatures.length"
+            >
+              Approve all features & stories
+            </button>
+            <button
+              type="button"
+              class="ghost"
+              (click)="onRefreshStoryRecommendations()"
+              [disabled]="storyRecommendationsLoading"
+            >
+              {{ storyRecommendationsLoading ? 'Refreshing…' : 'Refresh stories' }}
+            </button>
+          </div>
         </div>
 
         <div class="story-grid">
@@ -390,16 +417,24 @@
             <ng-container *ngIf="feature.approved; else featureNotApproved">
               <div *ngIf="feature.stories.length; else noStories">
                 <div *ngFor="let story of feature.stories; let sIdx = index" class="story-approval">
+                  <div class="story-approval__meta">
+                    <label>
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        [checked]="story.approved"
+                        (change)="onToggleStoryApproval(fIdx, sIdx)"
+                      />
+                      <span class="story-approval__label">Approve story</span>
+                    </label>
+                    <button type="button" class="ghost" (click)="onEditStory(fIdx, sIdx)">Edit</button>
+                    <button type="button" class="ghost ghost--danger" (click)="onDismissStory(fIdx, sIdx)">
+                      Dismiss
+                    </button>
+                  </div>
                   <label>
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      [checked]="story.approved"
-                      (change)="onToggleStoryApproval(fIdx, sIdx)"
-                    />
-                    <span class="story-approval__label">Approve story</span>
+                    <span class="story-approval__summary">{{ story.spec.userStory }}</span>
                   </label>
-                  <p class="story-approval__story">{{ story.spec.userStory }}</p>
                   <div class="story-approval__lists" *ngIf="story.spec.acceptanceCriteria.length">
                     <h4>Acceptance Criteria</h4>
                     <ul>
@@ -555,6 +590,7 @@
     <feature-form
       [open]="isFeatureFormOpen"
       [preset]="featurePreset"
+      [showAiAssist]="false"
       (cancel)="onFeatureFormCancel()"
       (submit)="onFeatureFormSubmit($event)"
     ></feature-form>

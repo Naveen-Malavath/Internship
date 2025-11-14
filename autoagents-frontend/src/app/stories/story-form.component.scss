@@ -1,0 +1,123 @@
+.story-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: clamp(1.5rem, 3vw, 2rem);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.92);
+  border-radius: 1.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 35px 65px rgba(15, 23, 42, 0.45);
+}
+
+.story-form__header h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  color: #f8fafc;
+}
+
+.story-form__header p {
+  margin: 0;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.story-form__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.story-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: rgba(226, 232, 240, 0.85);
+  font-weight: 500;
+}
+
+.story-form input,
+.story-form textarea {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  color: #f8fafc;
+  font-size: 0.95rem;
+}
+
+.story-form textarea {
+  resize: vertical;
+  min-height: 2.75rem;
+}
+
+.story-form__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  border-radius: 0.85rem;
+  padding: 0.85rem;
+}
+
+.story-form__list header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: rgba(191, 219, 254, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+}
+
+.story-form__empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.story-form__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.story-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.primary {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  border: none;
+  border-radius: 999px;
+  padding: 0.6rem 1.6rem;
+  color: #f8fafc;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+  padding: 0.45rem 1.1rem;
+  color: rgba(226, 232, 240, 0.88);
+  cursor: pointer;
+}
+
+.ghost--danger {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #f87171;
+}
+
+.ghost:disabled,
+.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+

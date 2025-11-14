@@ -14,15 +14,19 @@ import { AgentFeatureDetail, AgentFeatureRisk, FeatureFormSubmission } from '../
 export class FeatureFormComponent {
   @Input() open = false;
   @Input() saving = false;
+  @Input() showAiAssist = true;
+  @Input() aiAssistLoading = false;
   @Input() set preset(value: AgentFeatureDetail | null) {
     if (!value) {
       return;
     }
     this.detail = this.cloneDetail(value);
+    this.aiPrompt = '';
   }
 
   @Output() cancel = new EventEmitter<void>();
   @Output() submit = new EventEmitter<FeatureFormSubmission>();
+  @Output() aiAssist = new EventEmitter<string>();
 
   protected detail: AgentFeatureDetail = this.createEmptyDetail();
   protected readonly priorityOptions: AgentFeatureDetail['priority'][] = [
@@ -32,6 +36,7 @@ export class FeatureFormComponent {
     'critical',
   ];
   protected selectedFiles: File[] = [];
+  protected aiPrompt = '';
 
   protected onSummaryBlur(): void {
     if (!this.detail.key.trim() && this.detail.summary.trim()) {
@@ -158,6 +163,7 @@ export class FeatureFormComponent {
     this.cancel.emit();
     this.detail = this.createEmptyDetail();
     this.selectedFiles = [];
+    this.aiPrompt = '';
   }
 
   protected onSubmit(): void {
@@ -171,6 +177,7 @@ export class FeatureFormComponent {
     });
     this.detail = this.createEmptyDetail();
     this.selectedFiles = [];
+    this.aiPrompt = '';
   }
 
   protected isValid(): boolean {
@@ -185,6 +192,19 @@ export class FeatureFormComponent {
       this.detail.stakeholders.some((stakeholder) => stakeholder.trim().length > 0) &&
       this.detail.targetRelease.trim().length > 0
     );
+  }
+
+  protected onRequestAiAssist(): void {
+    const prompt = this.aiPrompt.trim();
+    if (!prompt || this.saving || this.aiAssistLoading) {
+      return;
+    }
+    this.aiAssist.emit(prompt);
+  }
+
+  public applyAiDetail(detail: AgentFeatureDetail): void {
+    this.detail = this.cloneDetail(detail);
+    this.aiPrompt = '';
   }
 
   private normalizeDetail(detail: AgentFeatureDetail): AgentFeatureDetail {

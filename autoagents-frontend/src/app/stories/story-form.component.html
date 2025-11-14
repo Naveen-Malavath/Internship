@@ -1,0 +1,76 @@
+<section class="story-form" *ngIf="open">
+  <header class="story-form__header">
+    <h2>{{ preset ? 'Edit Story' : 'Add Story' }}</h2>
+    <p>Refine the user story, acceptance criteria, and implementation notes.</p>
+  </header>
+
+  <form (ngSubmit)="onSubmit()" class="story-form__body">
+    <label>
+      Feature title
+      <input
+        type="text"
+        name="featureTitle"
+        [ngModel]="story.featureTitle"
+        (ngModelChange)="story.featureTitle = $event"
+        [readonly]="featureTitleReadonly"
+        required
+        minlength="3"
+      />
+    </label>
+
+    <label>
+      User story
+      <textarea
+        name="userStory"
+        rows="3"
+        [ngModel]="story.userStory"
+        (ngModelChange)="story.userStory = $event"
+        required
+        minlength="10"
+        placeholder="As a ..., I want ..., so that ..."
+      ></textarea>
+    </label>
+
+    <section class="story-form__list">
+      <header>
+        <h3>Acceptance criteria</h3>
+        <button type="button" class="ghost" (click)="onAddAcceptanceCriterion()">+ Add criterion</button>
+      </header>
+      <p class="story-form__empty" *ngIf="!story.acceptanceCriteria.length">Add at least one acceptance criterion.</p>
+      <div *ngFor="let criterion of story.acceptanceCriteria; let idx = index" class="story-form__item">
+        <textarea
+          rows="2"
+          [ngModel]="criterion"
+          (ngModelChange)="onUpdateAcceptanceCriterion(idx, $event)"
+          placeholder="Given ... When ... Then ..."
+        ></textarea>
+        <button type="button" class="ghost ghost--danger" (click)="onRemoveAcceptanceCriterion(idx)">Remove</button>
+      </div>
+    </section>
+
+    <section class="story-form__list">
+      <header>
+        <h3>Implementation notes</h3>
+        <button type="button" class="ghost" (click)="onAddImplementationNote()">+ Add note</button>
+      </header>
+      <div *ngFor="let note of story.implementationNotes; let idx = index" class="story-form__item">
+        <textarea
+          rows="2"
+          [ngModel]="note"
+          (ngModelChange)="onUpdateImplementationNote(idx, $event)"
+          placeholder="Step-by-step guidance or technical considerations"
+        ></textarea>
+        <button type="button" class="ghost ghost--danger" (click)="onRemoveImplementationNote(idx)">Remove</button>
+      </div>
+    </section>
+
+    <footer class="story-form__footer">
+      <button type="button" class="ghost" (click)="onCancel()" [disabled]="saving">Cancel</button>
+      <button type="submit" class="primary" [disabled]="saving">
+        {{ saving ? 'Saving…' : preset ? 'Update story' : 'Add story' }}
+      </button>
+    </footer>
+  </form>
+</section>
+
+
