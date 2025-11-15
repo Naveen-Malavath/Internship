@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import datetime
+import os
 from typing import Any, Dict, List
 
+import anthropic
 from anthropic import APIError
+from fastapi import HTTPException
 
 from .claude_client import (
     DEFAULT_CLAUDE_MODEL,
@@ -229,4 +233,80 @@ class Agent2Service:
                 }
             )
         return fallback
+
+
+async def generate_stories_for_project(project_id: str, db):
+    """Generate and persist user stories for all features in a project."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Claude API key not configured")
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    features_cursor = db["features"].find({"project_id": project_id}).sort("order_index", 1)
+    features = await features_cursor.to_list(length=None)
+    if not features:
+        raise HTTPException(
+            status_code=400, detail="No features found for this project. Run Agent-1 first."
+        )
+
+    created_stories: List[Dict[str, Any]] = []
+
+    for feature in features:
+        feature_text = feature.get("feature_text") or ""
+        feature_id_str = str(feature.get("_id")) if feature.get("_id") is not None else ""
+
+        prompt = (
+            "You are an expert Agile business analyst.\n\n"
+            f"Feature: {feature_text}\n\n"
+            "Task:\n"
+            "Write 2–3 user stories in this exact format:\n"
+            '"As a <type of user>, I want <goal> so that <reason>."\n\n'
+            "For each user story, write 2–3 acceptance criteria as bullet points.\n\n"
+            "Return the result as plain text, with a blank line between each user story."
+        )
+
+        try:
+            response = await client.messages.create(
+                model="claude-3-5-sonnet-latest",
+                max_tokens=1000,
+                temperature=0.4,
+                messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+            )
+        except anthropic.APIError as exc:
+            raise HTTPException(
+                status_code=500, detail="Claude API error while generating user stories"
+            ) from exc
+
+        response_text_parts: List[str] = []
+        for block in getattr(response, "content", []):
+            if getattr(block, "type", None) == "text" and getattr(block, "text", None):
+                response_text_parts.append(block.text)
+        response_text = "\n".join(response_text_parts).strip()
+        if not response_text:
+            continue
+
+        story_blocks = [block.strip() for block in response_text.split("\n\n") if block.strip()]
+
+        for block in story_blocks:
+            lines = [line.strip() for line in block.splitlines() if line.strip()]
+            if not lines:
+                continue
+
+            story_text = lines[0]
+            acceptance_criteria = "\n".join(lines[1:]) if len(lines) > 1 else ""
+
+            document = {
+                "project_id": project_id,
+                "feature_id": feature_id_str,
+                "story_text": story_text,
+                "acceptance_criteria": acceptance_criteria,
+                "created_at": datetime.datetime.utcnow(),
+            }
+
+            insert_result = await db["stories"].insert_one(document)
+            stored_doc = {**document, "_id": str(insert_result.inserted_id)}
+            created_stories.append(stored_doc)
+
+    return created_stories
 
