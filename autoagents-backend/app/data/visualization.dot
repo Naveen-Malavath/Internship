@@ -1,12 +1,17 @@
-digraph BankingPlatform {
+digraph FinancialPlatform {
     node [shape=box];
-    User -> Authentication;
-    Authentication -> BiometricVerification;
-    Authentication -> TwoFactorVerification;
-    User -> Dashboard;
-    Dashboard -> SpendingAnalytics;
-    Dashboard -> InvestmentTracking;
-    User -> PaymentGateway;
-    PaymentGateway -> TransactionProcessing;
-    PaymentGateway -> NetworkIntegration;
+    UserAuth [label="Multi-Factor Authentication"];
+    Onboarding [label="Biometric Onboarding"];
+    Payments [label="Mobile Payment Ecosystem"];
+    Dashboard [label="Personal Financial Dashboard"];
+    Investments [label="Investment Portfolio Insights"];
+    FraudDetection [label="Advanced Fraud Detection"];
+    OpenBanking [label="Open Banking API"];
+    Compliance [label="Regulatory Compliance"];
+
+    UserAuth -> Onboarding;
+    UserAuth -> Payments;
+    UserAuth -> Dashboard;
+    FraudDetection -> Payments;
+    OpenBanking -> Compliance;
 }

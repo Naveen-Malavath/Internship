@@ -15,6 +15,28 @@
     </header>
 
     <form class="feature-form-body" (submit)="$event.preventDefault(); onSubmit()">
+      <section class="form-section ai-section" *ngIf="showAiAssist">
+        <h2>AI Assistance</h2>
+        <p class="ai-helper">
+          Describe the feature you need and let Agent 1 draft the brief automatically.
+        </p>
+        <div class="ai-row">
+          <textarea
+            rows="3"
+            [(ngModel)]="aiPrompt"
+            name="aiPrompt"
+            placeholder="Generate onboarding workflow for small businesses with risk checks and progressive profiling..."
+          ></textarea>
+          <button
+            type="button"
+            class="ai-button"
+            (click)="onRequestAiAssist()"
+            [disabled]="aiAssistLoading || saving || !aiPrompt.trim()"
+          >
+            {{ aiAssistLoading ? 'Generating…' : 'Generate with AI' }}
+          </button>
+        </div>
+      </section>
       <section class="form-section">
         <h2>Overview</h2>
         <div class="form-grid">

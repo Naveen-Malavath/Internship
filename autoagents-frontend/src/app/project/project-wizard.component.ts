@@ -61,6 +61,7 @@ export class ProjectWizardComponent {
       executiveSummary: value.executiveSummary,
       epicIdeas: [...value.epicIdeas],
       riskNotes: [...value.riskNotes],
+      customPrompt: value.customPrompt ?? this.aiSummary.customPrompt ?? '',
     };
   }
   @Input() set featureRecommendations(value: AgentFeatureDetail[] | null) {
@@ -88,6 +89,13 @@ export class ProjectWizardComponent {
     aiSummary: ProjectWizardAISummary;
     features: AgentFeatureDetail[];
   }>();
+  @Output() editStory = new EventEmitter<{
+    featureIndex: number;
+    storyIndex: number;
+    story: AgentStorySpec;
+    featureDetail: AgentFeatureDetail;
+  }>();
+  @Output() dismissStory = new EventEmitter<{ featureIndex: number; storyIndex: number }>();
 
   protected readonly steps = ['Template', 'Project Details', 'AI Assist', 'Features', 'Stories', 'Review'];
   protected stepIndex = 0;
@@ -111,6 +119,7 @@ export class ProjectWizardComponent {
     executiveSummary: '',
     epicIdeas: [],
     riskNotes: [],
+    customPrompt: '',
   };
 
   protected readonly aiPrompts = PROJECT_AI_SUGGESTIONS;
@@ -292,6 +301,22 @@ export class ProjectWizardComponent {
     this.maybeRequestStoryRecommendations();
   }
 
+  protected approveAllFeatures(): void {
+    this.wizardFeatures = this.wizardFeatures.map((feature) => ({
+      ...feature,
+      approved: true,
+    }));
+    this.invalidateStoryRecommendations(false);
+  }
+
+  protected approveAllFeaturesAndStories(): void {
+    this.wizardFeatures = this.wizardFeatures.map((feature) => ({
+      ...feature,
+      approved: true,
+      stories: feature.stories.map((story) => ({ ...story, approved: true })),
+    }));
+  }
+
   protected onToggleStoryApproval(featureIndex: number, storyIndex: number): void {
     const feature = this.wizardFeatures[featureIndex];
     if (!feature) {
@@ -301,6 +326,36 @@ export class ProjectWizardComponent {
       idx === storyIndex ? { ...story, approved: !story.approved } : story,
     );
     this.wizardFeatures[featureIndex] = { ...feature, stories: nextStories };
+  }
+
+  protected onEditStory(featureIndex: number, storyIndex: number): void {
+    const feature = this.wizardFeatures[featureIndex];
+    if (!feature) {
+      return;
+    }
+    const story = feature.stories[storyIndex];
+    if (!story) {
+      return;
+    }
+    this.editStory.emit({
+      featureIndex,
+      storyIndex,
+      story: story.spec,
+      featureDetail: feature.detail,
+    });
+  }
+
+  protected onDismissStory(featureIndex: number, storyIndex: number): void {
+    this.wizardFeatures = this.wizardFeatures.map((feature, idx) => {
+      if (idx !== featureIndex) {
+        return feature;
+      }
+      return {
+        ...feature,
+        stories: feature.stories.filter((_, sIdx) => sIdx !== storyIndex),
+      };
+    });
+    this.dismissStory.emit({ featureIndex, storyIndex });
   }
 
   protected onNext(): void {
@@ -357,16 +412,13 @@ export class ProjectWizardComponent {
         );
       case 2:
         return this.aiSummary.executiveSummary.trim().length >= 20;
-      case 3:
-        return this.wizardFeatures.length > 0 && this.wizardFeatures.every((feature) => feature.approved);
+      case 3: {
+        const approvedFeatures = this.getApprovedFeatures();
+        return approvedFeatures.length > 0;
+      }
       case 4: {
-        const approved = this.wizardFeatures.filter((feature) => feature.approved);
-        return (
-          approved.length > 0 &&
-          approved.every(
-            (feature) => feature.stories.length > 0 && feature.stories.every((story) => story.approved),
-          )
-        );
+        const approvedStories = this.getApprovedStories();
+        return approvedStories.length > 0;
       }
       default:
         return true;
@@ -374,7 +426,12 @@ export class ProjectWizardComponent {
   }
 
   protected canSubmit(): boolean {
-    return this.stepIndex === this.steps.length - 1 && this.canProceed();
+    if (this.stepIndex !== this.steps.length - 1) {
+      return false;
+    }
+    const approvedFeatures = this.getApprovedFeatures();
+    const approvedStories = this.getApprovedStories();
+    return approvedFeatures.length > 0 && approvedStories.length > 0;
   }
 
   protected resetWizard(): void {
@@ -396,6 +453,7 @@ export class ProjectWizardComponent {
       executiveSummary: '',
       epicIdeas: [],
       riskNotes: [],
+      customPrompt: '',
     };
     this.projectFiles = [];
     this.wizardFeatures = [];
@@ -522,6 +580,18 @@ export class ProjectWizardComponent {
     });
   }
 
+  public updateStory(featureIndex: number, storyIndex: number, story: AgentStorySpec): void {
+    this.wizardFeatures = this.wizardFeatures.map((feature, idx) => {
+      if (idx !== featureIndex) {
+        return feature;
+      }
+      const stories = feature.stories.map((entry, sIdx) =>
+        sIdx === storyIndex ? { ...entry, spec: story } : entry,
+      );
+      return { ...feature, stories };
+    });
+  }
+
   private sortWizardFeatures(features: WizardFeature[]): WizardFeature[] {
     return [...features].sort((a, b) => {
       if (a.source !== b.source) {
@@ -541,12 +611,23 @@ export class ProjectWizardComponent {
     this.hasRequestedStoryRecommendations = false;
   }
 
+  private getApprovedFeatures(): WizardFeature[] {
+    return this.wizardFeatures.filter((feature) => feature.approved);
+  }
+
+  private getApprovedStories(): WizardStory[] {
+    return this.getApprovedFeatures().flatMap((feature) =>
+      feature.stories.filter((story) => story.approved),
+    );
+  }
+
   private seedAISummary(template?: ProjectTemplate): void {
     if (!template) {
       this.aiSummary = {
         executiveSummary: '',
         epicIdeas: [],
         riskNotes: [],
+        customPrompt: '',
       };
       return;
     }
@@ -555,6 +636,7 @@ export class ProjectWizardComponent {
       executiveSummary: template.summary,
       epicIdeas: template.focusAreas.map((focus, index) => `Epic ${index + 1}: ${focus}`),
       riskNotes: ['Pending AI insights based on your selected prompts.'],
+      customPrompt: '',
     };
   }
 
@@ -572,5 +654,6 @@ export class ProjectWizardComponent {
     const base = detail.key?.trim().toLowerCase() || detail.summary.trim().toLowerCase();
     return base.replace(/[^a-z0-9]+/g, '-');
   }
+
 }
 

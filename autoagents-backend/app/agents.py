@@ -104,11 +104,11 @@ class ClaudeAgent:
 
         response = await self._client.messages.create(
             model=self._model,
-            max_tokens=800,
+            max_tokens=1400,
             temperature=0.4,
             system=(
                 "You are Agent_1, a product strategist who translates business ideas into "
-                "feature briefs. Respond with concise, implementation-ready suggestions."
+                "feature briefs. Respond with concise, implementation-ready suggestions. "
                 "Always return valid JSON that matches this schema:\n"
                 "{\n"
                 '  "summary": "one sentence summary",\n'
@@ -119,7 +119,9 @@ class ClaudeAgent:
                 '      "acceptanceCriteria": ["bullet", "..."]\n'
                 "    }\n"
                 "  ]\n"
-                "}"
+                "}\n"
+                'Ensure the "features" array contains at least eight distinct items spanning onboarding, core workflows, administration/compliance, analytics/reporting, integrations, and forward-looking innovation. '
+                "Keep the prose tight so everything fits within the token budget."
             ),
             messages=[
                 {"role": "user", "content": [{"type": "text", "text": (
@@ -172,6 +174,22 @@ class ClaudeAgent:
             if "\n" in stripped:
                 stripped = stripped.split("\n", 1)[1]
 
+        decoder = json.JSONDecoder()
+        try:
+            payload, _ = decoder.raw_decode(stripped)
+            return payload
+        except json.JSONDecodeError:
+            pass
+
+        first_brace = stripped.find("{")
+        last_brace = stripped.rfind("}")
+        if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
+            candidate = stripped[first_brace : last_brace + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                logger.debug("Candidate JSON slice failed to parse; continuing fallback.", exc_info=True)
+
         try:
             return json.loads(stripped)
         except json.JSONDecodeError:
@@ -199,8 +217,8 @@ class ClaudeStoryAgent:
 
         response = await self._client.messages.create(
             model=self._model,
-            max_tokens=900,
-            temperature=0.45,
+            max_tokens=1400,
+            temperature=0.4,
             system=(
                 "You are Agent_2, a senior product manager translating feature briefs into user "
                 "stories and implementation notes. Always respond with JSON shaped exactly like:\n"
@@ -214,7 +232,10 @@ class ClaudeStoryAgent:
                 '      "implementationNotes": ["first task", "second task"]\n'
                 "    }\n"
                 "  ]\n"
-                "}"
+                "}\n"
+                "Return at least eight story objects for every approved feature (match exactly by featureTitle). "
+                "Ensure acceptance criteria include low- and medium-level architectural considerations. "
+                "Keep prose concise so the response stays within the token budget."
             ),
             messages=[
                 {
@@ -254,15 +275,42 @@ class ClaudeStoryAgent:
         ]
 
         summary = payload.get("summary", "Story summary unavailable.")
+        if not stories:
+            logger.warning("Agent_2 returned no stories. Falling back to generated scaffolding.")
+            stories = []
+            for feature in features:
+                stories.append(self._build_placeholder_story(feature))
+            summary = (
+                summary
+                if summary and summary != "Story summary unavailable."
+                else "Generated placeholder stories because Agent_2 response was empty."
+            )
         debug_payload = {
             "raw_text_preview": text[:250],
         }
 
-        return AgentStoriesResult(
-            run_id=run_id,
-            summary=summary,
-            stories=stories,
-            debug=debug_payload,
+        return AgentStoriesResult(run_id=run_id, summary=summary, stories=stories, debug=debug_payload)
+
+    def _build_placeholder_story(self, feature: FeatureSpec) -> StorySpec:
+        title = feature.title or "Unlabelled feature"
+        user_story = (
+            f"As a platform engineer, I need {title.lower()} capabilities so that the solution stays reliable."
+        )
+        acceptance = [
+            f"Given the {title.lower()} service is provisioned, when a workload executes, then end-to-end tracing is captured.",
+            f"Given deployment pipelines run for {title.lower()}, when artifacts are promoted, then infrastructure policies pass.",
+            f"Given observability hooks are enabled, when {title.lower()} integrates with downstream systems, then alerts trigger within service budgets.",
+        ]
+        implementation = [
+            f"Outline modules, interfaces, and data contracts for the {title.lower()} stack.",
+            "Integrate shared authentication, logging, and metrics components.",
+            "Automate integration tests covering API, data, and messaging flows.",
+        ]
+        return StorySpec(
+            feature_title=title,
+            user_story=user_story,
+            acceptance_criteria=acceptance,
+            implementation_notes=implementation,
         )
 
 

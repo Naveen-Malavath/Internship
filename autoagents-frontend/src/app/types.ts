@@ -148,6 +148,7 @@ export type ProjectWizardAISummary = {
   executiveSummary: string;
   epicIdeas: string[];
   riskNotes: string[];
+  customPrompt: string;
 };
 
 export type ProjectWizardSubmission = {

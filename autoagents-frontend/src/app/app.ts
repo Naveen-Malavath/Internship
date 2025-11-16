@@ -35,11 +35,20 @@ import {
   ProjectWizardSubmission,
   ProjectWizardSubmissionPayload,
 } from './types';
+import { StoryFormComponent } from './stories/story-form.component';
+
+type StoryFormContext =
+  | { scope: 'wizard'; featureIndex: number; storyIndex: number; originalStory: AgentStorySpec }
+  | { scope: 'workspace'; featureTitle: string; originalStory: AgentStorySpec };
+
+type StoryFormContextInput =
+  | { scope: 'wizard'; featureIndex: number; storyIndex: number }
+  | { scope: 'workspace'; featureTitle: string };
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, WorkspaceViewComponent, ProjectWizardComponent, FeatureFormComponent],
+  imports: [CommonModule, WorkspaceViewComponent, ProjectWizardComponent, FeatureFormComponent, StoryFormComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
@@ -61,6 +70,8 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   protected readonly lastPrompt = signal('');
   protected readonly latestFeatures = signal<AgentFeatureSpec[]>([]);
   protected readonly latestStories = signal<AgentStorySpec[]>([]);
+  protected readonly agent1SelectedFeatures = signal<Set<string>>(new Set());
+  protected readonly agent2SelectedStories = signal<Set<string>>(new Set());
   protected readonly conversationHistory = signal<HistoryEntry[]>([]);
   protected readonly activeConversationId = signal<string>(this.createConversationId());
   protected readonly isFullScreen = signal(false);
@@ -74,6 +85,10 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   protected readonly workspaceMermaidSaving = signal(false);
   protected readonly workspaceMermaidSaveMessage = signal<string | null>(null);
   protected readonly workspaceMermaidUpdatedAt = signal<string | null>(null);
+  protected readonly isStoryFormOpen = signal(false);
+  protected readonly storyFormSaving = signal(false);
+  protected readonly storyFormDraft = signal<AgentStorySpec | null>(null);
+  protected readonly storyFormFeatureReadonly = signal(false);
   protected readonly mermaidChatInput = signal('');
   protected readonly mermaidChatError = signal<string | null>(null);
   protected readonly workspaceProject = signal<ProjectWizardSubmission | null>(null);
@@ -90,12 +105,16 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   protected readonly isFeatureFormOpen = signal(false);
   protected readonly featureFormSaving = signal(false);
   protected readonly featureFormDraft = signal<AgentFeatureDetail | null>(null);
+  protected readonly featureFormAiLoading = signal(false);
+  protected readonly featureFormEditTarget = signal<string | null>(null);
   protected readonly projectWizardFeatureRecommendations = signal<AgentFeatureDetail[]>([]);
   protected readonly projectWizardStoryRecommendations = signal<AgentStorySpec[]>([]);
   protected readonly projectWizardFeaturesLoading = signal(false);
   protected readonly projectWizardStoriesLoading = signal(false);
 
   @ViewChild('chatMermaidContainer') private chatMermaidContainer?: ElementRef<HTMLDivElement>;
+  @ViewChild(FeatureFormComponent) private featureFormRef?: FeatureFormComponent;
+  @ViewChild(ProjectWizardComponent) private projectWizardRef?: ProjectWizardComponent;
 
   private readonly http = inject(HttpClient);
   private mermaidChatInitialised = false;
@@ -103,6 +122,7 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   private projectWizardCompletionTimer: ReturnType<typeof setTimeout> | null = null;
   private projectWizardAiTimer: ReturnType<typeof setTimeout> | null = null;
   private featureFormTimer: ReturnType<typeof setTimeout> | null = null;
+  private storyFormContext: StoryFormContext | null = null;
 
   ngOnInit(): void {
     this.fetchRightNowStatus();
@@ -321,7 +341,9 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     this.latestFeatures.set(
       features.map((feature: AgentFeatureSpec) => this.cloneFeature(feature)),
     );
+    this.resetAgent1Selections(this.latestFeatures());
     this.latestStories.set([]);
+    this.resetAgent2Selections([]);
     this.clearMermaidDiagram();
     this.agentStage.set('agent2');
     this.agent2AwaitingDecision.set(false);
@@ -350,7 +372,9 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     this.agent2AwaitingDecision.set(false);
     this.lastPrompt.set('');
     this.latestFeatures.set([]);
+    this.resetAgent1Selections([]);
     this.latestStories.set([]);
+    this.resetAgent2Selections([]);
     this.chatInput.set('');
     this.workspaceVisualization.set(null);
     this.workspaceMermaid.set('');
@@ -367,7 +391,9 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     this.agent2AwaitingDecision.set(session.agent2AwaitingDecision);
     this.lastPrompt.set(session.lastPrompt);
     this.latestFeatures.set(session.latestFeatures.map((feature: AgentFeatureSpec) => this.cloneFeature(feature)));
+    this.resetAgent1Selections(this.latestFeatures());
     this.latestStories.set(session.latestStories.map((story: AgentStorySpec) => this.cloneStory(story)));
+    this.resetAgent2Selections(this.latestStories());
     this.workspaceMermaid.set('');
     this.workspaceProject.set(session.project ?? null);
     this.activeConversationId.set(session.id);
@@ -427,6 +453,306 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     };
   }
 
+  private featureTrackingKey(feature: AgentFeatureSpec): string {
+    const detailKey = feature.detail?.key?.trim().toLowerCase();
+    if (detailKey?.length) {
+      return detailKey;
+    }
+    return feature.title?.trim().toLowerCase() ?? '';
+  }
+
+  private detailTrackingKey(detail: AgentFeatureDetail): string {
+    const key = detail.key?.trim().toLowerCase();
+    if (key?.length) {
+      return key;
+    }
+    return detail.summary?.trim().toLowerCase() ?? '';
+  }
+
+  private storyTrackingKey(featureTitle: string, story: AgentStorySpec): string {
+    const featureKey = featureTitle.trim().toLowerCase();
+    const storyKey = story.userStory.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `${featureKey}::${storyKey}`;
+  }
+
+  private extractFeatureKeys(features: AgentFeatureSpec[]): Set<string> {
+    const keys = new Set<string>();
+    for (const feature of features) {
+      const key = this.featureTrackingKey(feature);
+      if (key) {
+        keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  private resetAgent1Selections(features: AgentFeatureSpec[]): void {
+    this.agent1SelectedFeatures.set(this.extractFeatureKeys(features));
+  }
+
+  private syncAgent1Selections(): void {
+    const currentSelections = this.agent1SelectedFeatures();
+    if (!currentSelections.size) {
+      this.agent1SelectedFeatures.set(new Set());
+      return;
+    }
+
+    const validKeys = this.extractFeatureKeys(this.latestFeatures());
+    const nextSelections = new Set<string>();
+    for (const key of validKeys) {
+      if (currentSelections.has(key)) {
+        nextSelections.add(key);
+      }
+    }
+
+    this.agent1SelectedFeatures.set(nextSelections);
+  }
+
+  private setFeatureSelection(key: string, selected: boolean): void {
+    if (!key) {
+      return;
+    }
+
+    const currentSelections = this.agent1SelectedFeatures();
+    const nextSelections = new Set<string>(currentSelections);
+    if (selected) {
+      nextSelections.add(key);
+    } else {
+      nextSelections.delete(key);
+    }
+
+    const validKeys = this.extractFeatureKeys(this.latestFeatures());
+    const prunedSelections = new Set<string>();
+    for (const validKey of validKeys) {
+      if (nextSelections.has(validKey)) {
+        prunedSelections.add(validKey);
+      }
+    }
+
+    this.agent1SelectedFeatures.set(prunedSelections);
+  }
+
+  private getSelectedLatestFeatures(): AgentFeatureSpec[] {
+    const selectedKeys = this.agent1SelectedFeatures();
+    if (!selectedKeys.size) {
+      return [];
+    }
+
+    return this.latestFeatures().filter((feature) => selectedKeys.has(this.featureTrackingKey(feature)));
+  }
+
+  protected canSelectFeatures(message: ChatMessage): boolean {
+    if (
+      this.agentStage() !== 'agent1' ||
+      !this.agent1AwaitingDecision() ||
+      message.agent !== 'agent1' ||
+      !message.features?.length
+    ) {
+      return false;
+    }
+
+    const runId = this.agent1RunId();
+    return Boolean(runId && message.runId === runId);
+  }
+
+  protected isFeatureSelected(feature: AgentFeatureSpec): boolean {
+    const key = this.featureTrackingKey(feature);
+    return Boolean(key && this.agent1SelectedFeatures().has(key));
+  }
+
+  protected onFeatureSelectionChange(feature: AgentFeatureSpec, selected: boolean): void {
+    const key = this.featureTrackingKey(feature);
+    this.setFeatureSelection(key, selected);
+  }
+
+  protected onFeatureSelectionInput(event: Event, feature: AgentFeatureSpec): void {
+    event.stopPropagation();
+    const target = event.target as HTMLInputElement | null;
+    this.onFeatureSelectionChange(feature, !!target?.checked);
+  }
+
+  private extractStoryKeys(stories: AgentStorySpec[]): Set<string> {
+    const keys = new Set<string>();
+    for (const story of stories) {
+      const featureTitle = story.featureTitle ?? '';
+      const key = this.storyTrackingKey(featureTitle, story);
+      if (key) {
+        keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  private resetAgent2Selections(stories: AgentStorySpec[]): void {
+    this.agent2SelectedStories.set(this.extractStoryKeys(stories));
+  }
+
+  private syncAgent2Selections(): void {
+    const currentSelections = this.agent2SelectedStories();
+    if (!currentSelections.size) {
+      this.agent2SelectedStories.set(new Set());
+      return;
+    }
+
+    const validKeys = this.extractStoryKeys(this.latestStories());
+    const nextSelections = new Set<string>();
+    for (const key of validKeys) {
+      if (currentSelections.has(key)) {
+        nextSelections.add(key);
+      }
+    }
+
+    this.agent2SelectedStories.set(nextSelections);
+  }
+
+  private setStorySelection(key: string, selected: boolean): void {
+    if (!key) {
+      return;
+    }
+
+    const currentSelections = this.agent2SelectedStories();
+    const nextSelections = new Set<string>(currentSelections);
+    if (selected) {
+      nextSelections.add(key);
+    } else {
+      nextSelections.delete(key);
+    }
+
+    const validKeys = this.extractStoryKeys(this.latestStories());
+    const prunedSelections = new Set<string>();
+    for (const validKey of validKeys) {
+      if (nextSelections.has(validKey)) {
+        prunedSelections.add(validKey);
+      }
+    }
+
+    this.agent2SelectedStories.set(prunedSelections);
+  }
+
+  private getSelectedLatestStories(): AgentStorySpec[] {
+    const selectedKeys = this.agent2SelectedStories();
+    if (!selectedKeys.size) {
+      return [];
+    }
+
+    return this.latestStories().filter((story) =>
+      selectedKeys.has(this.storyTrackingKey(story.featureTitle ?? '', story)),
+    );
+  }
+
+  protected canSelectStories(message: ChatMessage): boolean {
+    if (
+      this.agentStage() !== 'agent2' ||
+      !this.agent2AwaitingDecision() ||
+      message.agent !== 'agent2' ||
+      !message.stories?.length
+    ) {
+      return false;
+    }
+
+    const runId = this.agent2RunId();
+    return Boolean(runId && message.runId === runId);
+  }
+
+  protected isStorySelected(story: AgentStorySpec): boolean {
+    const key = this.storyTrackingKey(story.featureTitle ?? '', story);
+    return Boolean(key && this.agent2SelectedStories().has(key));
+  }
+
+  protected onStorySelectionChange(story: AgentStorySpec, selected: boolean): void {
+    const key = this.storyTrackingKey(story.featureTitle ?? '', story);
+    this.setStorySelection(key, selected);
+  }
+
+  protected onStorySelectionInput(event: Event, story: AgentStorySpec): void {
+    event.stopPropagation();
+    const target = event.target as HTMLInputElement | null;
+    this.onStorySelectionChange(story, !!target?.checked);
+  }
+
+  private applyWorkspaceStoryUpdate(
+    featureTitle: string,
+    existing: AgentStorySpec,
+    updated: AgentStorySpec,
+    notify = true,
+  ): void {
+    const featureTitleKey = featureTitle.trim().toLowerCase();
+    const existingKey = this.storyTrackingKey(featureTitle, existing);
+    const updatedStory = this.cloneStory({ ...updated, featureTitle });
+
+    this.workspaceStories.update((stories) =>
+      stories.map((story) => {
+        const storyKey = this.storyTrackingKey(story.featureTitle, story);
+        return storyKey === existingKey ? updatedStory : story;
+      }),
+    );
+
+    this.latestStories.update((stories) =>
+      stories.map((story) => {
+        const storyKey = this.storyTrackingKey(story.featureTitle, story);
+        return storyKey === existingKey ? updatedStory : story;
+      }),
+    );
+    this.syncAgent2Selections();
+
+    this.workspaceProject.update((project) => {
+      if (!project) {
+        return project;
+      }
+      const stories = project.stories.map((story) => {
+        const storyKey = this.storyTrackingKey(story.featureTitle, story);
+        return storyKey === existingKey ? updatedStory : story;
+      });
+      return {
+        ...project,
+        stories,
+      };
+    });
+
+    // Update features detail acceptance criteria if necessary (no change here).
+    if (notify) {
+      this.appendMessage({
+        sender: 'assistant',
+        agent: 'agent2',
+        text: `Story for "${featureTitle}" refined.`,
+        stories: [updatedStory],
+        runId: null,
+      });
+    }
+  }
+
+  private removeWorkspaceStory(featureTitle: string, story: AgentStorySpec): void {
+    const storyKey = this.storyTrackingKey(featureTitle, story);
+
+    this.workspaceStories.update((stories) =>
+      stories.filter((entry) => this.storyTrackingKey(entry.featureTitle, entry) !== storyKey),
+    );
+
+    this.latestStories.update((stories) =>
+      stories.filter((entry) => this.storyTrackingKey(entry.featureTitle, entry) !== storyKey),
+    );
+    this.syncAgent2Selections();
+
+    this.workspaceProject.update((project) => {
+      if (!project) {
+        return project;
+      }
+      return {
+        ...project,
+        stories: project.stories.filter(
+          (entry) => this.storyTrackingKey(entry.featureTitle, entry) !== storyKey,
+        ),
+      };
+    });
+
+    this.appendMessage({
+      sender: 'assistant',
+      agent: 'agent2',
+      text: `Story "${story.userStory}" was dismissed from feature "${featureTitle}".`,
+      runId: null,
+    });
+  }
+
   private cloneStory(story: AgentStorySpec): AgentStorySpec {
     return {
       featureTitle: story.featureTitle,
@@ -469,7 +795,9 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     this.agent1RunId.set(null);
     this.agent2RunId.set(null);
     this.latestFeatures.set([]);
+    this.resetAgent1Selections([]);
     this.latestStories.set([]);
+    this.resetAgent2Selections([]);
     this.lastPrompt.set(pendingMessage);
     this.clearMermaidDiagram();
 
@@ -493,6 +821,7 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
           this.latestFeatures.set(
           features.map((feature: AgentFeatureSpec) => this.cloneFeature(feature)),
           );
+          this.resetAgent1Selections(this.latestFeatures());
           this.agent1RunId.set(response.run_id);
           this.agent1AwaitingDecision.set(true);
           this.clearMermaidDiagram();
@@ -527,17 +856,19 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
       run_id: runId,
     };
 
-    const featuresSnapshot =
-      decision === 'keep' || decision === 'keep_all'
-        ? this.latestFeatures().map((feature: AgentFeatureSpec) => this.cloneFeature(feature))
-        : undefined;
-
-    if ((decision === 'keep' || decision === 'keep_all') && (!featuresSnapshot || !featuresSnapshot.length)) {
-      console.warn('[agent1:keep] No features available to store.');
-      return;
-    }
-
-    if (featuresSnapshot) {
+    let featuresSnapshot: AgentFeatureSpec[] | undefined;
+    if (decision === 'keep' || decision === 'keep_all') {
+      const sourceFeatures =
+        decision === 'keep_all' ? this.latestFeatures() : this.getSelectedLatestFeatures();
+      if (!sourceFeatures.length) {
+        console.warn(
+          decision === 'keep'
+            ? '[agent1:keep] No features selected to store.'
+            : '[agent1:keep_all] No features available to store.',
+        );
+        return;
+      }
+      featuresSnapshot = sourceFeatures.map((feature: AgentFeatureSpec) => this.cloneFeature(feature));
       payload.features = featuresSnapshot;
     }
 
@@ -567,6 +898,7 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
                 acceptanceCriteria: [...feature.acceptanceCriteria],
               })),
             );
+            this.resetAgent1Selections(this.latestFeatures());
             this.agent1RunId.set(response.run_id);
             this.agent1AwaitingDecision.set(true);
             this.clearMermaidDiagram();
@@ -574,6 +906,7 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
             this.agent1RunId.set(null);
             this.agent1AwaitingDecision.set(false);
             this.latestFeatures.set(featuresSnapshot ?? []);
+            this.resetAgent1Selections(this.latestFeatures());
             this.clearMermaidDiagram();
             if (featuresSnapshot?.length) {
               this.startAgent2(featuresSnapshot);
@@ -605,16 +938,30 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const stories = this.latestStories();
     if (decision === 'keep') {
       if (!this.agent2RunId()) {
         console.warn('[agent2:keep] Missing run id to approve.');
         return;
       }
+      const stories = this.latestStories();
       if (!stories.length) {
         console.warn('[agent2:keep] No stories captured to approve.');
         return;
       }
+      const selectedStories = this.getSelectedLatestStories();
+      if (!selectedStories.length) {
+        console.warn('[agent2:keep] No stories selected to approve.');
+        return;
+      }
+      const approvedStories = selectedStories.map((story: AgentStorySpec) => this.cloneStory(story));
+      this.latestStories.set(approvedStories);
+      this.resetAgent2Selections(approvedStories);
+      this.invokeAgent2(
+        features.map((feature: AgentFeatureSpec) => this.cloneFeature(feature)),
+        decision,
+        approvedStories,
+      );
+      return;
     }
 
     this.invokeAgent2(features.map((feature: AgentFeatureSpec) => this.cloneFeature(feature)), decision);
@@ -681,13 +1028,16 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
           console.debug('[agent2:response]', response);
           const storiesResponse = response.stories ?? [];
           if (storiesResponse.length) {
-            this.latestStories.set(
-              storiesResponse.map((story: AgentStorySpec) => ({
-                ...story,
-                acceptanceCriteria: [...story.acceptanceCriteria],
-                implementationNotes: [...story.implementationNotes],
-              })),
-            );
+            const nextStories = storiesResponse.map((story: AgentStorySpec) => ({
+              ...story,
+              acceptanceCriteria: [...story.acceptanceCriteria],
+              implementationNotes: [...story.implementationNotes],
+            }));
+            this.latestStories.set(nextStories);
+            this.resetAgent2Selections(this.latestStories());
+          } else if (decision !== 'keep') {
+            this.latestStories.set([]);
+            this.resetAgent2Selections([]);
           }
 
           const assistantMessage: ChatMessage = {
@@ -774,6 +1124,8 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   protected openFeatureForm(): void {
     this.cancelFeatureFormTimer();
     this.featureFormSaving.set(false);
+    this.featureFormEditTarget.set(null);
+    this.featureFormAiLoading.set(false);
     this.isFeatureFormOpen.set(true);
     this.featureFormDraft.set(null);
   }
@@ -782,6 +1134,9 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     this.isFeatureFormOpen.set(false);
     this.cancelFeatureFormTimer();
     this.featureFormSaving.set(false);
+    this.featureFormEditTarget.set(null);
+    this.featureFormDraft.set(null);
+    this.featureFormAiLoading.set(false);
   }
 
   protected onFeatureFormSubmit(submission: FeatureFormSubmission): void {
@@ -789,33 +1144,242 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
+    this.featureFormAiLoading.set(false);
     this.featureFormSaving.set(true);
     this.featureFormDraft.set(submission.detail);
 
+    const editKey = this.featureFormEditTarget();
+    const existingFeature =
+      editKey !== null
+        ? this.workspaceFeatures().find((feature: AgentFeatureSpec) => this.featureTrackingKey(feature) === editKey)
+        : null;
+    const previousFeature = existingFeature ? this.cloneFeature(existingFeature) : null;
+
     this.cancelFeatureFormTimer();
     this.featureFormTimer = setTimeout(() => {
-      const feature = this.createFeatureFromDetail(submission.detail);
-      this.latestFeatures.update((features: AgentFeatureSpec[]) => [...features, feature]);
-      if (this.isWorkspaceMode()) {
-        this.workspaceFeatures.update((features: AgentFeatureSpec[]) => [
-          ...features,
-          this.cloneFeature(feature),
-        ]);
-      }
+      if (previousFeature) {
+        this.applyWorkspaceFeatureUpdate(
+          previousFeature,
+          submission.detail,
+          'manual',
+          `Feature "${submission.detail.summary}" updated manually.`,
+          null,
+        );
+        if (submission.files.length) {
+          this.uploadFeatureFiles(submission.files, submission.detail);
+        }
+      } else {
+        const feature = this.createFeatureFromDetail(submission.detail);
+        this.latestFeatures.update((features: AgentFeatureSpec[]) => [...features, feature]);
+        this.syncAgent1Selections();
+        if (this.isWorkspaceMode()) {
+          this.workspaceFeatures.update((features: AgentFeatureSpec[]) => [
+            ...features,
+            this.cloneFeature(feature),
+          ]);
+          this.workspaceProject.update((project) =>
+            project
+              ? {
+                  ...project,
+                  features: [...project.features, this.cloneFeatureDetail(submission.detail)],
+                }
+              : project,
+          );
+        }
 
-      this.appendMessage({
-        sender: 'assistant',
-        agent: 'agent1',
-        text: `Manual feature captured: ${submission.detail.summary}`,
-        features: [feature],
-        runId: null,
-      });
-      this.uploadFeatureFiles(submission.files, submission.detail);
+        this.appendMessage({
+          sender: 'assistant',
+          agent: 'agent1',
+          text: `Manual feature captured: ${submission.detail.summary}`,
+          features: [feature],
+          runId: null,
+        });
+        this.uploadFeatureFiles(submission.files, submission.detail);
+      }
 
       this.featureFormSaving.set(false);
       this.isFeatureFormOpen.set(false);
       this.featureFormDraft.set(null);
+      this.featureFormEditTarget.set(null);
+      this.featureFormAiLoading.set(false);
     }, 650);
+  }
+
+  protected onFeatureFormAi(prompt: string): void {
+    const trimmed = prompt.trim();
+    if (!trimmed || this.featureFormAiLoading()) {
+      return;
+    }
+
+    this.featureFormAiLoading.set(true);
+    const existingDetail = this.featureFormDraft();
+    const project = this.workspaceProject();
+    const promptBody = existingDetail
+      ? `${this.composeFeatureEnhancementPrompt(this.createFeatureFromDetail(existingDetail), project)}\n\nProduct owner request:\n${trimmed}`
+      : trimmed;
+    const payload: AgentFeatureRequestPayload = { prompt: promptBody };
+
+    this.http.post<AgentFeatureResponse>(`${this.backendUrl}/agent/features`, payload).subscribe({
+      next: (response: AgentFeatureResponse) => {
+        const spec = response.features?.[0];
+        if (!spec) {
+          console.warn('[feature-form:ai] No features returned for prompt.');
+          this.featureFormAiLoading.set(false);
+          return;
+        }
+
+        const existing = this.featureFormDraft();
+        const detail = existing
+          ? this.mergeFeatureDetail(existing, spec)
+          : this.createFeatureDetailFromSpec(spec, 0);
+
+        this.featureFormDraft.set(detail);
+        this.featureFormRef?.applyAiDetail(detail);
+        this.featureFormAiLoading.set(false);
+      },
+      error: (error: unknown) => {
+        console.error('[feature-form:ai:error]', error);
+        this.featureFormAiLoading.set(false);
+      },
+    });
+  }
+
+  protected onWorkspaceFeatureEdit(feature: AgentFeatureSpec): void {
+    const detail = feature.detail
+      ? this.cloneFeatureDetail(feature.detail)
+      : this.createFeatureDetailFromSpec(feature, 0);
+    this.cancelFeatureFormTimer();
+    this.featureFormSaving.set(false);
+    this.featureFormDraft.set(detail);
+    this.featureFormEditTarget.set(this.featureTrackingKey(feature));
+    this.isFeatureFormOpen.set(true);
+  }
+
+  protected onWorkspaceFeatureDismiss(feature: AgentFeatureSpec): void {
+    const key = this.featureTrackingKey(feature);
+    if (!key) {
+      return;
+    }
+    this.workspaceFeatures.update((features) =>
+      features.filter((entry) => this.featureTrackingKey(entry) !== key),
+    );
+    this.latestFeatures.update((features) =>
+      features.filter((entry) => this.featureTrackingKey(entry) !== key),
+    );
+    this.syncAgent1Selections();
+    this.workspaceProject.update((project) => {
+      if (!project) {
+        return project;
+      }
+      return {
+        ...project,
+        features: project.features.filter(
+          (detail) => this.detailTrackingKey(detail) !== key,
+        ),
+        stories: project.stories.filter(
+          (story) => story.featureTitle.trim().toLowerCase() !== feature.title.trim().toLowerCase(),
+        ),
+      };
+    });
+    this.workspaceStories.update((stories) =>
+      stories.filter(
+        (entry) => entry.featureTitle.trim().toLowerCase() !== feature.title.trim().toLowerCase(),
+      ),
+    );
+    this.latestStories.update((stories) =>
+      stories.filter(
+        (entry) => entry.featureTitle.trim().toLowerCase() !== feature.title.trim().toLowerCase(),
+      ),
+    );
+    this.syncAgent2Selections();
+    this.appendMessage({
+      sender: 'assistant',
+      agent: 'agent1',
+      text: `Feature "${feature.title}" was dismissed from the workspace.`,
+      runId: null,
+    });
+  }
+
+  protected onWorkspaceStoryEdit(event: { feature: AgentFeatureSpec; story: AgentStorySpec }): void {
+    const { feature, story } = event;
+    this.openStoryForm({ scope: 'workspace', featureTitle: feature.title }, story, true);
+  }
+
+  protected onWorkspaceStoryDismiss(event: { feature: AgentFeatureSpec; story: AgentStorySpec }): void {
+    const { feature, story } = event;
+    this.removeWorkspaceStory(feature.title, story);
+  }
+
+  protected onStoryFormCancel(): void {
+    this.storyFormSaving.set(false);
+    this.closeStoryForm();
+  }
+
+  protected onStoryFormSubmit(story: AgentStorySpec): void {
+    if (!this.storyFormContext) {
+      this.closeStoryForm();
+      return;
+    }
+
+    this.storyFormSaving.set(true);
+
+    if (this.storyFormContext.scope === 'wizard') {
+      const { featureIndex, storyIndex, originalStory } = this.storyFormContext;
+      const patched = this.cloneStory({
+        ...story,
+        featureTitle: originalStory.featureTitle,
+      });
+      this.projectWizardRef?.updateStory(featureIndex, storyIndex, patched);
+    } else {
+      const { featureTitle, originalStory } = this.storyFormContext;
+      const patched = this.cloneStory({
+        ...story,
+        featureTitle,
+      });
+      this.applyWorkspaceStoryUpdate(featureTitle, originalStory, patched, false);
+      this.appendMessage({
+        sender: 'assistant',
+        agent: 'agent2',
+        text: `Story "${patched.userStory}" updated manually for feature "${featureTitle}".`,
+        stories: [patched],
+        runId: null,
+      });
+    }
+
+    this.storyFormSaving.set(false);
+    this.closeStoryForm();
+  }
+
+  private openStoryForm(
+    context: StoryFormContextInput,
+    story: AgentStorySpec,
+    featureReadonly: boolean,
+  ): void {
+    this.storyFormContext =
+      context.scope === 'wizard'
+        ? {
+            scope: 'wizard',
+            featureIndex: context.featureIndex,
+            storyIndex: context.storyIndex,
+            originalStory: this.cloneStory(story),
+          }
+        : {
+            scope: 'workspace',
+            featureTitle: context.featureTitle,
+            originalStory: this.cloneStory(story),
+          };
+    this.storyFormDraft.set(this.cloneStory(story));
+    this.storyFormFeatureReadonly.set(featureReadonly);
+    this.isStoryFormOpen.set(true);
+    this.storyFormSaving.set(false);
+  }
+
+  private closeStoryForm(): void {
+    this.storyFormContext = null;
+    this.isStoryFormOpen.set(false);
+    this.storyFormDraft.set(null);
+    this.storyFormFeatureReadonly.set(false);
+    this.storyFormSaving.set(false);
   }
 
   private createFeatureFromDetail(detail: AgentFeatureDetail): AgentFeatureSpec {
@@ -865,6 +1429,128 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     };
   }
 
+  private findWorkspaceFeatureDetail(featureTitle: string): AgentFeatureDetail | null {
+    const titleKey = featureTitle.trim().toLowerCase();
+    const match = this.workspaceFeatures().find(
+      (feature) => feature.title?.trim().toLowerCase() === titleKey,
+    );
+    if (!match) {
+      return null;
+    }
+    return match.detail ? this.cloneFeatureDetail(match.detail) : this.createFeatureDetailFromSpec(match, 0);
+  }
+
+  private mergeFeatureDetail(original: AgentFeatureDetail, spec: AgentFeatureSpec): AgentFeatureDetail {
+    const base = this.createFeatureDetailFromSpec(spec, 0);
+    return {
+      ...original,
+      summary: base.summary,
+      description: base.description,
+      problemStatement: base.problemStatement,
+      businessObjective: base.businessObjective,
+      acceptanceCriteria: base.acceptanceCriteria,
+    };
+  }
+
+  private applyWorkspaceFeatureUpdate(
+    previousFeature: AgentFeatureSpec,
+    newDetail: AgentFeatureDetail,
+    origin: 'ai' | 'manual',
+    summary: string | null,
+    runId: string | null,
+  ): void {
+    const targetKey = this.featureTrackingKey(previousFeature);
+    const previousTitle = previousFeature.title ?? '';
+    const previousTitleKey = previousTitle.trim().toLowerCase();
+    const previousDetailSummary = previousFeature.detail?.summary ?? '';
+    const previousDetailSummaryKey = previousDetailSummary.trim().toLowerCase();
+    const updatedSpec = this.createFeatureFromDetail(newDetail);
+    const newTitle = updatedSpec.title ?? '';
+    const newTitleKey = newTitle.trim().toLowerCase();
+
+    const matchesFeature = (feature: AgentFeatureSpec): boolean => {
+      const featureKey = this.featureTrackingKey(feature);
+      if (targetKey && featureKey === targetKey) {
+        return true;
+      }
+      const featureTitleKey = feature.title?.trim().toLowerCase() ?? '';
+      return (!targetKey && featureTitleKey === previousTitleKey) || featureTitleKey === previousDetailSummaryKey;
+    };
+
+    this.workspaceFeatures.update((features) =>
+      features.map((feature) => (matchesFeature(feature) ? this.cloneFeature(updatedSpec) : feature)),
+    );
+
+    this.latestFeatures.update((features) =>
+      features.map((feature) => (matchesFeature(feature) ? this.cloneFeature(updatedSpec) : feature)),
+    );
+    this.syncAgent1Selections();
+
+    this.workspaceProject.update((project) => {
+      if (!project) {
+        return project;
+      }
+      let matched = false;
+      const updatedFeatures = project.features.map((detail) => {
+        const detailKey = this.detailTrackingKey(detail);
+        const detailSummaryKey = detail.summary?.trim().toLowerCase() ?? '';
+        const isMatch =
+          (targetKey && detailKey === targetKey) ||
+          detailSummaryKey === previousDetailSummaryKey ||
+          detailSummaryKey === previousTitleKey;
+        if (isMatch) {
+          matched = true;
+          return this.cloneFeatureDetail(newDetail);
+        }
+        return detail;
+      });
+      return {
+        ...project,
+        features: matched ? updatedFeatures : [...updatedFeatures, this.cloneFeatureDetail(newDetail)],
+      };
+    });
+
+    if (previousTitleKey && previousTitleKey !== newTitleKey) {
+      this.workspaceStories.update((stories) =>
+        stories.map((story) =>
+          story.featureTitle?.trim().toLowerCase() === previousTitleKey
+            ? {
+                ...story,
+                featureTitle: newTitle,
+              }
+            : story,
+        ),
+      );
+
+      this.latestStories.update((stories) =>
+        stories.map((story) =>
+          story.featureTitle?.trim().toLowerCase() === previousTitleKey
+            ? {
+                ...story,
+                featureTitle: newTitle,
+              }
+            : story,
+        ),
+      );
+      this.syncAgent2Selections();
+    }
+
+    const messageText =
+      summary && summary.trim().length
+        ? summary
+        : origin === 'ai'
+          ? `Agent 1 refined feature "${updatedSpec.title}".`
+          : `Feature "${updatedSpec.title}" updated.`;
+
+    this.appendMessage({
+      sender: 'assistant',
+      agent: 'agent1',
+      text: messageText,
+      features: [this.cloneFeature(updatedSpec)],
+      runId: runId ?? null,
+    });
+  }
+
   private activateProjectWorkspace(submission: ProjectWizardSubmission): void {
     this.workspaceProject.set(submission);
     const prompt = submission.details.description?.trim().length
@@ -874,7 +1560,9 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     const featureSpecs = submission.features.map((detail) => this.createFeatureFromDetail(detail));
     const storySpecs = submission.stories.map((story) => this.cloneStory(story));
     this.latestFeatures.set(featureSpecs.map((feature) => this.cloneFeature(feature)));
+    this.resetAgent1Selections(this.latestFeatures());
     this.latestStories.set(storySpecs.map((story) => this.cloneStory(story)));
+    this.resetAgent2Selections(this.latestStories());
     this.workspaceFeatures.set(featureSpecs.map((feature) => this.cloneFeature(feature)));
     this.workspaceStories.set(storySpecs.map((story) => this.cloneStory(story)));
     this.workspaceVisualization.set(null);
@@ -1024,6 +1712,23 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     this.projectWizardAiLoading.set(false);
   }
 
+  protected onProjectWizardStoryEdit(event: {
+    featureIndex: number;
+    storyIndex: number;
+    story: AgentStorySpec;
+    featureDetail: AgentFeatureDetail;
+  }): void {
+    this.openStoryForm(
+      { scope: 'wizard', featureIndex: event.featureIndex, storyIndex: event.storyIndex },
+      event.story,
+      true,
+    );
+  }
+
+  protected onProjectWizardStoryDismiss(_: { featureIndex: number; storyIndex: number }): void {
+    // Wizard manages its own state; nothing additional needed at the app level yet.
+  }
+
   private composeWizardSummary(details: ProjectWizardDetails): ProjectWizardAISummary {
     const trimmedDescription = details.description.trim();
     const sentences = trimmedDescription
@@ -1057,7 +1762,103 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
       executiveSummary: executiveSummary.endsWith('.') ? executiveSummary : `${executiveSummary}.`,
       epicIdeas,
       riskNotes,
+      customPrompt: '',
     };
+  }
+
+  private composeFeatureEnhancementPrompt(
+    feature: AgentFeatureSpec,
+    project: ProjectWizardSubmission | null,
+  ): string {
+    const detail = feature.detail ?? null;
+    const lines: string[] = [
+      'You are Agent_1 refining a single product feature for AutoAgents.',
+    ];
+
+    if (project) {
+      lines.push(
+        '',
+        `Project Name: ${project.details.name}`,
+        `Project Key: ${project.details.key}`,
+        `Industry: ${project.details.industry}`,
+        `Methodology: ${project.details.methodology}`,
+        `Team Size: ${project.details.teamSize ?? 'Unspecified'}`,
+        `Elevator Pitch: ${project.details.description}`,
+      );
+
+      if (project.aiSummary.executiveSummary.trim().length) {
+        lines.push('', `Executive Summary: ${project.aiSummary.executiveSummary.trim()}`);
+      }
+      if (project.aiSummary.epicIdeas.length) {
+        lines.push('', 'Epic Ideas:');
+        project.aiSummary.epicIdeas.forEach((idea, index) => lines.push(`${index + 1}. ${idea}`));
+      }
+      if (project.aiSummary.riskNotes.length) {
+        lines.push('', 'Risk Highlights:');
+        project.aiSummary.riskNotes.forEach((risk, index) => lines.push(`${index + 1}. ${risk}`));
+      }
+      if (project.aiSummary.customPrompt?.trim().length) {
+        lines.push('', 'Product Owner Guidance:', project.aiSummary.customPrompt.trim());
+      }
+    }
+
+    lines.push('', 'Current feature draft:');
+    lines.push(`Title: ${feature.title}`);
+    lines.push(`Description: ${feature.description}`);
+    if (feature.acceptanceCriteria?.length) {
+      lines.push('Acceptance Criteria:');
+      feature.acceptanceCriteria.forEach((criterion, index) => lines.push(`${index + 1}. ${criterion}`));
+    }
+
+    if (detail) {
+      lines.push(
+        '',
+        `Problem Statement: ${detail.problemStatement}`,
+        `Business Objective: ${detail.businessObjective}`,
+        `User Persona: ${detail.userPersona}`,
+      );
+      if (detail.successMetrics?.length) {
+        lines.push(`Success Metrics: ${detail.successMetrics.join('; ')}`);
+      }
+      if (detail.stakeholders?.length) {
+        lines.push(`Stakeholders: ${detail.stakeholders.join('; ')}`);
+      }
+      if (detail.dependencies?.length) {
+        lines.push(`Dependencies: ${detail.dependencies.join('; ')}`);
+      }
+      if (detail.constraints?.length) {
+        lines.push(`Constraints: ${detail.constraints.join('; ')}`);
+      }
+      if (detail.nonFunctionalRequirements?.length) {
+        lines.push(`Non-functional Requirements: ${detail.nonFunctionalRequirements.join('; ')}`);
+      }
+      if (detail.risks?.length) {
+        lines.push('Risks:');
+        detail.risks.forEach((risk, index) => {
+          const mitigation = risk.mitigation?.trim().length ? ` | Mitigation: ${risk.mitigation}` : '';
+          lines.push(`${index + 1}. ${risk.description}${mitigation}`);
+        });
+      }
+    }
+
+    lines.push(
+      '',
+      'Refine this single feature into an implementation-ready brief.',
+      'Return valid JSON with exactly one item in the "features" array, matching this schema:',
+      '{',
+      '  "summary": "contextual summary of this refinement",',
+      '  "features": [',
+      '    {',
+      '      "title": "Refined feature title",',
+      '      "description": "Improved description (2 sentences max)",',
+      '      "acceptanceCriteria": ["Given ...", "When ...", "Then ..."]',
+      '    }',
+      '  ]',
+      '}',
+      'Ensure acceptance criteria remain specific and testable (3-5 items). Adjust naming only if it improves clarity.',
+    );
+
+    return lines.join('\n');
   }
 
   private composeFeaturePrompt(details: ProjectWizardDetails, aiSummary: ProjectWizardAISummary): string {
@@ -1086,7 +1887,94 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
       aiSummary.riskNotes.forEach((risk, index) => lines.push(`${index + 1}. ${risk}`));
     }
 
-    lines.push('', 'Generate 3-5 detailed product features with acceptance criteria tailored to this project.');
+    if (aiSummary.customPrompt.trim().length) {
+      lines.push('', 'Product Owner Guidance:', aiSummary.customPrompt.trim());
+    }
+
+    lines.push('', 'Return valid JSON per the agreed schema.');
+    lines.push(
+      'Ensure the "features" array contains at least eight distinct items (add more if the scope warrants) covering onboarding, core workflows, administration/compliance, analytics/reporting, integrations/extensibility, and forward-looking innovations.',
+    );
+    lines.push(
+      'Each feature entry must include a concise title, tailored description, and three to five acceptance criteria aligned to this project.',
+    );
+    return lines.join('\n');
+  }
+
+  private composeStoryEnhancementPrompt(
+    feature: AgentFeatureSpec | AgentFeatureDetail,
+    story: AgentStorySpec,
+    project: ProjectWizardSubmission | null,
+  ): string {
+    let featureSummary: string;
+    let featureDescription: string;
+    let detail: AgentFeatureDetail | null;
+
+    if ('summary' in feature && 'problemStatement' in feature) {
+      featureSummary = feature.summary;
+      featureDescription = feature.description;
+      detail = feature;
+    } else {
+      const spec = feature as AgentFeatureSpec;
+      featureSummary = spec.title ?? spec.detail?.summary ?? '';
+      featureDescription = spec.description ?? spec.detail?.description ?? '';
+      detail = spec.detail ?? null;
+    }
+
+    const lines: string[] = ['You are Agent_2 refining a single user story for AutoAgents.'];
+
+    if (project) {
+      lines.push(
+        '',
+        `Project Name: ${project.details.name}`,
+        `Industry: ${project.details.industry}`,
+        `Executive Summary: ${project.aiSummary.executiveSummary}`,
+      );
+      if (project.aiSummary.customPrompt?.trim().length) {
+        lines.push('Product Owner Guidance:', project.aiSummary.customPrompt.trim());
+      }
+    }
+
+    lines.push(
+      '',
+      `Feature: ${featureSummary}`,
+      `Feature Description: ${featureDescription}`,
+    );
+
+    if (detail && 'problemStatement' in detail) {
+      lines.push(
+        `Problem Statement: ${detail.problemStatement}`,
+        `Business Objective: ${detail.businessObjective}`,
+        `User Persona: ${detail.userPersona}`,
+      );
+    }
+
+    lines.push(
+      '',
+      'Current story draft to refine:',
+      `User Story: ${story.userStory}`,
+      `Acceptance Criteria: ${story.acceptanceCriteria.join(' | ') || 'None provided'}`,
+      `Implementation Notes: ${story.implementationNotes.join(' | ') || 'None provided'}`,
+    );
+
+    lines.push(
+      '',
+      'Refine this story into a concise, testable user story with architecture-aware acceptance criteria and implementation notes at low to medium level of detail.',
+      'Return valid JSON with this schema:',
+      '{',
+      '  "summary": "short summary",',
+      '  "stories": [',
+      '    {',
+      '      "featureTitle": "Name of the feature",',
+      '      "userStory": "As a ...",',
+      '      "acceptanceCriteria": ["Given ...", "When ...", "Then ..."],',
+      '      "implementationNotes": ["Step or component", "..."]',
+      '    }',
+      '  ]',
+      '}',
+      'Ensure the acceptance criteria cover architectural concerns (auth, data, integrations) at low and medium levels, and produce between three and five criteria.',
+    );
+
     return lines.join('\n');
   }
 
@@ -1113,8 +2001,12 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
       );
     });
 
+    if (aiSummary.customPrompt.trim().length) {
+      lines.push('Product Owner Guidance:', aiSummary.customPrompt.trim(), '');
+    }
+
     lines.push(
-      'For each feature above, generate a high quality user story with acceptance criteria and implementation notes.',
+      'For each feature above, generate the set of user stories needed to deliver the capability end-to-end. Prioritise low- and medium-level architectural considerations, and include acceptance criteria plus implementation notes for every story.',
     );
     return lines.join('\n');
   }

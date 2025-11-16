@@ -39,6 +39,11 @@
         [mermaidSaveMessage]="workspaceMermaidSaveMessage()"
         (mermaidChange)="onWorkspaceMermaidChange($event)"
         (mermaidSave)="onWorkspaceMermaidSave($event)"
+      (featureDismiss)="onWorkspaceFeatureDismiss($event)"
+        (featureEdit)="onWorkspaceFeatureEdit($event)"
+        (storyEdit)="onWorkspaceStoryEdit($event)"
+        (storyDismiss)="onWorkspaceStoryDismiss($event)"
+        (createProject)="openProjectWizard()"
         (exit)="onWorkspaceExit()"
       ></workspace-view>
     </section>
@@ -111,7 +116,23 @@
                 <p>{{ message.text }}</p>
 
                 <div class="feature-list" *ngIf="message.features?.length">
-                  <article class="feature-card" *ngFor="let feature of message.features">
+                  <article
+                    class="feature-card"
+                    *ngFor="let feature of message.features"
+                    [class.feature-card--selectable]="canSelectFeatures(message)"
+                    [class.feature-card--selected]="canSelectFeatures(message) && isFeatureSelected(feature)"
+                  >
+                    <div class="selection-control" *ngIf="canSelectFeatures(message)" (click)="$event.stopPropagation()">
+                      <label (click)="$event.stopPropagation()">
+                        <input
+                          type="checkbox"
+                          [checked]="isFeatureSelected(feature)"
+                          (change)="onFeatureSelectionInput($event, feature)"
+                          aria-label="Select feature"
+                        />
+                        <span>Select</span>
+                      </label>
+                    </div>
                     <h3>{{ feature.title }}</h3>
                     <p>{{ feature.description }}</p>
                     <ul *ngIf="feature.acceptanceCriteria?.length">
@@ -171,7 +192,23 @@
                 </div>
 
                 <div class="story-list" *ngIf="message.stories?.length">
-                  <article class="story-card" *ngFor="let story of message.stories">
+                  <article
+                    class="story-card"
+                    *ngFor="let story of message.stories"
+                    [class.story-card--selectable]="canSelectStories(message)"
+                    [class.story-card--selected]="canSelectStories(message) && isStorySelected(story)"
+                  >
+                    <div class="selection-control" *ngIf="canSelectStories(message)" (click)="$event.stopPropagation()">
+                      <label (click)="$event.stopPropagation()">
+                        <input
+                          type="checkbox"
+                          [checked]="isStorySelected(story)"
+                          (change)="onStorySelectionInput($event, story)"
+                          aria-label="Select story"
+                        />
+                        <span>Select</span>
+                      </label>
+                    </div>
                     <h3>{{ story.featureTitle }}</h3>
                     <p>{{ story.userStory }}</p>
                     <div class="story-section" *ngIf="story.acceptanceCriteria?.length">
@@ -200,7 +237,12 @@
                 <button type="button" class="secondary" (click)="onAgent1Decision('keep_all')" [disabled]="isSending()">
                   Keep All
                 </button>
-                <button type="button" class="primary" (click)="onAgent1Decision('keep')" [disabled]="isSending()">
+                <button
+                  type="button"
+                  class="primary"
+                  (click)="onAgent1Decision('keep')"
+                  [disabled]="isSending() || !agent1SelectedFeatures().size"
+                >
                   Keep
                 </button>
               </div>
@@ -212,7 +254,12 @@
                 <button type="button" class="secondary" (click)="onAgent2Decision('again')" [disabled]="isSending()">
                   Again
                 </button>
-                <button type="button" class="primary" (click)="onAgent2Decision('keep')" [disabled]="isSending()">
+                <button
+                  type="button"
+                  class="primary"
+                  (click)="onAgent2Decision('keep')"
+                  [disabled]="isSending() || !agent2SelectedStories().size"
+                >
                   Keep
                 </button>
               </div>
@@ -256,13 +303,26 @@
   (requestAISummary)="onProjectWizardRequestAI($event)"
   (requestFeatureRecommendations)="onProjectWizardRequestFeatures($event)"
   (requestStoryRecommendations)="onProjectWizardRequestStories($event)"
+  (editStory)="onProjectWizardStoryEdit($event)"
+  (dismissStory)="onProjectWizardStoryDismiss($event)"
 ></project-wizard>
 
 <feature-form
   [open]="isFeatureFormOpen()"
   [saving]="featureFormSaving()"
   [preset]="featureFormDraft()"
+  [aiAssistLoading]="featureFormAiLoading()"
   (cancel)="onFeatureFormCancel()"
   (submit)="onFeatureFormSubmit($event)"
+  (aiAssist)="onFeatureFormAi($event)"
 ></feature-form>
+
+<story-form
+  [open]="isStoryFormOpen()"
+  [saving]="storyFormSaving()"
+  [preset]="storyFormDraft()"
+  [featureTitleReadonly]="storyFormFeatureReadonly()"
+  (cancel)="onStoryFormCancel()"
+  (submit)="onStoryFormSubmit($event)"
+></story-form>
 
