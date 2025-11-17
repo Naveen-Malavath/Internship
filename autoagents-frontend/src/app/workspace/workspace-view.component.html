@@ -205,6 +205,42 @@
                 <p>The diagram reflects edits in real time.</p>
               </div>
               <div class="studio-panel__controls">
+                <div class="preview-zoom" role="group" aria-label="Diagram zoom controls">
+                  <button
+                    type="button"
+                    class="preview-zoom__button"
+                    (click)="zoomOut()"
+                    [disabled]="!canZoomOut()"
+                    aria-label="Zoom out"
+                  >
+                    -
+                  </button>
+                  <span class="preview-zoom__label">{{ (previewDisplayScale * 100) | number: '1.0-0' }}%</span>
+                  <button
+                    type="button"
+                    class="preview-zoom__button"
+                    (click)="zoomIn()"
+                    [disabled]="!canZoomIn()"
+                    aria-label="Zoom in"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    class="preview-zoom__reset workspace__action workspace__action--ghost"
+                    (click)="resetZoom()"
+                    [disabled]="previewScale === 1"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    class="preview-zoom__reset workspace__action workspace__action--ghost"
+                    (click)="togglePreviewFit()"
+                  >
+                    {{ previewFitToContainer ? 'Actual Size' : 'Fit to View' }}
+                  </button>
+                </div>
                 <span class="studio-badge">Theme: {{ previewTheme }}</span>
                 <button type="button" class="workspace__action workspace__action--outline" (click)="togglePreviewTheme()">
                   Switch to {{ previewTheme === 'dark' ? 'light' : 'dark' }} mode
@@ -213,7 +249,9 @@
             </header>
 
             <div class="studio-panel__preview" [class.light]="previewTheme === 'light'">
-              <div class="preview-canvas" #mermaidContainer></div>
+              <div class="preview-scroll w-full h-full overflow-auto">
+                <div class="preview-canvas" [class.preview-canvas--fit]="previewFitToContainer" #mermaidContainer></div>
+              </div>
               <p *ngIf="!mermaidInput.trim()" class="preview-placeholder">
                 Enter Mermaid code to render a diagram.
               </p>

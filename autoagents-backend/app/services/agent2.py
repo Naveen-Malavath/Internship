@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 from typing import Any, Dict, List
 
@@ -16,6 +17,9 @@ from .claude_client import (
     extract_text,
     get_claude_client,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class Agent2Service:
@@ -67,9 +71,10 @@ class Agent2Service:
             raise RuntimeError(f"Agent-2 failed to generate stories: {exc}") from exc
 
         payload = coerce_json(extract_text(response))
-        stories = payload.get("stories", [])
-        if not isinstance(stories, list):
-            raise RuntimeError("Agent-2 returned an unexpected payload.")
+        stories = self._extract_story_payload(payload)
+        if not stories:
+            logger.warning("Agent-2 returned no stories. Falling back to heuristic generation.")
+            stories = self._fallback_story_payload(normalized_features)
 
         features_by_id = {feature["id"]: feature for feature in normalized_features}
         features_by_title = {feature["title"].strip().lower(): feature for feature in normalized_features}
@@ -103,9 +108,30 @@ class Agent2Service:
             )
 
         if cleaned:
-            return cleaned
+            return self._ensure_story_coverage(cleaned, normalized_features)
 
         return self._fallback_stories(normalized_features)
+
+    def _extract_story_payload(self, payload: Any) -> List[Dict[str, Any]]:
+        """Handle multiple possible payload shapes from Claude."""
+        if isinstance(payload, list):
+            return [self._coerce_dict(item) for item in payload]
+
+        if isinstance(payload, dict):
+            candidate_keys = [
+                "stories",
+                "Stories",
+                "userStories",
+                "generatedStories",
+                "data",
+            ]
+            for key in candidate_keys:
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return [self._coerce_dict(item) for item in value]
+                if isinstance(value, dict) and "items" in value and isinstance(value["items"], list):
+                    return [self._coerce_dict(item) for item in value["items"]]
+        return []
 
     def _normalize_features(self, features: List[Dict]) -> List[Dict[str, Any]]:
         """Normalize heterogeneous feature payloads into a consistent structure."""
@@ -186,6 +212,28 @@ class Agent2Service:
         # If the model didn't pick a feature, fall back to the first available.
         return next(iter(features_by_id.values()), None)
 
+    def _ensure_story_coverage(
+        self,
+        stories: List[Dict[str, Any]],
+        features: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Ensure every feature receives at least one story."""
+        covered_ids = {
+            story.get("feature_id")
+            for story in stories
+            if story.get("feature_id")
+        }
+        missing = [feature for feature in features if feature["id"] not in covered_ids]
+        if not missing:
+            return stories
+
+        logger.info("Agent-2 missing stories for %d feature(s); adding placeholders.", len(missing))
+        return stories + self._fallback_story_payload(missing)
+
+    def _fallback_story_payload(self, features: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Generate placeholder stories when Claude fails to respond."""
+        return [self._build_placeholder_story(feature) for feature in features]
+
     def _coerce_list(self, value: Any) -> List[str]:
         """Ensure acceptance criteria / implementation notes are simple string lists."""
         if not value:
@@ -233,6 +281,27 @@ class Agent2Service:
                 }
             )
         return fallback
+
+    def _build_placeholder_story(self, feature: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a deterministic placeholder story for a specific feature."""
+        title = feature["title"]
+        description = feature["description"]
+        normalized_title = title.lower()
+        normalized_description = description.lower()
+        return {
+            "feature_id": feature["id"],
+            "feature_text": title,
+            "story_text": f"As a user, I want {normalized_title} so that {normalized_description}",
+            "acceptance_criteria": [
+                f"Given {title}, when the capability is triggered, then value is delivered.",
+                "Given authenticated access, when roles are enforced, then data remains protected.",
+                "Given monitoring hooks, when events occur, then stakeholders receive alerts.",
+            ],
+            "implementation_notes": [
+                "Coordinate with backend/API owners.",
+                "Capture telemetry for success metrics.",
+            ],
+        }
 
 
 async def generate_stories_for_project(project_id: str, db):

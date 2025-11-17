@@ -10,3 +10,4 @@ async def status_right_now() -> dict[str, str]:
     """Return a lightweight status message for the frontend."""
     return {"status": "All systems operational."}
 
+

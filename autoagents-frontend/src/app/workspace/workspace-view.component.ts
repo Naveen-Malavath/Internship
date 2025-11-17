@@ -10,6 +10,7 @@ import {
   ElementRef,
   AfterViewInit,
   OnDestroy,
+  HostListener,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import mermaid from 'mermaid';
@@ -53,10 +54,19 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   protected previewTheme: 'dark' | 'light' = 'dark';
   protected mermaidLineNumbers: number[] = [1];
   protected lineNumberOffset = 0;
-
+  protected previewScale = 1;
+  protected previewDisplayScale = 1;
+  protected previewFitToContainer = true;
+  protected previewOverflowing = false;
   private mermaidInitialised = false;
   private mermaidRenderIndex = 0;
   private copyNotificationTimer: ReturnType<typeof setTimeout> | null = null;
+  private previewAutoScale = 1;
+  private readonly previewScaleMin = 0.75;
+  private readonly previewScaleMax = 3;
+  private readonly previewScaleStep = 0.25;
+  private readonly mermaidLabelMaxChars = 36;
+  private readonly previewReadableScaleFloor = 0.65;
 
   ngOnChanges(changes: SimpleChanges): void {
     // Handle mermaidSource changes - highest priority as it's the primary way parent updates content
@@ -93,6 +103,11 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     } else {
       this.renderMermaid();
     }
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.applyPreviewScale();
   }
 
   ngOnDestroy(): void {
@@ -184,6 +199,34 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     void this.renderMermaid();
   }
 
+  protected zoomIn(): void {
+    this.previewScale = this.clampScale(this.previewScale + this.previewScaleStep);
+    this.applyPreviewScale();
+  }
+
+  protected zoomOut(): void {
+    this.previewScale = this.clampScale(this.previewScale - this.previewScaleStep);
+    this.applyPreviewScale();
+  }
+
+  protected resetZoom(): void {
+    this.previewScale = 1;
+    this.applyPreviewScale();
+  }
+
+  protected togglePreviewFit(): void {
+    this.previewFitToContainer = !this.previewFitToContainer;
+    this.applyPreviewScale();
+  }
+
+  protected canZoomIn(): boolean {
+    return this.previewScale < this.previewScaleMax - 0.001;
+  }
+
+  protected canZoomOut(): boolean {
+    return this.previewScale > this.previewScaleMin + 0.001;
+  }
+
   protected onFeatureEdit(feature: AgentFeatureSpec): void {
     this.featureEdit.emit(feature);
   }
@@ -226,20 +269,19 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   private generateDefaultMermaid(): void {
     const lines: string[] = ['graph TD'];
     const promptNode = this.escapeMermaidId('prompt');
-    if (this.prompt) {
-      lines.push(`${promptNode}["${this.escapeHtml(this.prompt)}"]`);
-    } else {
-      lines.push(`${promptNode}["Customer Request"]`);
-    }
+    const promptLabel = this.formatMermaidLabel(this.prompt || 'Customer Request');
+    lines.push(`${promptNode}["${promptLabel}"]`);
 
     this.features.forEach((feature, index) => {
       const featureId = this.escapeMermaidId(`feature_${index}`);
-      lines.push(`${promptNode} --> ${featureId}["${this.escapeHtml(feature.title)}"]`);
+      const featureLabel = this.formatMermaidLabel(feature.title || `Feature ${index + 1}`);
+      lines.push(`${promptNode} --> ${featureId}["${featureLabel}"]`);
       this.stories
         .filter((story) => story.featureTitle === feature.title)
         .forEach((story, storyIndex) => {
           const storyId = this.escapeMermaidId(`story_${index}_${storyIndex}`);
-          lines.push(`${featureId} --> ${storyId}["${this.escapeHtml(story.userStory)}"]`);
+          const storyLabel = this.formatMermaidLabel(story.userStory || `Story ${storyIndex + 1}`);
+          lines.push(`${featureId} --> ${storyId}["${storyLabel}"]`);
         });
     });
 
@@ -248,6 +290,34 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     }
 
     this.setMermaidInput(lines.join('\n'), true);
+  }
+
+  private formatMermaidLabel(value: string): string {
+    const trimmed = (value || '').trim();
+    if (!trimmed) {
+      return this.escapeHtml('Untitled');
+    }
+
+    const words = trimmed.split(/\s+/);
+    const lines: string[] = [];
+    let current = '';
+
+    words.forEach((word) => {
+      const candidate = current ? `${current} ${word}` : word;
+      if (candidate.length > this.mermaidLabelMaxChars && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = candidate;
+      }
+    });
+
+    if (current) {
+      lines.push(current);
+    }
+
+    const escapedLines = lines.map((line) => this.escapeHtml(line));
+    return escapedLines.join('<br/>');
   }
 
   private setMermaidInput(value: string, emitEvent: boolean): void {
@@ -281,8 +351,13 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     try {
       await mermaid.parse(definition);
       const { svg } = await mermaid.render(renderId, definition);
-      this.mermaidContainer.nativeElement.innerHTML = svg;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'mermaid-svg-wrapper';
+      wrapper.innerHTML = svg;
+      this.mermaidContainer.nativeElement.innerHTML = '';
+      this.mermaidContainer.nativeElement.appendChild(wrapper);
       this.mermaidError = null;
+      this.applyPreviewScale();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Mermaid syntax error. Please review the diagram definition.';
       this.mermaidError = message;
@@ -330,5 +405,118 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     this.mermaidLineNumbers = Array.from({ length: lines }, (_, index) => index + 1);
   }
 
+  private clampScale(value: number): number {
+    const fixed = Number(value.toFixed(2));
+    return Math.min(this.previewScaleMax, Math.max(this.previewScaleMin, fixed));
+  }
+
+  private applyPreviewScale(): void {
+    if (!this.mermaidContainer) {
+      return;
+    }
+
+    const svgWrapper = this.mermaidContainer.nativeElement.querySelector('.mermaid-svg-wrapper') as HTMLElement | null;
+    const svg = svgWrapper?.querySelector('svg');
+    if (!svgWrapper || !svg) {
+      return;
+    }
+
+    svg.removeAttribute('width');
+    svg.removeAttribute('height');
+
+    const viewBox = svg.viewBox?.baseVal;
+    const bbox = svg.getBBox();
+    const fallbackBox = svg.getBoundingClientRect();
+
+    const naturalWidth = Math.max(1, viewBox?.width || bbox.width || fallbackBox.width || 600);
+    const naturalHeight = Math.max(1, viewBox?.height || bbox.height || fallbackBox.height || 400);
+
+    const previewHost = this.mermaidContainer.nativeElement.closest('.preview-scroll') as HTMLElement | null;
+    const availableWidth = previewHost?.clientWidth || this.mermaidContainer.nativeElement.clientWidth || naturalWidth;
+    const availableHeight = previewHost?.clientHeight || this.mermaidContainer.nativeElement.clientHeight || naturalHeight;
+
+    const { scale: autoScale, overflowing } = this.calculateAutoScale(naturalWidth, naturalHeight, availableWidth, availableHeight);
+    this.previewAutoScale = autoScale;
+    this.previewOverflowing = overflowing && this.previewFitToContainer;
+
+    svg.style.transformOrigin = 'top left';
+    svg.style.display = 'block';
+    svgWrapper.style.transformOrigin = 'top left';
+    svgWrapper.style.display = 'flex';
+    svgWrapper.style.justifyContent = 'flex-start';
+    svgWrapper.style.alignItems = 'flex-start';
+    svgWrapper.style.gap = '0';
+
+    if (this.previewFitToContainer) {
+      svgWrapper.style.width = '100%';
+      svgWrapper.style.maxWidth = '100%';
+      svgWrapper.style.height = 'auto';
+      svgWrapper.style.maxHeight = '100%';
+      svg.style.width = '100%';
+      svg.style.height = 'auto';
+      svg.style.maxWidth = '100%';
+      svg.style.maxHeight = 'none';
+    } else {
+      svgWrapper.style.width = `${naturalWidth}px`;
+      svgWrapper.style.height = `${naturalHeight}px`;
+      svgWrapper.style.maxWidth = 'none';
+      svgWrapper.style.maxHeight = 'none';
+      svg.style.width = `${naturalWidth}px`;
+      svg.style.height = `${naturalHeight}px`;
+      svg.style.maxWidth = 'none';
+      svg.style.maxHeight = 'none';
+    }
+
+    const baseScale = this.previewFitToContainer ? this.previewAutoScale : 1;
+    const effectiveScale = baseScale * this.previewScale;
+    this.previewDisplayScale = Number(effectiveScale.toFixed(3));
+
+    if (Math.abs(effectiveScale - 1) < 0.001) {
+      svgWrapper.style.removeProperty('transform');
+    } else {
+      svgWrapper.style.transform = `scale(${effectiveScale})`;
+    }
+  }
+
+  private calculateAutoScale(
+    naturalWidth: number,
+    naturalHeight: number,
+    availableWidth: number,
+    availableHeight: number,
+  ): { scale: number; overflowing: boolean } {
+    if (!naturalWidth || !naturalHeight) {
+      return { scale: 1, overflowing: false };
+    }
+
+    const needsWidthFit = naturalWidth > availableWidth;
+    const needsHeightFit = naturalHeight > availableHeight;
+
+    if (!needsWidthFit && !needsHeightFit) {
+      return { scale: 1, overflowing: false };
+    }
+
+    const ratios: number[] = [];
+    if (needsWidthFit && Number.isFinite(availableWidth / naturalWidth)) {
+      ratios.push(availableWidth / naturalWidth);
+    }
+    if (needsHeightFit && Number.isFinite(availableHeight / naturalHeight)) {
+      ratios.push(availableHeight / naturalHeight);
+    }
+
+    if (!ratios.length) {
+      return { scale: 1, overflowing: needsWidthFit || needsHeightFit };
+    }
+
+    const targetScale = Math.min(1, ...ratios);
+    if (!Number.isFinite(targetScale) || targetScale <= 0) {
+      return { scale: 1, overflowing: false };
+    }
+
+    if (targetScale < this.previewReadableScaleFloor) {
+      return { scale: this.previewReadableScaleFloor, overflowing: true };
+    }
+
+    return { scale: Number(targetScale.toFixed(3)), overflowing: false };
+  }
 }
 
