@@ -30,6 +30,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   @Input() visualization: AgentVisualizationResponse | null = null;
   @Input() project: ProjectWizardSubmission | null = null;
   @Input() mermaidEditorContent = '';
+  @Input() mermaidSource: string | null = null;
   @Input() mermaidSaving = false;
   @Input() mermaidUpdatedAt: string | null = null;
   @Input() mermaidSaveMessage: string | null = null;
@@ -58,24 +59,40 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   private copyNotificationTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['stories'] && !this.mermaidEditorContent) {
+    // Handle mermaidSource changes - highest priority as it's the primary way parent updates content
+    if (changes['mermaidSource']) {
+      const newSource = changes['mermaidSource'].currentValue;
+      if (newSource !== null && typeof newSource === 'string') {
+        this.setMermaidInput(newSource, false);
+      } else if (newSource === null && this.mermaidInput) {
+        // Clear editor if source becomes null
+        this.setMermaidInput('', false);
+      }
+    }
+
+    if (changes['stories'] && !this.mermaidEditorContent && !this.mermaidSource) {
       this.generateDefaultMermaid();
     }
 
     if (changes['visualization']) {
       this.visualizationData = this.visualization;
-      if (this.visualizationData?.diagrams?.mermaid) {
+      if (this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
         this.setMermaidInput(this.visualizationData.diagrams.mermaid, false);
       }
     }
 
-    if (changes['mermaidEditorContent'] && typeof changes['mermaidEditorContent'].currentValue === 'string') {
+    if (changes['mermaidEditorContent'] && typeof changes['mermaidEditorContent'].currentValue === 'string' && !this.mermaidSource) {
       this.setMermaidInput(changes['mermaidEditorContent'].currentValue, false);
     }
   }
 
   ngAfterViewInit(): void {
-    this.renderMermaid();
+    // If mermaidSource is provided initially, use it
+    if (this.mermaidSource !== null && typeof this.mermaidSource === 'string' && !this.mermaidInput) {
+      this.setMermaidInput(this.mermaidSource, false);
+    } else {
+      this.renderMermaid();
+    }
   }
 
   ngOnDestroy(): void {
