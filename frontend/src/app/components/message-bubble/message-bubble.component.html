@@ -1,0 +1,60 @@
+<div class="message-wrapper" [class.user-message]="message.role === 'user'" [class.assistant-message]="message.role === 'assistant'">
+  <div class="message-container">
+    <div class="message-avatar">
+      @if (message.role === 'user') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      } @else {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
+          <path d="M2 17L12 22L22 17V7L12 12L2 7V17Z"/>
+        </svg>
+      }
+    </div>
+    
+    <div class="message-content">
+      <div class="message-header">
+        <span class="message-role">{{ message.role === 'user' ? 'You' : 'Agent‑1' }}</span>
+        <span class="message-time">{{ message.timestamp | date:'short' }}</span>
+      </div>
+      
+      @if (message.isLoading) {
+        <div class="loading-indicator">
+          <div class="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      } @else {
+        <div class="message-text">{{ message.content }}</div>
+        @if (message.role === 'assistant') {
+          <div class="feedback-buttons">
+            <button
+              type="button"
+              class="feedback-button"
+              [class.active]="message.feedback === 'up'"
+              (click)="onFeedback('up')"
+              [disabled]="message.isLoading"
+              title="Thumbs up"
+            >
+              👍
+            </button>
+            <button
+              type="button"
+              class="feedback-button"
+              [class.active]="message.feedback === 'down'"
+              (click)="onFeedback('down')"
+              [disabled]="message.isLoading"
+              title="Thumbs down"
+            >
+              👎
+            </button>
+          </div>
+        }
+      }
+    </div>
+  </div>
+</div>
