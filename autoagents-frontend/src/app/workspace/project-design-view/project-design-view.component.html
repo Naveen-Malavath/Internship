@@ -1,0 +1,67 @@
+<div class="project-design-view">
+  <header class="project-design-view__header">
+    <h2 class="project-design-view__title">Project Designs</h2>
+    
+    <button
+      type="button"
+      class="project-design-view__generate-btn"
+      (click)="onGenerateDesigns()"
+      [disabled]="isGenerating"
+    >
+      {{ isGenerating ? 'Generating...' : 'Generate Designs' }}
+    </button>
+  </header>
+
+  <!-- Loading State -->
+  <div *ngIf="isLoading" class="project-design-view__message project-design-view__message--loading">
+    <p>Loading designs...</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error && !isLoading" class="project-design-view__message project-design-view__message--error">
+    <p>{{ error }}</p>
+  </div>
+
+  <!-- No Designs State -->
+  <div *ngIf="hasNoDesigns && !isLoading && !error" class="project-design-view__message project-design-view__message--info">
+    <p>No designs yet. Click "Generate Designs" to create HLD, LLD, and DBD diagrams.</p>
+  </div>
+
+  <!-- Design Type Selection -->
+  <div *ngIf="designs && !isLoading" class="project-design-view__tabs">
+    <button
+      type="button"
+      class="project-design-view__tab"
+      [class.project-design-view__tab--active]="currentDesignType === 'LLD'"
+      (click)="onDesignTypeChange('LLD')"
+    >
+      LLD
+    </button>
+    <button
+      type="button"
+      class="project-design-view__tab"
+      [class.project-design-view__tab--active]="currentDesignType === 'HLD'"
+      (click)="onDesignTypeChange('HLD')"
+    >
+      HLD
+    </button>
+    <button
+      type="button"
+      class="project-design-view__tab"
+      [class.project-design-view__tab--active]="currentDesignType === 'DBD'"
+      (click)="onDesignTypeChange('DBD')"
+    >
+      DBD
+    </button>
+  </div>
+
+  <!-- Mermaid Editor -->
+  <div *ngIf="designs && !isLoading" class="project-design-view__editor">
+    <workspace-view
+      [mermaidSource]="currentMermaid"
+      [mermaidEditorContent]="currentMermaid"
+      (mermaidChange)="onMermaidChange($event)"
+    ></workspace-view>
+  </div>
+</div>
+

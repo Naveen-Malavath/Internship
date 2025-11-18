@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from ..db import get_database
 from ..services.agent2 import generate_stories_for_project
-from ..services.agent3 import generate_diagram_for_project
+from ..services.agent3 import generate_diagram_for_project, generate_designs_for_project
 from ..schemas.project import ProjectCreate, ProjectResponse
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -123,4 +123,33 @@ async def get_latest_project_diagram(project_id: str) -> Dict[str, Any]:
     diagram = dict(records[0])
     diagram["_id"] = str(diagram["_id"])
     return diagram
+
+
+@router.post("/{project_id}/designs/generate")
+async def generate_project_designs(project_id: str) -> Dict[str, Any]:
+    """Trigger Agent-3 to generate HLD, LLD, and DBD designs for a project."""
+    db = get_database()
+    designs = await generate_designs_for_project(project_id, db)
+    return designs
+
+
+@router.get("/{project_id}/designs")
+async def get_latest_project_designs(project_id: str) -> Dict[str, Any]:
+    """Return the most recent designs for the project."""
+    db = get_database()
+    cursor = (
+        db["designs"]
+        .find({"project_id": project_id})
+        .sort("created_at", -1)
+        .limit(1)
+    )
+    records = await cursor.to_list(length=1)
+    if not records:
+        raise HTTPException(
+            status_code=404, detail="No designs found for this project. Run Agent-3 first."
+        )
+
+    design = dict(records[0])
+    design["_id"] = str(design["_id"])
+    return design
 
