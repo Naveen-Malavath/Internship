@@ -39,7 +39,9 @@
         [mermaidSaveMessage]="workspaceMermaidSaveMessage()"
         (mermaidChange)="onWorkspaceMermaidChange($event)"
         (mermaidSave)="onWorkspaceMermaidSave($event)"
-      (featureDismiss)="onWorkspaceFeatureDismiss($event)"
+        (diagramTypeChange)="onWorkspaceDiagramTypeChange($event)"
+        (regenerateDiagram)="onWorkspaceRegenerateDiagram($event)"
+        (featureDismiss)="onWorkspaceFeatureDismiss($event)"
         (featureEdit)="onWorkspaceFeatureEdit($event)"
         (storyEdit)="onWorkspaceStoryEdit($event)"
         (storyDismiss)="onWorkspaceStoryDismiss($event)"
@@ -322,7 +324,9 @@
   [saving]="storyFormSaving()"
   [preset]="storyFormDraft()"
   [featureTitleReadonly]="storyFormFeatureReadonly()"
+  [aiAssistLoading]="storyFormAiLoading()"
   (cancel)="onStoryFormCancel()"
   (submit)="onStoryFormSubmit($event)"
+  (aiAssist)="onStoryFormAi($event)"
 ></story-form>
 

@@ -4,11 +4,24 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 import re
+from pathlib import Path
 
 from .db import connect_to_mongo, close_mongo_connection
-from .routers import auth, projects, features, stories, diagrams, agent_legacy, status
+from .routers import auth, projects, features, stories, diagrams, agent_legacy, status, visualizer
 
-load_dotenv()
+# Load .env file from the backend directory (parent of app/)
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path, override=True)
+    import logging
+    logging.getLogger(__name__).info(f"Loaded .env file from: {env_path}")
+else:
+    import logging
+    logging.getLogger(__name__).warning(
+        f".env file not found at {env_path}. "
+        "Using system environment variables only."
+    )
+    load_dotenv()  # Fallback to default behavior
 
 app = FastAPI(title="AutoAgents Backend")
 
@@ -81,6 +94,7 @@ app.include_router(stories.router)
 app.include_router(diagrams.router)
 app.include_router(agent_legacy.router)
 app.include_router(status.router)
+app.include_router(visualizer.router)
 
 
 @app.get("/")

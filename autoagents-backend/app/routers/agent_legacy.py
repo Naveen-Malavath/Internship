@@ -118,9 +118,20 @@ async def legacy_generate_features(
     try:
         feature_texts = await service.generate_features(project_title="", project_prompt=prompt)
     except RuntimeError as exc:  # Catch Claude runtime errors
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Agent-1 RuntimeError: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
+        ) from exc
+    except Exception as exc:  # Catch any other unexpected errors
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Agent-1 unexpected error: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Agent-1 failed: {str(exc)}",
         ) from exc
 
     features = [FeatureItem(title=text.strip()) for text in feature_texts]

@@ -1,17 +1,1 @@
-digraph FinancialPlatform {
-    node [shape=box];
-    UserAuth [label="Multi-Factor Authentication"];
-    Onboarding [label="Biometric Onboarding"];
-    Payments [label="Mobile Payment Ecosystem"];
-    Dashboard [label="Personal Financial Dashboard"];
-    Investments [label="Investment Portfolio Insights"];
-    FraudDetection [label="Advanced Fraud Detection"];
-    OpenBanking [label="Open Banking API"];
-    Compliance [label="Regulatory Compliance"];
-
-    UserAuth -> Onboarding;
-    UserAuth -> Payments;
-    UserAuth -> Dashboard;
-    FraudDetection -> Payments;
-    OpenBanking -> Compliance;
-}
+digraph G { A -> B }

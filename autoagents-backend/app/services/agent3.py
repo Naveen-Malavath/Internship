@@ -22,44 +22,133 @@ from .claude_client import (
 class Agent3Service:
     """Service wrapper for generating Mermaid diagrams via Claude."""
 
-    def __init__(self, model: str = DEFAULT_CLAUDE_MODEL) -> None:
-        self.model = model
+    def __init__(self, model: str | None = None) -> None:
+        self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
 
-    async def generate_mermaid(self, project_title: str, features: List[Dict], stories: List[Dict]) -> str:
-        """Generate a Mermaid diagram linking project features and stories."""
+    async def generate_mermaid(
+        self,
+        project_title: str,
+        features: List[Dict],
+        stories: List[Dict],
+        diagram_type: str = "hld",
+    ) -> str:
+        """Generate a Mermaid diagram linking project features and stories.
+        
+        Args:
+            project_title: Title of the project
+            features: List of feature dictionaries from Agent1
+            stories: List of story dictionaries from Agent2
+            diagram_type: Type of diagram to generate - 'hld' (High Level Design), 
+                         'lld' (Low Level Design), or 'database' (Database Design)
+        
+        Returns:
+            Mermaid diagram source code as string
+        """
         client = get_claude_client()
 
-        feature_outline = "\n".join(
-            f"- {feature.get('feature_text')}" for feature in features
-        )
+        # Format features with more detail
+        feature_details = []
+        for idx, feature in enumerate(features, 1):
+            feature_text = feature.get('feature_text') or feature.get('title') or f'Feature {idx}'
+            feature_details.append(f"{idx}. {feature_text}")
+
+        # Format stories grouped by feature
+        stories_by_feature = {}
+        for story in stories:
+            feature_id = story.get('feature_id') or 'unknown'
+            if feature_id not in stories_by_feature:
+                stories_by_feature[feature_id] = []
+            story_text = story.get('story_text') or story.get('user_story') or 'Story'
+            stories_by_feature[feature_id].append(story_text)
+
         story_outline = "\n".join(
-            f"- Feature ID {story.get('feature_id')}: {story.get('story_text')}"
-            for story in stories
+            f"- Feature {fid}: " + "\n  - ".join(story_list[:3])  # Limit to 3 stories per feature
+            for fid, story_list in list(stories_by_feature.items())[:10]  # Limit to 10 features
         )
 
-        user_prompt = (
-            "You are Agent-3, an AI architect. Produce a Mermaid flowchart using graph TD syntax. "
-            "The diagram must include the project as the start node, features as intermediate nodes, "
-            "and user stories as downstream nodes. Output ONLY the Mermaid source, no explanation.\n\n"
-            f"Project: {project_title or 'Untitled Project'}\n"
-            f"Features:\n{feature_outline or 'None'}\n\n"
-            f"Stories:\n{story_outline or 'None'}"
-        )
+        # Create type-specific prompts
+        if diagram_type.lower() == "lld":
+            system_prompt = (
+                "You are Agent-3, an AI software architect specializing in Low Level Design (LLD). "
+                "Generate detailed Mermaid diagrams showing component interactions, class structures, "
+                "API endpoints, service layers, and data flow at an implementation level. "
+                "Use appropriate Mermaid syntax like classDiagram, sequenceDiagram, or detailed flowcharts."
+            )
+            user_prompt = (
+                f"Project: {project_title or 'Untitled Project'}\n\n"
+                f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
+                f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
+                "Task: Create a LOW LEVEL DESIGN (LLD) Mermaid diagram that shows:\n"
+                "- Detailed component/class/module interactions\n"
+                "- API endpoints and service layers\n"
+                "- Data flow between components\n"
+                "- Database interactions and models\n"
+                "- Implementation-level architecture\n"
+                "- Use classDiagram, sequenceDiagram, or detailed flowchart syntax\n\n"
+                "Output ONLY valid Mermaid code, no explanations."
+            )
+        elif diagram_type.lower() == "database":
+            system_prompt = (
+                "You are Agent-3, an AI database architect. Generate Mermaid ER diagrams (entityRelationshipDiagram) "
+                "or database schema diagrams showing tables, relationships, keys, and data models based on features and stories."
+            )
+            user_prompt = (
+                f"Project: {project_title or 'Untitled Project'}\n\n"
+                f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
+                f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
+                "Task: Create a DATABASE DESIGN Mermaid diagram that shows:\n"
+                "- Entity-Relationship Diagram (ERD) with tables\n"
+                "- Primary keys, foreign keys, and relationships\n"
+                "- Data entities and their attributes\n"
+                "- Relationships between entities (one-to-one, one-to-many, many-to-many)\n"
+                "- Use entityRelationshipDiagram syntax in Mermaid\n\n"
+                "Output ONLY valid Mermaid code, no explanations."
+            )
+        else:  # Default to HLD
+            system_prompt = (
+                "You are Agent-3, an AI solution architect specializing in High Level Design (HLD). "
+                "Generate Mermaid diagrams showing system architecture, high-level components, "
+                "and business flow at a conceptual level."
+            )
+            user_prompt = (
+                f"Project: {project_title or 'Untitled Project'}\n\n"
+                f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
+                f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
+                "Task: Create a HIGH LEVEL DESIGN (HLD) Mermaid diagram that shows:\n"
+                "- System architecture and major components\n"
+                "- Business process flow from features to stories\n"
+                "- High-level interactions between system modules\n"
+                "- User journey through features\n"
+                "- Use flowchart (graph TD or graph LR) syntax\n\n"
+                "Output ONLY valid Mermaid code, no explanations."
+            )
 
         try:
             response = await client.messages.create(
                 model=self.model,
-                max_tokens=800,
+                max_tokens=2000,
                 temperature=0.35,
-                system="Return only valid Mermaid flowchart code.",
+                system=system_prompt,
                 messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
             )
         except APIError as exc:
             raise RuntimeError(f"Agent-3 failed to generate diagram: {exc}") from exc
 
         mermaid = extract_text(response).strip()
-        if not mermaid.startswith("graph"):
+        
+        # Clean up mermaid code - remove markdown fences if present
+        if mermaid.startswith("```"):
+            lines = mermaid.split("\n")
+            if lines[0].startswith("```mermaid"):
+                mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
+            elif lines[0].strip() == "```":
+                mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
+        mermaid = mermaid.strip()
+        
+        # Ensure it starts with a valid Mermaid diagram type
+        if not any(mermaid.startswith(prefix) for prefix in ["graph", "classDiagram", "sequenceDiagram", "erDiagram", "entityRelationshipDiagram", "flowchart"]):
             mermaid = f"graph TD\n{mermaid}"
+        
         return mermaid
 
 
@@ -134,7 +223,7 @@ async def generate_diagram_for_project(project_id: str, db) -> Dict[str, Any]:
 
     try:
         response = await client.messages.create(
-            model="claude-3-5-sonnet-latest",
+            model=os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL),
             max_tokens=800,
             temperature=0.3,
             messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],

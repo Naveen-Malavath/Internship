@@ -56,6 +56,7 @@ export type AgentVisualizationRequestPayload = {
   prompt?: string;
   features?: AgentFeatureSpec[];
   stories?: AgentStorySpec[];
+  diagramType?: string; // 'hld' | 'lld' | 'database'
 };
 
 export type AgentVisualizationResponse = {

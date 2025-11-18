@@ -5,6 +5,28 @@
   </header>
 
   <form (ngSubmit)="onSubmit()" class="story-form__body">
+    <section class="story-form__ai-section" *ngIf="showAiAssist">
+      <h3>AI Assistance</h3>
+      <p class="story-form__ai-helper">
+        Describe how you want to refine this story and let Agent 2 improve it automatically.
+      </p>
+      <div class="story-form__ai-row">
+        <textarea
+          rows="3"
+          [(ngModel)]="aiPrompt"
+          name="aiPrompt"
+          placeholder="Make the acceptance criteria more specific for authentication flows..."
+        ></textarea>
+        <button
+          type="button"
+          class="story-form__ai-button"
+          (click)="onRequestAiAssist()"
+          [disabled]="aiAssistLoading || saving || !aiPrompt.trim()"
+        >
+          {{ aiAssistLoading ? 'Refining…' : 'Refine with AI' }}
+        </button>
+      </div>
+    </section>
     <label>
       Feature title
       <input

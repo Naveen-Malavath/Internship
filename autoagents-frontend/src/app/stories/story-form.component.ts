@@ -15,17 +15,22 @@ export class StoryFormComponent {
   @Input() open = false;
   @Input() saving = false;
   @Input() featureTitleReadonly = false;
+  @Input() showAiAssist = true;
+  @Input() aiAssistLoading = false;
   @Input() set preset(value: AgentStorySpec | null) {
     if (!value) {
       return;
     }
     this.story = this.cloneStory(value);
+    this.aiPrompt = '';
   }
 
   @Output() cancel = new EventEmitter<void>();
   @Output() submit = new EventEmitter<AgentStorySpec>();
+  @Output() aiAssist = new EventEmitter<string>();
 
   protected story: AgentStorySpec = this.createEmptyStory();
+  protected aiPrompt = '';
 
   protected onAddAcceptanceCriterion(): void {
     this.story.acceptanceCriteria = [...this.story.acceptanceCriteria, ''];
@@ -60,6 +65,19 @@ export class StoryFormComponent {
     this.resetForm();
   }
 
+  protected onRequestAiAssist(): void {
+    const prompt = this.aiPrompt.trim();
+    if (!prompt || this.saving || this.aiAssistLoading) {
+      return;
+    }
+    this.aiAssist.emit(prompt);
+  }
+
+  public applyAiStory(story: AgentStorySpec): void {
+    this.story = this.cloneStory(story);
+    this.aiPrompt = '';
+  }
+
   protected onSubmit(): void {
     if (!this.isValid()) {
       return;
@@ -71,6 +89,7 @@ export class StoryFormComponent {
 
   private resetForm(): void {
     this.story = this.createEmptyStory();
+    this.aiPrompt = '';
   }
 
   private isValid(): boolean {

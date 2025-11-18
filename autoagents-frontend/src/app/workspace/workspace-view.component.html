@@ -142,6 +142,33 @@
                 <p>Edit the Mermaid definition. Changes render instantly.</p>
               </div>
               <div class="studio-panel__controls">
+                <div class="diagram-type-dropdown" role="group" aria-label="Diagram type selector">
+                  <button
+                    type="button"
+                    class="workspace__action workspace__action--outline diagram-type-dropdown__button"
+                    (click)="toggleDiagramDropdown()"
+                    [attr.aria-expanded]="isDiagramDropdownOpen"
+                    [attr.aria-haspopup]="true"
+                  >
+                    <span>Diagram Type: {{ getCurrentDiagramTypeLabel() }}</span>
+                    <span class="dropdown-arrow" [class.dropdown-arrow--open]="isDiagramDropdownOpen">▼</span>
+                  </button>
+                  <div class="diagram-type-dropdown__menu" *ngIf="isDiagramDropdownOpen" (click)="$event.stopPropagation()">
+                    <button
+                      *ngFor="let dt of diagramTypes"
+                      type="button"
+                      class="diagram-type-dropdown__item"
+                      [class.diagram-type-dropdown__item--active]="isDiagramTypeActive(dt.value)"
+                      [title]="dt.description"
+                      (click)="onDiagramTypeChange(dt.value)"
+                    >
+                      <span class="diagram-type-label">{{ dt.label }}</span>
+                      <span class="diagram-type-full-label">{{ dt.fullLabel }}</span>
+                      <span class="diagram-type-check" *ngIf="isDiagramTypeActive(dt.value)">✓</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="studio-panel__controls-divider"></div>
                 <input
                   type="file"
                   accept=".mermaid,.mmd,text/mermaid,text/plain"
@@ -205,7 +232,37 @@
                 <p>The diagram reflects edits in real time.</p>
               </div>
               <div class="studio-panel__controls">
-                <div class="preview-zoom" role="group" aria-label="Diagram zoom controls">
+                <div class="diagram-type-buttons" role="group" aria-label="Diagram type buttons">
+                  <button
+                    type="button"
+                    class="workspace__action"
+                    [class.workspace__action--primary]="currentDiagramType === 'hld'"
+                    [class.workspace__action--outline]="currentDiagramType !== 'hld'"
+                    (click)="loadPredefinedDiagram('hld'); currentDiagramType = 'hld'"
+                  >
+                    HLD
+                  </button>
+                  <button
+                    type="button"
+                    class="workspace__action"
+                    [class.workspace__action--primary]="currentDiagramType === 'lld'"
+                    [class.workspace__action--outline]="currentDiagramType !== 'lld'"
+                    (click)="loadPredefinedDiagram('lld'); currentDiagramType = 'lld'"
+                  >
+                    LLD
+                  </button>
+                  <button
+                    type="button"
+                    class="workspace__action"
+                    [class.workspace__action--primary]="currentDiagramType === 'database'"
+                    [class.workspace__action--outline]="currentDiagramType !== 'database'"
+                    (click)="loadPredefinedDiagram('database'); currentDiagramType = 'database'"
+                  >
+                    DBD
+                  </button>
+                </div>
+                <div class="studio-panel__controls-divider"></div>
+                <div class="preview-zoom" role="group" aria-label="Diagram zoom controls" *ngIf="showZoomControls">
                   <button
                     type="button"
                     class="preview-zoom__button"
@@ -244,6 +301,15 @@
                 <span class="studio-badge">Theme: {{ previewTheme }}</span>
                 <button type="button" class="workspace__action workspace__action--outline" (click)="togglePreviewTheme()">
                   Switch to {{ previewTheme === 'dark' ? 'light' : 'dark' }} mode
+                </button>
+                <div class="studio-panel__controls-divider"></div>
+                <button
+                  type="button"
+                  class="workspace__action workspace__action--primary"
+                  (click)="onRegenerateDiagram()"
+                  title="Regenerate diagram with Agent 3"
+                >
+                  Regenerate Diagram
                 </button>
               </div>
             </header>

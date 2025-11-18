@@ -16,6 +16,7 @@ import { FormsModule } from '@angular/forms';
 import mermaid from 'mermaid';
 
 import { AgentFeatureSpec, AgentStorySpec, AgentVisualizationResponse, ProjectWizardSubmission } from '../types';
+import { DiagramDataService } from '../diagram-data.service';
 
 @Component({
   selector: 'workspace-view',
@@ -37,12 +38,14 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   @Input() mermaidSaveMessage: string | null = null;
   @Output() mermaidChange = new EventEmitter<string>();
   @Output() mermaidSave = new EventEmitter<string>();
+  @Output() diagramTypeChange = new EventEmitter<string>();
   @Output() exit = new EventEmitter<void>();
   @Output() featureEdit = new EventEmitter<AgentFeatureSpec>();
   @Output() featureDismiss = new EventEmitter<AgentFeatureSpec>();
   @Output() storyEdit = new EventEmitter<{ feature: AgentFeatureSpec; story: AgentStorySpec }>();
   @Output() storyDismiss = new EventEmitter<{ feature: AgentFeatureSpec; story: AgentStorySpec }>();
   @Output() createProject = new EventEmitter<void>();
+  @Output() regenerateDiagram = new EventEmitter<string>();
   @ViewChild('mermaidContainer') private mermaidContainer?: ElementRef<HTMLDivElement>;
   @ViewChild('mermaidFileInput') private mermaidFileInput?: ElementRef<HTMLInputElement>;
 
@@ -52,12 +55,20 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   protected isDotCopied = false;
   protected isMermaidCopied = false;
   protected previewTheme: 'dark' | 'light' = 'dark';
+  protected currentDiagramType: 'hld' | 'lld' | 'database' = 'hld';
+  protected isDiagramDropdownOpen = false;
+  protected diagramTypes = [
+    { value: 'hld', label: 'HLD', fullLabel: 'High Level Design', description: 'System architecture & business flow' },
+    { value: 'lld', label: 'LLD', fullLabel: 'Low Level Design', description: 'Component interactions & implementation' },
+    { value: 'database', label: 'DBD', fullLabel: 'Database Design', description: 'ER diagrams & data models' },
+  ] as const;
   protected mermaidLineNumbers: number[] = [1];
   protected lineNumberOffset = 0;
   protected previewScale = 1;
   protected previewDisplayScale = 1;
   protected previewFitToContainer = true;
   protected previewOverflowing = false;
+  protected showZoomControls = false; // Hide zoom controls by default
   private mermaidInitialised = false;
   private mermaidRenderIndex = 0;
   private copyNotificationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -80,7 +91,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       }
     }
 
-    if (changes['stories'] && !this.mermaidEditorContent && !this.mermaidSource) {
+    if (changes['stories'] && !this.mermaidEditorContent && !this.mermaidSource && !this.mermaidInput) {
       this.generateDefaultMermaid();
     }
 
@@ -100,6 +111,10 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     // If mermaidSource is provided initially, use it
     if (this.mermaidSource !== null && typeof this.mermaidSource === 'string' && !this.mermaidInput) {
       this.setMermaidInput(this.mermaidSource, false);
+    } else if (!this.mermaidInput && !this.mermaidEditorContent && !this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
+      // Load HLD diagram by default if no mermaid content exists
+      this.currentDiagramType = 'hld';
+      this.loadPredefinedDiagram('hld');
     } else {
       this.renderMermaid();
     }
@@ -239,6 +254,85 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     this.createProject.emit();
   }
 
+  protected onDiagramTypeChange(type: 'hld' | 'lld' | 'database'): void {
+    if (this.currentDiagramType !== type) {
+      this.currentDiagramType = type;
+      this.isDiagramDropdownOpen = false;
+      
+      // Load predefined diagram based on type
+      this.loadPredefinedDiagram(type);
+      
+      // Emit event to parent to trigger diagram regeneration
+      this.diagramTypeChange.emit(type);
+    }
+  }
+
+  protected onRegenerateDiagram(): void {
+    // Emit event to regenerate diagram with current type
+    this.regenerateDiagram.emit(this.currentDiagramType);
+  }
+
+  protected loadPredefinedDiagram(type: 'hld' | 'lld' | 'database'): void {
+    let diagramContent = '';
+    
+    switch (type) {
+      case 'hld':
+        diagramContent = DiagramDataService.getHLDDiagram();
+        break;
+      case 'lld':
+        // Pass actual features and stories for dynamic LLD generation
+        diagramContent = DiagramDataService.getLLDDiagram(this.features, this.stories, this.prompt);
+        break;
+      case 'database':
+        diagramContent = DiagramDataService.getDBDDiagram();
+        break;
+    }
+    
+    if (diagramContent) {
+      this.setMermaidInput(diagramContent, true);
+      // Reset zoom to show full diagram
+      this.previewFitToContainer = true;
+      this.previewScale = 1;
+      this.mermaidError = null; // Clear any previous errors
+      
+      // Render will be triggered by setMermaidInput, then apply scale after render
+      // Longer timeout for LLD to ensure proper sizing
+      const timeout = type === 'lld' ? 350 : 200;
+      setTimeout(() => {
+        this.applyPreviewScale();
+      }, timeout);
+    }
+  }
+
+  protected getDiagramTypeLabel(type: string): string {
+    const found = this.diagramTypes.find((dt) => dt.value === type);
+    return found ? found.fullLabel : 'High Level Design';
+  }
+
+  protected getCurrentDiagramTypeLabel(): string {
+    return this.getDiagramTypeLabel(this.currentDiagramType);
+  }
+
+  protected toggleDiagramDropdown(): void {
+    this.isDiagramDropdownOpen = !this.isDiagramDropdownOpen;
+  }
+
+  protected closeDiagramDropdown(): void {
+    this.isDiagramDropdownOpen = false;
+  }
+
+  protected isDiagramTypeActive(type: string): boolean {
+    return this.currentDiagramType === type;
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.diagram-type-dropdown')) {
+      this.isDiagramDropdownOpen = false;
+    }
+  }
+
   protected onStoryEdit(feature: AgentFeatureSpec, story: AgentStorySpec): void {
     this.storyEdit.emit({ feature, story });
   }
@@ -336,7 +430,38 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       return;
     }
 
-    mermaid.initialize({ startOnLoad: false, theme: this.previewTheme });
+    // Configure Mermaid with better defaults for larger diagrams
+    // Enhanced sizing for LLD diagrams
+    const isLLD = this.currentDiagramType === 'lld' || 
+                  this.mermaidInput.includes('Feature Components') || 
+                  this.mermaidInput.includes('Story Components');
+    const baseFontSize = isLLD ? '18px' : '16px';
+    const padding = isLLD ? 30 : 20;
+    const nodeSpacing = isLLD ? 60 : 50;
+    const rankSpacing = isLLD ? 80 : 60;
+    
+    mermaid.initialize({ 
+      startOnLoad: false, 
+      theme: this.previewTheme,
+      themeVariables: {
+        fontSize: baseFontSize,
+        fontFamily: 'Arial, sans-serif',
+        primaryColor: '#3b82f6',
+        primaryTextColor: '#fff',
+        primaryBorderColor: '#1e40af',
+        lineColor: '#64748b',
+        secondaryColor: '#10b981',
+        tertiaryColor: '#f59e0b',
+      },
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true,
+        curve: 'basis',
+        padding: padding,
+        nodeSpacing: nodeSpacing,
+        rankSpacing: rankSpacing,
+      }
+    } as any);
     this.mermaidInitialised = true;
 
     const definition = this.mermaidInput.replace(/^\uFEFF/, '').trim();
@@ -356,12 +481,31 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       wrapper.innerHTML = svg;
       this.mermaidContainer.nativeElement.innerHTML = '';
       this.mermaidContainer.nativeElement.appendChild(wrapper);
+      
+      // Add data attribute for LLD diagrams to help with styling
+      if (this.currentDiagramType === 'lld') {
+        const svgElement = wrapper.querySelector('svg');
+        if (svgElement) {
+          svgElement.setAttribute('data-diagram-type', 'lld');
+        }
+        this.mermaidContainer.nativeElement.setAttribute('lld-diagram', 'true');
+      }
+      
       this.mermaidError = null;
-      this.applyPreviewScale();
+      
+      // Ensure fit to container is enabled for proper display
+      this.previewFitToContainer = true;
+      
+      // Use longer timeout for LLD diagrams to ensure proper rendering and sizing
+      const timeout = this.currentDiagramType === 'lld' ? 300 : 100;
+      setTimeout(() => {
+        this.applyPreviewScale();
+      }, timeout);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Mermaid syntax error. Please review the diagram definition.';
       this.mermaidError = message;
       this.mermaidContainer.nativeElement.innerHTML = '';
+      console.error('Mermaid render error:', error);
     }
   }
 
@@ -439,23 +583,46 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     this.previewAutoScale = autoScale;
     this.previewOverflowing = overflowing && this.previewFitToContainer;
 
-    svg.style.transformOrigin = 'top left';
+    svg.style.transformOrigin = 'center center';
     svg.style.display = 'block';
-    svgWrapper.style.transformOrigin = 'top left';
+    svgWrapper.style.transformOrigin = 'center center';
     svgWrapper.style.display = 'flex';
-    svgWrapper.style.justifyContent = 'flex-start';
-    svgWrapper.style.alignItems = 'flex-start';
+    svgWrapper.style.justifyContent = 'center';
+    svgWrapper.style.alignItems = 'center';
     svgWrapper.style.gap = '0';
 
     if (this.previewFitToContainer) {
-      svgWrapper.style.width = '100%';
+      // Calculate scale to fit diagram in container while maintaining aspect ratio
+      // Allow scaling up to 200% for better visibility, especially for LLD diagrams
+      const scaleWidth = availableWidth / naturalWidth;
+      const scaleHeight = availableHeight / naturalHeight;
+      
+      // For LLD diagrams (which can be complex), allow larger scale up to 200%
+      // For other diagrams, use up to 150%
+      const maxScaleForLLD = this.currentDiagramType === 'lld' ? 2.0 : 1.5;
+      const fitScale = Math.min(scaleWidth, scaleHeight, maxScaleForLLD);
+      
+      // Ensure minimum size for readability - use at least 80% of container width/height for better visibility
+      // Or ensure minimum width of 800px for LLD diagrams
+      const minWidthForLLD = this.currentDiagramType === 'lld' ? 900 : 700;
+      const minScaleWidth = minWidthForLLD / naturalWidth;
+      const minScaleHeight = (availableHeight * 0.8) / naturalHeight;
+      const minScale = Math.max(0.8, Math.min(minScaleWidth, minScaleHeight, 1.0));
+      
+      const finalScale = Math.max(fitScale, minScale);
+      
+      const displayWidth = naturalWidth * finalScale;
+      const displayHeight = naturalHeight * finalScale;
+      
+      svgWrapper.style.width = `${displayWidth}px`;
       svgWrapper.style.maxWidth = '100%';
-      svgWrapper.style.height = 'auto';
+      svgWrapper.style.height = `${displayHeight}px`;
       svgWrapper.style.maxHeight = '100%';
-      svg.style.width = '100%';
-      svg.style.height = 'auto';
+      
+      svg.style.width = `${displayWidth}px`;
+      svg.style.height = `${displayHeight}px`;
       svg.style.maxWidth = '100%';
-      svg.style.maxHeight = 'none';
+      svg.style.maxHeight = '100%';
     } else {
       svgWrapper.style.width = `${naturalWidth}px`;
       svgWrapper.style.height = `${naturalHeight}px`;
@@ -467,7 +634,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       svg.style.maxHeight = 'none';
     }
 
-    const baseScale = this.previewFitToContainer ? this.previewAutoScale : 1;
+    const baseScale = this.previewFitToContainer ? 1 : 1; // Always use 1 for fit to container
     const effectiveScale = baseScale * this.previewScale;
     this.previewDisplayScale = Number(effectiveScale.toFixed(3));
 

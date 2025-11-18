@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 class Agent2Service:
     """Service wrapper for generating user stories via Claude."""
 
-    def __init__(self, model: str = DEFAULT_CLAUDE_MODEL) -> None:
-        self.model = model
+    def __init__(self, model: str | None = None) -> None:
+        self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
 
     async def generate_stories(self, features: List[Dict]) -> List[Dict]:
         """Generate user stories based on provided features."""
@@ -337,7 +337,7 @@ async def generate_stories_for_project(project_id: str, db):
 
         try:
             response = await client.messages.create(
-                model="claude-3-5-sonnet-latest",
+                model=os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL),
                 max_tokens=1000,
                 temperature=0.4,
                 messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],

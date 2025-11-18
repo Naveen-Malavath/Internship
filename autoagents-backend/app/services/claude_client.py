@@ -9,7 +9,13 @@ from typing import Optional
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
 
-DEFAULT_CLAUDE_MODEL = "claude-3-5-haiku-20241022"
+def get_claude_model() -> str:
+    """Get Claude model name from environment or use default."""
+    # Using haiku-latest as default since it's confirmed to work
+    return os.getenv("CLAUDE_MODEL", "claude-3-5-haiku-latest")
+
+
+DEFAULT_CLAUDE_MODEL = get_claude_model()
 
 _client: Optional[AsyncAnthropic] = None
 
@@ -18,9 +24,9 @@ def get_claude_client() -> AsyncAnthropic:
     """Return a singleton AsyncAnthropic client."""
     global _client
     if _client is None:
-        api_key = os.getenv("CLAUDE_API_KEY")
+        api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            raise RuntimeError("CLAUDE_API_KEY is not configured.")
+            raise RuntimeError("CLAUDE_API_KEY or ANTHROPIC_API_KEY is not configured.")
         _client = AsyncAnthropic(api_key=api_key)
     return _client
 
