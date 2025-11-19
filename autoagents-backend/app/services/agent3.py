@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import os
 from typing import Any, Dict, List
 
@@ -18,12 +19,21 @@ from .claude_client import (
     get_claude_client,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class Agent3Service:
     """Service wrapper for generating Mermaid diagrams via Claude."""
 
     def __init__(self, model: str | None = None) -> None:
-        self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+        # Priority: explicit model > CLAUDE_MODEL_DEBUG > CLAUDE_MODEL > default
+        debug_model = os.getenv("CLAUDE_MODEL_DEBUG")
+        if model is None and debug_model:
+            self.model = debug_model
+            logger.info(f"[agent3] Using DEBUG model from CLAUDE_MODEL_DEBUG: {self.model}")
+        else:
+            self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+            logger.info(f"[agent3] Initialized with Claude Sonnet 4.5 model: {self.model}")
 
     async def generate_mermaid(
         self,
@@ -31,6 +41,7 @@ class Agent3Service:
         features: List[Dict],
         stories: List[Dict],
         diagram_type: str = "hld",
+        original_prompt: str = "",
     ) -> str:
         """Generate a Mermaid diagram linking project features and stories.
         
@@ -40,11 +51,18 @@ class Agent3Service:
             stories: List of story dictionaries from Agent2
             diagram_type: Type of diagram to generate - 'hld' (High Level Design), 
                          'lld' (Low Level Design), or 'database' (Database Design)
+            original_prompt: Original user prompt for context
         
         Returns:
             Mermaid diagram source code as string
         """
-        client = get_claude_client()
+        logger.info(f"[agent3] Starting Mermaid diagram generation with Claude Sonnet 4.5 | model={self.model} | type={diagram_type} | features={len(features)} | stories={len(stories)} | prompt_length={len(original_prompt)}")
+        try:
+            client = get_claude_client()
+            logger.debug("[agent3] Claude client obtained successfully")
+        except RuntimeError as exc:
+            logger.error(f"[agent3] Failed to get Claude client: {exc}", exc_info=True)
+            raise
 
         # Format features with more detail
         feature_details = []
@@ -66,6 +84,11 @@ class Agent3Service:
             for fid, story_list in list(stories_by_feature.items())[:10]  # Limit to 10 features
         )
 
+        # Include original prompt context
+        prompt_context = ""
+        if original_prompt and original_prompt.strip():
+            prompt_context = f"\n\nOriginal User Requirements:\n{original_prompt.strip()}\n\n"
+        
         # Create type-specific prompts
         if diagram_type.lower() == "lld":
             system_prompt = (
@@ -75,15 +98,15 @@ class Agent3Service:
                 "Use appropriate Mermaid syntax like classDiagram, sequenceDiagram, or detailed flowcharts."
             )
             user_prompt = (
-                f"Project: {project_title or 'Untitled Project'}\n\n"
+                f"Project: {project_title or 'Untitled Project'}\n"
+                f"{prompt_context}"
                 f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
                 f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
-                "Task: Create a LOW LEVEL DESIGN (LLD) Mermaid diagram that shows:\n"
-                "- Detailed component/class/module interactions\n"
+                "Create a LOW LEVEL DESIGN (LLD) Mermaid diagram showing:\n"
+                "- Component/class/module interactions\n"
                 "- API endpoints and service layers\n"
                 "- Data flow between components\n"
-                "- Database interactions and models\n"
-                "- Implementation-level architecture\n"
+                "- Database interactions\n"
                 "- Use classDiagram, sequenceDiagram, or detailed flowchart syntax\n\n"
                 "Output ONLY valid Mermaid code, no explanations."
             )
@@ -93,14 +116,15 @@ class Agent3Service:
                 "or database schema diagrams showing tables, relationships, keys, and data models based on features and stories."
             )
             user_prompt = (
-                f"Project: {project_title or 'Untitled Project'}\n\n"
+                f"Project: {project_title or 'Untitled Project'}\n"
+                f"{prompt_context}"
                 f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
                 f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
-                "Task: Create a DATABASE DESIGN Mermaid diagram that shows:\n"
+                "Create a DATABASE DESIGN Mermaid diagram showing:\n"
                 "- Entity-Relationship Diagram (ERD) with tables\n"
                 "- Primary keys, foreign keys, and relationships\n"
                 "- Data entities and their attributes\n"
-                "- Relationships between entities (one-to-one, one-to-many, many-to-many)\n"
+                "- Relationships (one-to-one, one-to-many, many-to-many)\n"
                 "- Use entityRelationshipDiagram syntax in Mermaid\n\n"
                 "Output ONLY valid Mermaid code, no explanations."
             )
@@ -111,10 +135,11 @@ class Agent3Service:
                 "and business flow at a conceptual level."
             )
             user_prompt = (
-                f"Project: {project_title or 'Untitled Project'}\n\n"
+                f"Project: {project_title or 'Untitled Project'}\n"
+                f"{prompt_context}"
                 f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
                 f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
-                "Task: Create a HIGH LEVEL DESIGN (HLD) Mermaid diagram that shows:\n"
+                "Create a HIGH LEVEL DESIGN (HLD) Mermaid diagram showing:\n"
                 "- System architecture and major components\n"
                 "- Business process flow from features to stories\n"
                 "- High-level interactions between system modules\n"
@@ -124,16 +149,30 @@ class Agent3Service:
             )
 
         try:
+            # Optimized max_tokens for faster responses
+            max_tokens = 1500
+            logger.info(f"[agent3] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.3")
+            logger.debug(f"[agent3] System prompt length: {len(system_prompt)} chars")
+            logger.debug(f"[agent3] User prompt length: {len(user_prompt)} chars")
             response = await client.messages.create(
                 model=self.model,
-                max_tokens=2000,
-                temperature=0.35,
+                max_tokens=max_tokens,
+                temperature=0.3,  # Lower temperature for faster, more focused responses
                 system=system_prompt,
                 messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
             )
+            usage = getattr(response, "usage", None)
+            if usage:
+                logger.info(f"[agent3] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+            else:
+                logger.info("[agent3] API call successful")
         except APIError as exc:
+            error_type = getattr(exc, 'type', 'unknown')
+            error_status = getattr(exc, 'status_code', None)
+            logger.error(f"[agent3] APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
             raise RuntimeError(f"Agent-3 failed to generate diagram: {exc}") from exc
 
+        logger.debug("[agent3] Extracting Mermaid diagram from response")
         mermaid = extract_text(response).strip()
         
         # Clean up mermaid code - remove markdown fences if present
@@ -147,8 +186,10 @@ class Agent3Service:
         
         # Ensure it starts with a valid Mermaid diagram type
         if not any(mermaid.startswith(prefix) for prefix in ["graph", "classDiagram", "sequenceDiagram", "erDiagram", "entityRelationshipDiagram", "flowchart"]):
+            logger.warning("[agent3] Mermaid diagram doesn't start with valid type, prepending 'graph TD'")
             mermaid = f"graph TD\n{mermaid}"
         
+        logger.info(f"[agent3] Mermaid diagram generation complete | length={len(mermaid)} chars")
         return mermaid
 
 
@@ -221,14 +262,24 @@ async def generate_diagram_for_project(project_id: str, db) -> Dict[str, Any]:
 
     prompt = "\n".join(prompt_sections)
 
+    # Use debug model if available, otherwise default
+    model = os.getenv("CLAUDE_MODEL_DEBUG") or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+    logger.info(f"[agent3] generate_diagram_for_project using model: {model}")
+    
     try:
         response = await client.messages.create(
-            model=os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL),
+            model=model,
             max_tokens=800,
             temperature=0.3,
             messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
         )
+        usage = getattr(response, "usage", None)
+        if usage:
+            logger.info(f"[agent3] generate_diagram_for_project API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
     except anthropic.APIError as exc:
+        error_type = getattr(exc, 'type', 'unknown')
+        error_status = getattr(exc, 'status_code', None)
+        logger.error(f"[agent3] generate_diagram_for_project APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
         raise HTTPException(
             status_code=500, detail="Claude API error while generating diagram"
         ) from exc
@@ -265,7 +316,13 @@ async def generate_diagram_for_project(project_id: str, db) -> Dict[str, Any]:
 
 
 async def generate_designs_for_project(project_id: str, db):
-    """Generate and persist HLD, LLD, and DBD Mermaid designs for a project."""
+    """Generate and persist HLD, LLD, and DBD Mermaid designs for a project.
+    
+    This function generates all three diagram types (HLD, LLD, DBD) based on:
+    - Original user prompt
+    - Agent1 features
+    - Agent2 stories
+    """
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="Claude API key not configured")
@@ -305,40 +362,48 @@ async def generate_designs_for_project(project_id: str, db):
     )
 
     prompt = (
-        "You are a senior software architect.\n\n"
-        f"Project title: {project_title}\n"
-        f"Project description: {project_description}\n\n"
-        "Main features:\n"
-        f"{feature_lines or 'None provided'}\n\n"
-        "User stories (examples):\n"
-        f"{story_lines or 'None provided'}\n\n"
-        "Task:\n"
-        "Based on this project, generate THREE Mermaid-based designs:\n\n"
+        "You are Agent-3, a senior software architect. Generate architecture diagrams based on:\n"
+        f"- Original User Requirements: {project_description}\n"
+        f"- Agent1 Features: {feature_lines or 'None provided'}\n"
+        f"- Agent2 Stories: {story_lines or 'None provided'}\n\n"
+        "Generate THREE Mermaid diagrams:\n\n"
         "1) High-Level Design (HLD):\n"
-        "   - Use `flowchart LR` or similar to show user, frontend (Angular app), backend (FastAPI), database (MongoDB), and AI/Claude, and their interactions.\n\n"
+        "   - System architecture showing user, frontend (Angular), backend (FastAPI), database (MongoDB), AI agents\n"
+        "   - Use `flowchart LR` or `graph TD` syntax\n\n"
         "2) Low-Level Design (LLD):\n"
-        "   - Use a more detailed Mermaid diagram (e.g. `flowchart`, `sequenceDiagram`, or `classDiagram`) to represent internal services, API endpoints, and data flow between components.\n\n"
+        "   - Detailed component interactions, API endpoints, service layers, data flow\n"
+        "   - Use `classDiagram`, `sequenceDiagram`, or detailed `flowchart` syntax\n\n"
         "3) Database Design (DBD):\n"
-        "   - Use `erDiagram` syntax in Mermaid to represent collections/tables like Users, Projects, Features, Stories, Designs/Diagrams, and their relationships.\n\n"
-        "VERY IMPORTANT:\n"
-        "- Return ONLY valid JSON with this exact structure:\n"
+        "   - Entity-Relationship Diagram with tables, keys, relationships\n"
+        "   - Use `erDiagram` or `entityRelationshipDiagram` syntax\n\n"
+        "Return ONLY valid JSON:\n"
         "{\n"
-        '  "hld_mermaid": "<Mermaid code for HLD>",\n'
-        '  "lld_mermaid": "<Mermaid code for LLD>",\n'
-        '  "dbd_mermaid": "<Mermaid code for DB design>"\n'
+        '  "hld_mermaid": "<Mermaid code>",\n'
+        '  "lld_mermaid": "<Mermaid code>",\n'
+        '  "dbd_mermaid": "<Mermaid code>"\n'
         "}\n"
-        "- Do NOT wrap the Mermaid code in ``` fences.\n"
-        "- Do NOT add any extra keys or text outside the JSON."
+        "No markdown fences, no extra text."
     )
 
+    # Use debug model if available, otherwise default
+    model = os.getenv("CLAUDE_MODEL_DEBUG") or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+    logger.info(f"[agent3] generate_designs_for_project using model: {model}")
+    
     try:
+        # Optimized max_tokens for faster responses
         response = await client.messages.create(
-            model="claude-3-5-sonnet-latest",
-            max_tokens=4000,
+            model=model,
+            max_tokens=3000,  # Reduced from 4000 for faster response
             temperature=0.3,
             messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
         )
+        usage = getattr(response, "usage", None)
+        if usage:
+            logger.info(f"[agent3] generate_designs_for_project API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
     except anthropic.APIError as exc:
+        error_type = getattr(exc, 'type', 'unknown')
+        error_status = getattr(exc, 'status_code', None)
+        logger.error(f"[agent3] generate_designs_for_project APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
         raise HTTPException(
             status_code=500, detail="Claude API error while generating designs"
         ) from exc

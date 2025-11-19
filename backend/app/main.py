@@ -29,7 +29,7 @@ load_dotenv()
 logger = logging.getLogger("agent1")
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-20241022")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 if not ANTHROPIC_API_KEY:

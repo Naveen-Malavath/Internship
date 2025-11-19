@@ -26,15 +26,31 @@ class Agent2Service:
     """Service wrapper for generating user stories via Claude."""
 
     def __init__(self, model: str | None = None) -> None:
-        self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+        # Priority: explicit model > CLAUDE_MODEL_DEBUG > CLAUDE_MODEL > default
+        debug_model = os.getenv("CLAUDE_MODEL_DEBUG")
+        if model is None and debug_model:
+            self.model = debug_model
+            logger.info(f"[agent2] Using DEBUG model from CLAUDE_MODEL_DEBUG: {self.model}")
+        else:
+            self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+            logger.info(f"[agent2] Initialized with Claude Sonnet 4.5 model: {self.model}")
 
-    async def generate_stories(self, features: List[Dict]) -> List[Dict]:
-        """Generate user stories based on provided features."""
+    async def generate_stories(self, features: List[Dict], original_prompt: str = "") -> List[Dict]:
+        """Generate user stories based on provided features and original prompt."""
+        logger.info(f"[agent2] Starting story generation with Claude Sonnet 4.5 | model={self.model} | features={len(features)} | prompt_length={len(original_prompt)}")
         if not features:
+            logger.warning("[agent2] No features provided, returning empty list")
             return []
 
-        client = get_claude_client()
+        try:
+            client = get_claude_client()
+            logger.debug("[agent2] Claude client obtained successfully")
+        except RuntimeError as exc:
+            logger.error(f"[agent2] Failed to get Claude client: {exc}", exc_info=True)
+            raise
+        
         normalized_features = self._normalize_features(features)
+        logger.debug(f"[agent2] Normalized {len(normalized_features)} features")
 
         feature_outline = "\n".join(
             f"- ID: {feature['id']} Title: {feature['title']}"
@@ -42,38 +58,70 @@ class Agent2Service:
             for feature in normalized_features
         )
 
+        # Include original prompt context for better story generation
+        prompt_context = ""
+        if original_prompt and original_prompt.strip():
+            prompt_context = f"\n\nOriginal User Prompt/Requirements:\n{original_prompt.strip()}\n\n"
+            prompt_context += "Use this context to ensure stories align with the original user intent and requirements.\n"
+        
         user_prompt = (
-            "You are Agent-2, a senior product owner. For each feature, return JSON with user stories.\n"
+            "You are Agent-2, a senior product owner. Generate user stories based on features AND the original user prompt.\n"
+            "Return JSON:\n"
             "{\n"
             '  "stories": [\n'
             "    {\n"
-            '      "feature_id": "Use the exact ID provided in the feature list",\n'
+            '      "feature_id": "Use exact ID from feature list",\n'
             '      "feature_title": "Feature name",\n'
             '      "story_text": "As a ...",\n'
             '      "acceptance_criteria": ["Given ...", "When ...", "Then ..."],\n'
-            '      "implementation_notes": ["System component or integration detail", "..."]\n'
+            '      "implementation_notes": ["Component detail", "..."]\n'
             "    }\n"
             "  ]\n"
             "}\n"
-            "Produce at least two stories per feature, keep acceptance criteria actionable, and include low/medium level implementation notes.\n\n"
+            "Generate 2-3 stories per feature. Ensure stories relate to both the feature AND the original prompt.\n"
+            f"{prompt_context}"
             f"Features:\n{feature_outline}"
         )
 
         try:
+            # Increased max_tokens to prevent truncation of JSON responses with multiple stories per feature
+            max_tokens = 4000
+            logger.info(f"[agent2] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.35")
+            logger.debug(f"[agent2] User prompt length: {len(user_prompt)} chars")
             response = await client.messages.create(
                 model=self.model,
-                max_tokens=2000,
-                temperature=0.4,
-                system="Respond ONLY with JSON as specified.",
+                max_tokens=max_tokens,
+                temperature=0.35,  # Lower temperature for faster, more focused responses
+                system="Respond ONLY with valid JSON as specified. Be concise.",
                 messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
             )
+            usage = getattr(response, "usage", None)
+            if usage:
+                logger.info(f"[agent2] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+            else:
+                logger.info("[agent2] API call successful")
         except APIError as exc:
+            error_type = getattr(exc, 'type', 'unknown')
+            error_status = getattr(exc, 'status_code', None)
+            logger.error(f"[agent2] APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
+            raise RuntimeError(f"Agent-2 failed to generate stories: {exc}") from exc
+        except Exception as exc:
+            logger.error(f"[agent2] Unexpected error during API call: {exc}", exc_info=True)
             raise RuntimeError(f"Agent-2 failed to generate stories: {exc}") from exc
 
-        payload = coerce_json(extract_text(response))
-        stories = self._extract_story_payload(payload)
+        logger.debug("[agent2] Extracting and parsing response")
+        try:
+            response_text = extract_text(response)
+            payload = coerce_json(response_text)
+            stories = self._extract_story_payload(payload)
+        except RuntimeError as exc:
+            logger.error(f"[agent2] Failed to parse response: {exc}", exc_info=True)
+            # Try to use fallback instead of failing completely
+            logger.warning("[agent2] Using fallback story generation due to parsing error")
+            stories = self._fallback_story_payload(normalized_features)
+        logger.debug(f"[agent2] Extracted {len(stories)} stories from payload")
         if not stories:
-            logger.warning("Agent-2 returned no stories. Falling back to heuristic generation.")
+            logger.warning("[agent2] Agent-2 returned no stories. Falling back to heuristic generation.")
             stories = self._fallback_story_payload(normalized_features)
 
         features_by_id = {feature["id"]: feature for feature in normalized_features}
@@ -108,9 +156,14 @@ class Agent2Service:
             )
 
         if cleaned:
-            return self._ensure_story_coverage(cleaned, normalized_features)
+            final_stories = self._ensure_story_coverage(cleaned, normalized_features)
+            logger.info(f"[agent2] Story generation complete | generated={len(final_stories)} stories")
+            return final_stories
 
-        return self._fallback_stories(normalized_features)
+        logger.warning("[agent2] No cleaned stories, using fallback generation")
+        fallback_stories = self._fallback_stories(normalized_features)
+        logger.info(f"[agent2] Fallback story generation complete | generated={len(fallback_stories)} stories")
+        return fallback_stories
 
     def _extract_story_payload(self, payload: Any) -> List[Dict[str, Any]]:
         """Handle multiple possible payload shapes from Claude."""
@@ -335,14 +388,24 @@ async def generate_stories_for_project(project_id: str, db):
             "Return the result as plain text, with a blank line between each user story."
         )
 
+        # Use debug model if available, otherwise default
+        model = os.getenv("CLAUDE_MODEL_DEBUG") or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+        logger.debug(f"[agent2] generate_stories_for_project using model: {model} for feature: {feature_id_str}")
+        
         try:
             response = await client.messages.create(
-                model=os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL),
+                model=model,
                 max_tokens=1000,
                 temperature=0.4,
                 messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
             )
+            usage = getattr(response, "usage", None)
+            if usage:
+                logger.debug(f"[agent2] generate_stories_for_project API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
         except anthropic.APIError as exc:
+            error_type = getattr(exc, 'type', 'unknown')
+            error_status = getattr(exc, 'status_code', None)
+            logger.error(f"[agent2] generate_stories_for_project APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
             raise HTTPException(
                 status_code=500, detail="Claude API error while generating user stories"
             ) from exc

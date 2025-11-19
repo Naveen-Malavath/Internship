@@ -6,6 +6,7 @@ import {
   AgentFeatureDetail,
   AgentStorySpec,
   FeatureFormSubmission,
+  ProjectAISuggestion,
   ProjectTemplate,
   ProjectWorkflowPreset,
   ProjectWizardAISummary,
@@ -76,6 +77,26 @@ export class ProjectWizardComponent {
     }
     this.applyStoryRecommendations(value);
   }
+  @Input() set aiSuggestionResponse(value: { suggestionId: string; output: string } | null) {
+    if (!value) {
+      return;
+    }
+    // Only process if we're not already showing this output
+    if (this.suggestionOutputs[value.suggestionId] === value.output) {
+      return;
+    }
+    this.suggestionLoading[value.suggestionId] = false;
+    this.suggestionOutputs[value.suggestionId] = value.output;
+    
+    // Open modal with the result (but don't apply it yet - wait for user to click "Use This")
+    const prompt = this.aiPrompts.find((p) => p.id === value.suggestionId);
+    if (prompt) {
+      this.currentSuggestionTitle = prompt.title;
+      this.openSuggestionModal = value.suggestionId;
+    }
+    
+    // Don't auto-apply - user must click "Use This" to apply
+  }
 
   @Output() cancel = new EventEmitter<void>();
   @Output() complete = new EventEmitter<ProjectWizardSubmissionPayload>();
@@ -96,6 +117,18 @@ export class ProjectWizardComponent {
     featureDetail: AgentFeatureDetail;
   }>();
   @Output() dismissStory = new EventEmitter<{ featureIndex: number; storyIndex: number }>();
+  @Output() requestAISuggestion = new EventEmitter<{
+    suggestionId: string;
+    suggestionType: 'summary' | 'epics' | 'acceptanceCriteria' | 'stories';
+    prompt: string;
+    projectContext: {
+      industry: string;
+      methodology: string;
+      name: string;
+      description: string;
+      focusAreas?: string[];
+    };
+  }>();
 
   protected readonly steps = ['Template', 'Project Details', 'AI Assist', 'Features', 'Stories', 'Review'];
   protected stepIndex = 0;
@@ -129,6 +162,10 @@ export class ProjectWizardComponent {
   protected featureEditingIndex: number | null = null;
   protected featurePreset: AgentFeatureDetail | null = null;
   protected featureFormSaving = false;
+  protected suggestionLoading: Record<string, boolean> = {};
+  protected suggestionOutputs: Record<string, string> = {};
+  protected openSuggestionModal: string | null = null;
+  protected currentSuggestionTitle: string = '';
 
   private hasRequestedFeatureRecommendations = false;
   private hasRequestedStoryRecommendations = false;
@@ -287,6 +324,140 @@ export class ProjectWizardComponent {
       return;
     }
     this.requestAISummary.emit(this.details);
+  }
+
+  protected onRequestAISuggestion(prompt: ProjectAISuggestion): void {
+    if (this.suggestionLoading[prompt.id]) {
+      return;
+    }
+    
+    this.suggestionLoading[prompt.id] = true;
+    this.suggestionOutputs[prompt.id] = '';
+    this.currentSuggestionTitle = prompt.title;
+    this.openSuggestionModal = prompt.id; // Open modal immediately to show loading state
+    
+    const template = this.selectedTemplate;
+    const focusAreas = template?.focusAreas || [];
+    
+    this.requestAISuggestion.emit({
+      suggestionId: prompt.id,
+      suggestionType: prompt.category === 'stories' ? 'stories' : 
+                     prompt.category === 'epics' ? 'epics' :
+                     prompt.category === 'acceptanceCriteria' ? 'acceptanceCriteria' : 'summary',
+      prompt: prompt.prompt,
+      projectContext: {
+        industry: this.details.industry,
+        methodology: this.details.methodology,
+        name: this.details.name,
+        description: this.details.description,
+        focusAreas: focusAreas,
+      },
+    });
+  }
+
+  protected onCloseSuggestionModal(): void {
+    this.openSuggestionModal = null;
+    this.currentSuggestionTitle = '';
+  }
+
+  protected getCurrentSuggestionOutput(): string {
+    if (!this.openSuggestionModal) {
+      return '';
+    }
+    return this.suggestionOutputs[this.openSuggestionModal] || '';
+  }
+
+  protected onRegenerateSuggestion(): void {
+    if (!this.openSuggestionModal || this.suggestionLoading[this.openSuggestionModal]) {
+      return;
+    }
+
+    const prompt = this.aiPrompts.find((p) => p.id === this.openSuggestionModal);
+    if (!prompt) {
+      return;
+    }
+
+    // Clear the current output and regenerate
+    this.suggestionOutputs[this.openSuggestionModal] = '';
+    this.suggestionLoading[this.openSuggestionModal] = true;
+
+    const template = this.selectedTemplate;
+    const focusAreas = template?.focusAreas || [];
+
+    this.requestAISuggestion.emit({
+      suggestionId: prompt.id,
+      suggestionType: prompt.category === 'stories' ? 'stories' : 
+                     prompt.category === 'epics' ? 'epics' :
+                     prompt.category === 'acceptanceCriteria' ? 'acceptanceCriteria' : 'summary',
+      prompt: prompt.prompt,
+      projectContext: {
+        industry: this.details.industry,
+        methodology: this.details.methodology,
+        name: this.details.name,
+        description: this.details.description,
+        focusAreas: focusAreas,
+      },
+    });
+  }
+
+  protected onUseSuggestion(): void {
+    if (!this.openSuggestionModal || !this.getCurrentSuggestionOutput()) {
+      return;
+    }
+
+    // Apply the suggestion output to the appropriate fields
+    const output = this.getCurrentSuggestionOutput();
+    this.applySuggestionOutput(this.openSuggestionModal, output);
+    
+    // Close the modal after applying
+    this.onCloseSuggestionModal();
+  }
+
+  private applySuggestionOutput(suggestionId: string, output: string): void {
+    const prompt = this.aiPrompts.find((p) => p.id === suggestionId);
+    if (!prompt) {
+      return;
+    }
+
+    switch (prompt.category) {
+      case 'summary':
+        // Set the executive summary
+        this.aiSummary.executiveSummary = output.trim();
+        break;
+      
+      case 'epics':
+        // Parse epic ideas (one per line, format: "Epic N: Title - Description")
+        const epicLines = output
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .map((line) => {
+            // Remove "Epic N:" prefix if present
+            const match = line.match(/^Epic\s+\d+:\s*(.+)$/i);
+            return match ? match[1] : line;
+          });
+        this.aiSummary.epicIdeas = epicLines;
+        break;
+      
+      case 'acceptanceCriteria':
+        // For acceptance criteria, we could add it to a feature or show it
+        // For now, we'll just store it in customPrompt or show it
+        // This might need to be handled differently based on your needs
+        break;
+      
+      case 'stories':
+        // Parse risk notes (one per line, format: "- Risk description")
+        const riskLines = output
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .map((line) => {
+            // Remove leading "- " or bullet if present
+            return line.replace(/^[-•]\s*/, '');
+          });
+        this.aiSummary.riskNotes = riskLines;
+        break;
+    }
   }
 
   protected onRefreshFeatureRecommendations(): void {

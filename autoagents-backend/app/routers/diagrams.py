@@ -54,11 +54,14 @@ async def generate_diagram(
         diagram_type = "hld"  # Default to HLD if invalid
 
     try:
+        # Get original prompt from project for context
+        original_prompt = project.get("prompt") or project.get("description") or ""
         mermaid_source = await agent3_service.generate_mermaid(
             project_title=project.get("title", ""),
             features=features,
             stories=stories,
             diagram_type=diagram_type,
+            original_prompt=original_prompt,
         )
     except RuntimeError as exc:
         raise HTTPException(

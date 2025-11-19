@@ -197,3 +197,21 @@ export type FeatureFormSubmission = {
   files: File[];
 };
 
+export type AISuggestionRequest = {
+  suggestion_type: 'summary' | 'epics' | 'acceptanceCriteria' | 'stories';
+  prompt: string;
+  project_context?: {
+    industry?: string;
+    methodology?: string;
+    name?: string;
+    description?: string;
+    focusAreas?: string[] | string;
+  };
+};
+
+export type AISuggestionResponse = {
+  run_id: string;
+  output: string;
+  type: string;
+};
+

@@ -302,7 +302,9 @@
   [storyRecommendationsLoading]="projectWizardStoriesLoading()"
   (cancel)="onProjectWizardCancel()"
   (complete)="onProjectWizardComplete($event)"
+  [aiSuggestionResponse]="projectWizardSuggestionResponse()"
   (requestAISummary)="onProjectWizardRequestAI($event)"
+  (requestAISuggestion)="onProjectWizardRequestAISuggestion($event)"
   (requestFeatureRecommendations)="onProjectWizardRequestFeatures($event)"
   (requestStoryRecommendations)="onProjectWizardRequestStories($event)"
   (editStory)="onProjectWizardStoryEdit($event)"
@@ -318,15 +320,4 @@
   (submit)="onFeatureFormSubmit($event)"
   (aiAssist)="onFeatureFormAi($event)"
 ></feature-form>
-
-<story-form
-  [open]="isStoryFormOpen()"
-  [saving]="storyFormSaving()"
-  [preset]="storyFormDraft()"
-  [featureTitleReadonly]="storyFormFeatureReadonly()"
-  [aiAssistLoading]="storyFormAiLoading()"
-  (cancel)="onStoryFormCancel()"
-  (submit)="onStoryFormSubmit($event)"
-  (aiAssist)="onStoryFormAi($event)"
-></story-form>
 

@@ -33,7 +33,7 @@ export const PROJECT_WORKFLOWS: ProjectWorkflowPreset[] = [
 export const PROJECT_AI_SUGGESTIONS: ProjectAISuggestion[] = [
   {
     id: 'exec-summary',
-    title: 'Generate executive summary',
+    title: 'Project summary',
     category: 'summary',
     prompt:
       'Draft an executive summary for a {industry} initiative focused on {focusAreas}. Highlight customer impact and business outcomes in under 120 words.',

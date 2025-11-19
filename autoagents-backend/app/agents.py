@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
+
+from .services.claude_client import DEFAULT_CLAUDE_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -92,16 +95,28 @@ class VisualizationResult:
 
 
 class ClaudeAgent:
-    """Wrapper around Claude 3.5 Haiku for feature ideation."""
+    """Wrapper around Claude Sonnet 4.5 for feature ideation."""
 
-    def __init__(self, api_key: str, model: str = "claude-3-5-haiku-latest") -> None:
+    def __init__(self, api_key: str, model: str | None = None) -> None:
         self._client = AsyncAnthropic(api_key=api_key)
-        self._model = model
+        # Priority: explicit model > CLAUDE_MODEL_DEBUG > DEFAULT_CLAUDE_MODEL
+        if model is None:
+            debug_model = os.getenv("CLAUDE_MODEL_DEBUG")
+            if debug_model:
+                self._model = debug_model
+                logger.info(f"[ClaudeAgent] Using DEBUG model from CLAUDE_MODEL_DEBUG: {self._model}")
+            else:
+                self._model = DEFAULT_CLAUDE_MODEL
+                logger.info(f"[ClaudeAgent] Using default Sonnet 4.5 model: {self._model}")
+        else:
+            self._model = model
+            logger.info(f"[ClaudeAgent] Using explicit model: {self._model}")
 
     async def generate_features(self, prompt: str) -> AgentResult:
         run_id = str(uuid.uuid4())
-        logger.debug("Agent_1 generating features | run_id=%s", run_id)
+        logger.info(f"[ClaudeAgent] Starting feature generation | run_id={run_id} | model={self._model} | prompt_length={len(prompt)}")
 
+        logger.debug(f"[ClaudeAgent] Attempting API call | model={self._model} | max_tokens=1400 | temperature=0.4")
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=1400,
@@ -132,10 +147,13 @@ class ClaudeAgent:
             ],
         )
 
-        logger.debug(
-            "Claude raw response | run_id=%s usage=%s", run_id, getattr(response, "usage", None)
-        )
+        usage = getattr(response, "usage", None)
+        if usage:
+            logger.info(f"[ClaudeAgent] API call successful | run_id={run_id} | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+        else:
+            logger.info(f"[ClaudeAgent] API call successful | run_id={run_id}")
 
+        logger.debug(f"[ClaudeAgent] Extracting and parsing response | run_id={run_id}")
         text = self._extract_text(response)
         payload = self._coerce_json(text)
 
@@ -154,7 +172,8 @@ class ClaudeAgent:
         debug_payload = {
             "raw_text_preview": text[:250],
         }
-
+        
+        logger.info(f"[ClaudeAgent] Feature generation complete | run_id={run_id} | generated={len(features)} features")
         return AgentResult(run_id=run_id, summary=summary, features=features, debug=debug_payload)
 
     @staticmethod
@@ -203,18 +222,30 @@ class ClaudeAgent:
 class ClaudeStoryAgent:
     """Agent responsible for turning features into implementation-ready stories."""
 
-    def __init__(self, api_key: str, model: str = "claude-3-5-haiku-latest") -> None:
+    def __init__(self, api_key: str, model: str | None = None) -> None:
         self._client = AsyncAnthropic(api_key=api_key)
-        self._model = model
+        # Priority: explicit model > CLAUDE_MODEL_DEBUG > DEFAULT_CLAUDE_MODEL
+        if model is None:
+            debug_model = os.getenv("CLAUDE_MODEL_DEBUG")
+            if debug_model:
+                self._model = debug_model
+                logger.info(f"[ClaudeStoryAgent] Using DEBUG model from CLAUDE_MODEL_DEBUG: {self._model}")
+            else:
+                self._model = DEFAULT_CLAUDE_MODEL
+                logger.info(f"[ClaudeStoryAgent] Using default Sonnet 4.5 model: {self._model}")
+        else:
+            self._model = model
+            logger.info(f"[ClaudeStoryAgent] Using explicit model: {self._model}")
 
     async def generate_stories(self, features: list[FeatureSpec]) -> AgentStoriesResult:
         run_id = str(uuid.uuid4())
-        logger.debug("Agent_2 generating stories | run_id=%s features=%d", run_id, len(features))
+        logger.info(f"[ClaudeStoryAgent] Starting story generation | run_id={run_id} | model={self._model} | features={len(features)}")
 
         feature_outline = "\n".join(
             f"- {feature.title}: {feature.description}" for feature in features
         )
 
+        logger.debug(f"[ClaudeStoryAgent] Attempting API call | model={self._model} | max_tokens=1400 | temperature=0.4")
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=1400,
@@ -257,6 +288,13 @@ class ClaudeStoryAgent:
             ],
         )
 
+        usage = getattr(response, "usage", None)
+        if usage:
+            logger.info(f"[ClaudeStoryAgent] API call successful | run_id={run_id} | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+        else:
+            logger.info(f"[ClaudeStoryAgent] API call successful | run_id={run_id}")
+        
+        logger.debug(f"[ClaudeStoryAgent] Extracting and parsing response | run_id={run_id}")
         text = ClaudeAgent._extract_text(response)
         payload = ClaudeAgent._coerce_json(text)
 
@@ -288,7 +326,8 @@ class ClaudeStoryAgent:
         debug_payload = {
             "raw_text_preview": text[:250],
         }
-
+        
+        logger.info(f"[ClaudeStoryAgent] Story generation complete | run_id={run_id} | generated={len(stories)} stories")
         return AgentStoriesResult(run_id=run_id, summary=summary, stories=stories, debug=debug_payload)
 
     def _build_placeholder_story(self, feature: FeatureSpec) -> StorySpec:
@@ -317,19 +356,27 @@ class ClaudeStoryAgent:
 class ClaudeVisualizationAgent:
     """Agent responsible for producing visual system diagrams from features and stories."""
 
-    def __init__(self, api_key: str, model: str = "claude-3-5-haiku-latest") -> None:
+    def __init__(self, api_key: str, model: str | None = None) -> None:
         self._client = AsyncAnthropic(api_key=api_key)
-        self._model = model
+        # Priority: explicit model > CLAUDE_MODEL_DEBUG > DEFAULT_CLAUDE_MODEL
+        if model is None:
+            debug_model = os.getenv("CLAUDE_MODEL_DEBUG")
+            if debug_model:
+                self._model = debug_model
+                logger.info(f"[ClaudeVisualizationAgent] Using DEBUG model from CLAUDE_MODEL_DEBUG: {self._model}")
+            else:
+                self._model = DEFAULT_CLAUDE_MODEL
+                logger.info(f"[ClaudeVisualizationAgent] Using default Sonnet 4.5 model: {self._model}")
+        else:
+            self._model = model
+            logger.info(f"[ClaudeVisualizationAgent] Using explicit model: {self._model}")
 
     async def generate_visualization(
         self, features: list[FeatureSpec], stories: list[StorySpec]
     ) -> VisualizationResult:
         run_id = str(uuid.uuid4())
-        logger.debug(
-            "Agent_3 generating visualization | run_id=%s features=%d stories=%d",
-            run_id,
-            len(features),
-            len(stories),
+        logger.info(
+            f"[ClaudeVisualizationAgent] Starting visualization generation | run_id={run_id} | model={self._model} | features={len(features)} | stories={len(stories)}"
         )
 
         feature_outline = "\n".join(
@@ -344,10 +391,12 @@ class ClaudeVisualizationAgent:
             for story in stories
         )
 
+        # Optimized max_tokens for faster responses
+        logger.debug(f"[ClaudeVisualizationAgent] Attempting API call | model={self._model} | max_tokens=1200 | temperature=0.3")
         response = await self._client.messages.create(
             model=self._model,
-            max_tokens=900,
-            temperature=0.35,
+            max_tokens=1200,  # Increased slightly but still optimized
+            temperature=0.3,  # Lower temperature for faster responses
             system=(
                 "You are Agent_3, a staff-level product visualizer."
                 "Return ONLY JSON with this schema:\n"
@@ -382,6 +431,13 @@ class ClaudeVisualizationAgent:
             ],
         )
 
+        usage = getattr(response, "usage", None)
+        if usage:
+            logger.info(f"[ClaudeVisualizationAgent] API call successful | run_id={run_id} | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+        else:
+            logger.info(f"[ClaudeVisualizationAgent] API call successful | run_id={run_id}")
+        
+        logger.debug(f"[ClaudeVisualizationAgent] Extracting and parsing response | run_id={run_id}")
         text = ClaudeAgent._extract_text(response)
         payload = ClaudeAgent._coerce_json(text)
 
@@ -397,6 +453,155 @@ class ClaudeVisualizationAgent:
                 "raw_text_preview": text[:250],
             },
         )
-
+        
+        logger.info(f"[ClaudeVisualizationAgent] Visualization generation complete | run_id={run_id} | mermaid_length={len(visualization.mermaid)} | dot_length={len(visualization.dot)}")
         return visualization
+
+
+class ClaudeSuggestionAgent:
+    """Agent responsible for generating project suggestions like summaries, epics, acceptance criteria, and risks."""
+
+    def __init__(self, api_key: str, model: str | None = None) -> None:
+        self._client = AsyncAnthropic(api_key=api_key)
+        # Priority: explicit model > CLAUDE_MODEL_DEBUG > DEFAULT_CLAUDE_MODEL
+        if model is None:
+            debug_model = os.getenv("CLAUDE_MODEL_DEBUG")
+            if debug_model:
+                self._model = debug_model
+                logger.info(f"[ClaudeSuggestionAgent] Using DEBUG model from CLAUDE_MODEL_DEBUG: {self._model}")
+            else:
+                self._model = DEFAULT_CLAUDE_MODEL
+                logger.info(f"[ClaudeSuggestionAgent] Using default Sonnet 4.5 model: {self._model}")
+        else:
+            self._model = model
+            logger.info(f"[ClaudeSuggestionAgent] Using explicit model: {self._model}")
+
+    async def generate_suggestion(
+        self, 
+        suggestion_type: str,
+        prompt: str,
+        project_context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """
+        Generate AI suggestions based on type.
+        
+        Args:
+            suggestion_type: One of 'summary', 'epics', 'acceptanceCriteria', 'stories' (for risks)
+            prompt: The base prompt template
+            project_context: Optional project details (industry, methodology, etc.)
+        
+        Returns:
+            Dictionary with 'output' (text) and 'run_id'
+        """
+        run_id = str(uuid.uuid4())
+        logger.debug("SuggestionAgent generating %s | run_id=%s", suggestion_type, run_id)
+
+        # Build context-aware prompt
+        context_lines = []
+        if project_context:
+            if project_context.get("industry"):
+                context_lines.append(f"Industry: {project_context['industry']}")
+            if project_context.get("methodology"):
+                context_lines.append(f"Methodology: {project_context['methodology']}")
+            if project_context.get("name"):
+                context_lines.append(f"Project Name: {project_context['name']}")
+            if project_context.get("description"):
+                context_lines.append(f"Project Description: {project_context['description']}")
+            if project_context.get("focusAreas"):
+                focus_areas = project_context["focusAreas"]
+                if isinstance(focus_areas, list):
+                    context_lines.append(f"Focus Areas: {', '.join(focus_areas)}")
+                else:
+                    context_lines.append(f"Focus Areas: {focus_areas}")
+
+        # Replace placeholders in prompt
+        final_prompt = prompt
+        if project_context:
+            final_prompt = final_prompt.replace("{industry}", project_context.get("industry", "General"))
+            final_prompt = final_prompt.replace("{methodology}", project_context.get("methodology", "scrum"))
+            if "{focusAreas}" in final_prompt:
+                focus_areas = project_context.get("focusAreas", [])
+                if isinstance(focus_areas, list):
+                    focus_str = ", ".join(focus_areas)
+                else:
+                    focus_str = str(focus_areas)
+                final_prompt = final_prompt.replace("{focusAreas}", focus_str)
+
+        # Build system prompt based on suggestion type
+        system_prompts = {
+            "summary": (
+                "You are a product strategist drafting executive summaries for project initiatives. "
+                "Respond with a concise, professional executive summary (under 120 words) that highlights "
+                "customer impact and business outcomes. Return ONLY the summary text, no JSON, no markdown formatting."
+            ),
+            "epics": (
+                "You are a product manager creating epic-level roadmap initiatives. "
+                "Respond with 4-6 epic ideas, each on a new line, formatted as: 'Epic N: [Title] - [One sentence justification]'. "
+                "Return ONLY the epic list, one per line, no JSON, no markdown formatting."
+            ),
+            "acceptanceCriteria": (
+                "You are a product owner defining acceptance criteria for MVP releases. "
+                "Respond with key acceptance criteria as bullet points, one per line, starting with '- '. "
+                "Return ONLY the criteria list, no JSON, no markdown formatting."
+            ),
+            "stories": (  # Used for risk register
+                "You are a delivery manager identifying project risks. "
+                "Respond with the top delivery risks, one per line, formatted as: '- [Risk description]'. "
+                "Cover technology, compliance, and people considerations. "
+                "Return ONLY the risk list, no JSON, no markdown formatting."
+            ),
+        }
+
+        system_prompt = system_prompts.get(suggestion_type, system_prompts["summary"])
+
+        # Build user message
+        user_message_parts = []
+        if context_lines:
+            user_message_parts.append("Project Context:")
+            user_message_parts.extend(context_lines)
+            user_message_parts.append("")
+        user_message_parts.append(final_prompt)
+
+        logger.debug(f"[ClaudeSuggestionAgent] Attempting API call | model={self._model} | type={suggestion_type} | max_tokens=800 | temperature=0.4")
+        response = await self._client.messages.create(
+            model=self._model,
+            max_tokens=800,
+            temperature=0.4,
+            system=system_prompt,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "\n".join(user_message_parts)}]
+                }
+            ],
+        )
+
+        usage = getattr(response, "usage", None)
+        if usage:
+            logger.info(f"[ClaudeSuggestionAgent] API call successful | run_id={run_id} | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+        else:
+            logger.info(f"[ClaudeSuggestionAgent] API call successful | run_id={run_id}")
+        
+        logger.debug(f"[ClaudeSuggestionAgent] Extracting response | run_id={run_id}")
+        text = ClaudeAgent._extract_text(response)
+        
+        # Clean up the response (remove markdown formatting if present)
+        cleaned_text = text.strip()
+        if cleaned_text.startswith("```"):
+            # Remove code blocks
+            lines = cleaned_text.split("\n")
+            if len(lines) > 1:
+                cleaned_text = "\n".join(lines[1:-1]).strip()
+        # Remove any leading dashes/bullets if they're duplicated
+        cleaned_text = cleaned_text.strip()
+
+        logger.info(
+            f"[ClaudeSuggestionAgent] Suggestion generation complete | run_id={run_id} | type={suggestion_type} | length={len(cleaned_text)}"
+        )
+
+        return {
+            "run_id": run_id,
+            "output": cleaned_text,
+            "type": suggestion_type,
+        }
 

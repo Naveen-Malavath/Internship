@@ -988,3 +988,124 @@
   }
 }
 
+/* AI Suggestion Modal Styles */
+.suggestion-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.68);
+  backdrop-filter: blur(12px);
+  z-index: 80;
+}
+
+.suggestion-modal-shell {
+  position: fixed;
+  inset: clamp(2rem, 5vw, 4rem);
+  margin: auto;
+  max-width: min(900px, 85vw);
+  max-height: min(85vh, 700px);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 1.6rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 40px 80px rgba(2, 6, 23, 0.55);
+  z-index: 90;
+  color: #e2e8f0;
+}
+
+.suggestion-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 2rem clamp(1.75rem, 4vw, 2.5rem) 1.5rem;
+  gap: 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+
+  h1 {
+    margin: 0;
+    font-size: clamp(1.6rem, 2.5vw, 2rem);
+    letter-spacing: -0.01em;
+    color: #f8fafc;
+  }
+
+  .suggestion-modal-subtitle {
+    margin: 0.5rem 0 0;
+    color: rgba(226, 232, 240, 0.75);
+    font-size: 0.95rem;
+  }
+}
+
+.suggestion-modal-close {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.6);
+  color: #f8fafc;
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.suggestion-modal-close:hover {
+  border-color: rgba(148, 163, 184, 0.75);
+  transform: translateY(-1px);
+}
+
+.suggestion-modal-body {
+  flex: 1;
+  padding: 2rem clamp(1.75rem, 4vw, 2.5rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.suggestion-modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: rgba(226, 232, 240, 0.8);
+  font-size: 1.1rem;
+
+  p {
+    margin: 0;
+  }
+}
+
+.suggestion-modal-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.suggestion-output {
+  background: rgba(2, 6, 23, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+  flex: 1;
+  min-height: 200px;
+}
+
+.suggestion-modal-footer {
+  padding: 1.5rem clamp(1.75rem, 4vw, 2.5rem);
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+
+  button {
+    min-width: 100px;
+  }
+}
+

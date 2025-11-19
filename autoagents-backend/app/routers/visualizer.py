@@ -77,7 +77,9 @@ def _get_agent3() -> ClaudeVisualizationAgent:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Agent_3 is unavailable. Missing Claude API configuration.",
         )
-    return ClaudeVisualizationAgent(api_key=api_key, model=os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL))
+    # Priority: CLAUDE_MODEL_DEBUG > CLAUDE_MODEL > DEFAULT_CLAUDE_MODEL
+    model = os.getenv("CLAUDE_MODEL_DEBUG") or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+    return ClaudeVisualizationAgent(api_key=api_key, model=model)
 
 
 @router.post("", response_model=AgentVisualizationResponse)

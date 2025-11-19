@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime
 from typing import List
@@ -17,83 +18,136 @@ from .claude_client import (
     get_claude_client,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class Agent1Service:
     """Service wrapper for generating features via Claude."""
 
     def __init__(self, model: str | None = None) -> None:
-        self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+        # Priority: explicit model > CLAUDE_MODEL_DEBUG > CLAUDE_MODEL > default
+        debug_model = os.getenv("CLAUDE_MODEL_DEBUG")
+        if model is None and debug_model:
+            self.model = debug_model
+            logger.info(f"[agent1] Using DEBUG model from CLAUDE_MODEL_DEBUG: {self.model}")
+        else:
+            self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
+            logger.info(f"[agent1] Initialized with Claude Sonnet 4.5 model: {self.model}")
 
     async def generate_features(self, project_title: str, project_prompt: str) -> List[str]:
         """Generate feature descriptions for the given project using Claude."""
+        logger.info(f"[agent1] Starting feature generation with Claude Sonnet 4.5 | model={self.model} | title={project_title[:50]}")
         try:
             client = get_claude_client()
+            logger.debug("[agent1] Claude client obtained successfully")
         except RuntimeError as exc:
-            print(f"[agent1] Failed to get Claude client: {exc}")
+            logger.error(f"[agent1] Failed to get Claude client: {exc}", exc_info=True)
             raise
-        print(f"[agent1] using model {self.model}")
 
         system_prompt = (
-            "You are Agent-1, an AI product manager specializing in translating user ideas and requirements "
-            "into comprehensive, actionable feature specifications. Your role is to carefully analyze user input, "
-            "understand their vision, and break it down into detailed, implementation-ready features. "
-            "Respond ONLY with JSON and the schema:\n"
+            "You are Agent-1, a product strategist translating user ideas into actionable features. "
+            "Respond ONLY with valid JSON:\n"
             "{\n"
             '  "features": [\n'
-            '    "Feature description 1",\n'
-            '    "Feature description 2"\n'
+            '    {"title": "Feature name", "description": "2-3 sentences", "acceptanceCriteria": ["Criterion 1", "Criterion 2"]}\n'
             "  ]\n"
             "}\n"
-            "Provide at least eight implementation-ready feature descriptions that directly address the user's ideas and requirements."
+            "Provide 8-12 concise, implementation-ready features directly addressing the user's prompt."
         )
         user_prompt = (
-            f"Project title: {project_title or 'Untitled project'}\n"
-            f"User's idea/input/prompt:\n{project_prompt or 'No additional prompt provided.'}\n\n"
-            "Based on the above user input, generate comprehensive features that:\n"
-            "1. Directly address the user's stated needs and goals\n"
-            "2. Break down the idea into logical, actionable components\n"
-            "3. Cover all major functional areas mentioned in the user's input\n"
-            "4. Include both core features and supporting/enhancement features\n"
-            "5. Consider user experience, business value, and technical feasibility\n\n"
-            "Ensure each feature clearly relates back to the original user idea. "
-            "Return the JSON now."
+            f"Project: {project_title or 'Untitled'}\n"
+            f"User Prompt: {project_prompt or 'No prompt provided.'}\n\n"
+            "Generate 8-12 features that directly address the prompt. "
+            "Focus on core functionality, user experience, and implementation feasibility. "
+            "Return JSON now."
         )
 
         try:
-            print(f"[agent1] attempting API call with model: {self.model}")
+            # Increased max_tokens to prevent truncation of JSON responses with 8-12 features
+            max_tokens = 4000
+            logger.info(f"[agent1] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.4")
+            logger.debug(f"[agent1] System prompt length: {len(system_prompt)} chars")
+            logger.debug(f"[agent1] User prompt length: {len(user_prompt)} chars")
             response = await client.messages.create(
                 model=self.model,
-                max_tokens=1200,
-                temperature=0.5,
+                max_tokens=max_tokens,
+                temperature=0.4,  # Lower temperature for faster, more focused responses
                 system=system_prompt,
                 messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
             )
-            print(f"[agent1] API call successful")
+            usage = getattr(response, "usage", None)
+            if usage:
+                logger.info(f"[agent1] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+            else:
+                logger.info("[agent1] API call successful")
         except APIError as exc:  # pragma: no cover - upstream error surface
-            print(f"[agent1] APIError: {exc}")
-            # If model not found, try fallback to haiku
-            if "not_found_error" in str(exc) or "404" in str(exc):
-                print(f"[agent1] Model {self.model} not found, trying fallback: claude-3-5-haiku-latest")
+            error_message = str(exc)
+            error_type = getattr(exc, 'type', 'unknown')
+            error_status = getattr(exc, 'status_code', None)
+            logger.warning(f"[agent1] APIError - Type: {error_type}, Status: {error_status}, Message: {error_message}")
+            
+            # If model not found, try fallback to Claude 3.5 Sonnet (proven to work)
+            if "not_found_error" in error_message or error_status == 404 or "model not found" in error_message.lower():
+                fallback_model = "claude-3-5-sonnet-latest"
+                logger.warning(f"[agent1] Model {self.model} not found, trying fallback: {fallback_model}")
                 try:
                     response = await client.messages.create(
-                        model="claude-3-5-haiku-latest",
-                        max_tokens=1200,
-                        temperature=0.5,
+                        model=fallback_model,
+                        max_tokens=4000,
+                        temperature=0.4,
                         system=system_prompt,
                         messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
                     )
-                    print(f"[agent1] Fallback model call successful")
+                    usage = getattr(response, "usage", None)
+                    if usage:
+                        logger.info(f"[agent1] Fallback model ({fallback_model}) call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+                    else:
+                        logger.info(f"[agent1] Fallback model ({fallback_model}) call successful")
                 except APIError as fallback_exc:
-                    raise RuntimeError(f"Agent-1 failed with both {self.model} and fallback: {fallback_exc}") from fallback_exc
+                    logger.error(f"[agent1] Fallback model also failed: {fallback_exc}", exc_info=True)
+                    raise RuntimeError(f"Agent-1 failed with both {self.model} and fallback {fallback_model}: {fallback_exc}") from fallback_exc
             else:
-                raise RuntimeError(f"Agent-1 failed to generate features: {exc}") from exc
+                logger.error(f"[agent1] API call failed: {exc}", exc_info=True)
+                raise RuntimeError(f"Agent-1 failed to generate features: {exc} (Type: {error_type}, Status: {error_status})") from exc
 
-        payload = coerce_json(extract_text(response))
+        logger.debug("[agent1] Extracting and parsing response")
+        response_text = extract_text(response)
+        payload = coerce_json(response_text)
         features = payload.get("features", [])
         if not isinstance(features, list):
+            logger.error(f"[agent1] Unexpected payload structure: {type(features)}")
             raise RuntimeError("Agent-1 returned an unexpected payload.")
 
-        return [feature for feature in features if isinstance(feature, str) and feature.strip()]
+        # Handle both formats: objects with title/description/acceptanceCriteria OR simple strings
+        filtered_features = []
+        for feature in features:
+            if isinstance(feature, str) and feature.strip():
+                # Simple string format
+                filtered_features.append(feature.strip())
+            elif isinstance(feature, dict):
+                # Object format - extract title and description
+                title = feature.get("title", "").strip()
+                description = feature.get("description", "").strip()
+                if title:
+                    # Combine title and description for backward compatibility
+                    if description:
+                        feature_text = f"{title}: {description}"
+                    else:
+                        feature_text = title
+                    filtered_features.append(feature_text)
+                elif description:
+                    # Fallback to description if no title
+                    filtered_features.append(description)
+            # Skip invalid entries
+        
+        if not filtered_features:
+            logger.warning(f"[agent1] No valid features extracted from response. Payload structure: {type(features[0]) if features else 'empty'}")
+            # Try to extract at least some text from the response
+            if features:
+                logger.warning(f"[agent1] Features list structure: {features[:2]}")
+        
+        logger.info(f"[agent1] Feature generation complete | generated={len(filtered_features)} features")
+        return filtered_features
 
 
 async def generate_features_for_project(project_id: str, db) -> List[dict]:

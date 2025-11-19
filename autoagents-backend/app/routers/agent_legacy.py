@@ -120,18 +120,24 @@ async def legacy_generate_features(
     except RuntimeError as exc:  # Catch Claude runtime errors
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f"Agent-1 RuntimeError: {exc}", exc_info=True)
+        error_detail = str(exc)
+        logger.error(f"Agent-1 RuntimeError: {error_detail}", exc_info=True)
+        logger.error(f"Error type: {type(exc).__name__}, Full traceback above")
+        # Include more details in response for debugging
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
+            detail=f"Agent-1 RuntimeError: {error_detail}",
         ) from exc
     except Exception as exc:  # Catch any other unexpected errors
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f"Agent-1 unexpected error: {exc}", exc_info=True)
+        error_detail = str(exc)
+        error_type = type(exc).__name__
+        logger.error(f"Agent-1 unexpected error ({error_type}): {error_detail}", exc_info=True)
+        # Include error type and details in response for debugging
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Agent-1 failed: {str(exc)}",
+            detail=f"Agent-1 failed ({error_type}): {error_detail}",
         ) from exc
 
     features = [FeatureItem(title=text.strip()) for text in feature_texts]
@@ -207,7 +213,8 @@ async def legacy_generate_stories(request: AgentStoryRequest) -> AgentStoryRespo
         )
 
     try:
-        generated = await agent2_service.generate_stories(feature_documents)
+        # Pass original prompt to agent2 for context-aware story generation
+        generated = await agent2_service.generate_stories(feature_documents, original_prompt=prompt)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

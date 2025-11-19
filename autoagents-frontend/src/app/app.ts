@@ -23,6 +23,8 @@ import {
   AgentStorySpec,
   AgentVisualizationRequestPayload,
   AgentVisualizationResponse,
+  AISuggestionRequest,
+  AISuggestionResponse,
   ChatMessage,
   HistoryEntry,
   MermaidAssetResponse,
@@ -98,6 +100,7 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   protected readonly projectWizardAiLoading = signal(false);
   protected readonly projectWizardSummaryDraft = signal<ProjectWizardAISummary | null>(null);
   protected readonly projectWizardLastSubmission = signal<ProjectWizardSubmission | null>(null);
+  protected readonly projectWizardSuggestionResponse = signal<{ suggestionId: string; output: string } | null>(null);
 
   protected readonly projectWizardTemplates = PROJECT_TEMPLATES;
   protected readonly projectWizardWorkflows = PROJECT_WORKFLOWS;
@@ -1753,6 +1756,56 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     }, 900);
   }
 
+  protected onProjectWizardRequestAISuggestion(event: {
+    suggestionId: string;
+    suggestionType: 'summary' | 'epics' | 'acceptanceCriteria' | 'stories';
+    prompt: string;
+    projectContext: {
+      industry: string;
+      methodology: string;
+      name: string;
+      description: string;
+      focusAreas?: string[];
+    };
+  }): void {
+    const payload: AISuggestionRequest = {
+      suggestion_type: event.suggestionType,
+      prompt: event.prompt,
+      project_context: {
+        industry: event.projectContext.industry,
+        methodology: event.projectContext.methodology,
+        name: event.projectContext.name,
+        description: event.projectContext.description,
+        focusAreas: event.projectContext.focusAreas,
+      },
+    };
+
+    this.http
+      .post<AISuggestionResponse>(`${this.backendUrl}/agent/suggestions`, payload)
+      .subscribe({
+        next: (response: AISuggestionResponse) => {
+          this.projectWizardSuggestionResponse.set({
+            suggestionId: event.suggestionId,
+            output: response.output,
+          });
+          // Clear the response after a short delay to allow the component to process it
+          setTimeout(() => {
+            this.projectWizardSuggestionResponse.set(null);
+          }, 100);
+        },
+        error: (error: unknown) => {
+          console.error('[wizard:suggestion:error]', error);
+          this.projectWizardSuggestionResponse.set({
+            suggestionId: event.suggestionId,
+            output: 'Error generating suggestion. Please try again.',
+          });
+          setTimeout(() => {
+            this.projectWizardSuggestionResponse.set(null);
+          }, 100);
+        },
+      });
+  }
+
   protected onProjectWizardRequestFeatures(event: { details: ProjectWizardDetails; aiSummary: ProjectWizardAISummary }): void {
     if (this.projectWizardFeaturesLoading()) {
       return;
@@ -1899,7 +1952,7 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
         `Industry: ${project.details.industry}`,
         `Methodology: ${project.details.methodology}`,
         `Team Size: ${project.details.teamSize ?? 'Unspecified'}`,
-        `Elevator Pitch: ${project.details.description}`,
+        `Prompt Summary: ${project.details.description}`,
       );
 
       if (project.aiSummary.executiveSummary.trim().length) {
@@ -1988,7 +2041,7 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
       `Kick-off: ${details.startDate ?? 'Not set'}`,
       `Target Launch: ${details.targetLaunch ?? 'Not set'}`,
       '',
-      `Elevator Pitch: ${details.description}`,
+      `Prompt Summary: ${details.description}`,
       '',
       `Executive Summary: ${aiSummary.executiveSummary}`,
     ];

@@ -64,7 +64,7 @@
       <form *ngIf="stepIndex === 1" class="wizard-step wizard-step--details" (submit)="$event.preventDefault()">
         <h2>Project basics</h2>
         <p class="wizard-step__hint">
-          Name your project, capture the elevator pitch, and pick the right workflow to start.
+          Name your project, capture the prompt summary, and pick the right workflow to start.
         </p>
 
         <div class="form-grid">
@@ -140,7 +140,7 @@
         </div>
 
         <label class="description-field">
-          Elevator pitch
+          Prompt summary
           <textarea
             name="description"
             rows="4"
@@ -216,12 +216,24 @@
         </div>
 
         <div class="ai-prompts">
-          <article *ngFor="let prompt of aiPrompts" class="ai-prompt">
+          <article 
+            *ngFor="let prompt of aiPrompts" 
+            class="ai-prompt"
+            [class.ai-prompt--loading]="suggestionLoading[prompt.id]"
+          >
             <header>
               <h3>{{ prompt.title }}</h3>
               <span class="tag">{{ prompt.category }}</span>
             </header>
             <p>{{ prompt.prompt }}</p>
+            <button
+              type="button"
+              class="ghost ai-prompt__generate"
+              (click)="onRequestAISuggestion(prompt)"
+              [disabled]="suggestionLoading[prompt.id]"
+            >
+              {{ suggestionLoading[prompt.id] ? 'Generating...' : 'Generate' }}
+            </button>
             <pre *ngIf="prompt.sampleOutput">{{ prompt.sampleOutput }}</pre>
           </article>
         </div>
@@ -594,6 +606,54 @@
       (cancel)="onFeatureFormCancel()"
       (submit)="onFeatureFormSubmit($event)"
     ></feature-form>
+  </section>
+</ng-container>
+
+<!-- AI Suggestion Result Modal -->
+<ng-container *ngIf="openSuggestionModal">
+  <div class="suggestion-modal-backdrop" role="presentation" (click)="onCloseSuggestionModal()"></div>
+
+  <section class="suggestion-modal-shell" role="dialog" aria-modal="true" aria-labelledby="suggestionModalTitle">
+    <header class="suggestion-modal-header">
+      <div>
+        <h1 id="suggestionModalTitle">{{ currentSuggestionTitle }}</h1>
+        <p class="suggestion-modal-subtitle">AI Generated Result</p>
+      </div>
+      <button type="button" class="suggestion-modal-close" (click)="onCloseSuggestionModal()" aria-label="Close modal">
+        ✕
+      </button>
+    </header>
+
+    <div class="suggestion-modal-body">
+      <div *ngIf="suggestionLoading[openSuggestionModal]" class="suggestion-modal-loading">
+        <p>Generating output with AI...</p>
+      </div>
+      <div *ngIf="!suggestionLoading[openSuggestionModal] && getCurrentSuggestionOutput()" class="suggestion-modal-content">
+        <pre class="suggestion-output">{{ getCurrentSuggestionOutput() }}</pre>
+      </div>
+      <div *ngIf="!suggestionLoading[openSuggestionModal] && !getCurrentSuggestionOutput()" class="suggestion-modal-loading">
+        <p>No output available. Please try again.</p>
+      </div>
+    </div>
+
+    <footer class="suggestion-modal-footer">
+      <button 
+        type="button" 
+        class="ghost" 
+        (click)="onRegenerateSuggestion()"
+        [disabled]="suggestionLoading[openSuggestionModal]"
+      >
+        {{ suggestionLoading[openSuggestionModal] ? 'Regenerating...' : 'Regenerate' }}
+      </button>
+      <button 
+        type="button" 
+        class="primary" 
+        (click)="onUseSuggestion()"
+        [disabled]="suggestionLoading[openSuggestionModal] || !getCurrentSuggestionOutput()"
+      >
+        Use This
+      </button>
+    </footer>
   </section>
 </ng-container>
 
