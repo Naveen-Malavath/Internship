@@ -17,9 +17,6 @@ import mermaid from 'mermaid';
 
 import { AgentFeatureSpec, AgentStorySpec, AgentVisualizationResponse, ProjectWizardSubmission } from '../types';
 import { DiagramDataService } from '../diagram-data.service';
-import { MermaidStyleService, MermaidStyleConfig } from '../services/mermaid-style.service';
-import { DesignService, DesignResponse } from '../services/design.service';
-import { inject } from '@angular/core';
 
 @Component({
   selector: 'workspace-view',
@@ -34,11 +31,8 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   @Input() stories: AgentStorySpec[] = [];
   @Input() visualization: AgentVisualizationResponse | null = null;
   @Input() project: ProjectWizardSubmission | null = null;
-  @Input() projectId: string | null = null; // Project ID for fetching designs from backend
   @Input() mermaidEditorContent = '';
   @Input() mermaidSource: string | null = null;
-  @Input() mermaidStyleConfig: MermaidStyleConfig | null = null;
-  @Input() designGenerationKey: number | null = null; // Key to track design regenerations and clear cache
   @Input() mermaidSaving = false;
   @Input() mermaidUpdatedAt: string | null = null;
   @Input() mermaidSaveMessage: string | null = null;
@@ -55,16 +49,11 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   @ViewChild('mermaidContainer') private mermaidContainer?: ElementRef<HTMLDivElement>;
   @ViewChild('mermaidFileInput') private mermaidFileInput?: ElementRef<HTMLInputElement>;
 
-  private readonly designService = inject(DesignService);
-  private cachedDesigns: DesignResponse | null = null;
-  private isLoadingDesigns = false;
-
   protected mermaidInput = '';
   protected mermaidError: string | null = null;
   protected visualizationData: AgentVisualizationResponse | null = null;
   protected isDotCopied = false;
   protected isMermaidCopied = false;
-  private lastValidMermaidSource: string | null = null;
   protected previewTheme: 'dark' | 'light' = 'dark';
   protected currentDiagramType: 'hld' | 'lld' | 'database' = 'hld';
   protected isDiagramDropdownOpen = false;
@@ -91,113 +80,68 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   private readonly previewReadableScaleFloor = 0.65;
 
   ngOnChanges(changes: SimpleChanges): void {
-    // Handle projectId changes - clear cache when project changes
-    if (changes['projectId']) {
-      const newProjectId = changes['projectId'].currentValue;
-      const oldProjectId = changes['projectId'].previousValue;
-      if (newProjectId !== oldProjectId) {
-        console.debug(`[workspace-view] Project ID changed from ${oldProjectId} to ${newProjectId}, clearing cache`);
-        this.clearDesignCache();
-        // If we have a projectId, try to load designs
-        if (newProjectId && this.currentDiagramType) {
-          this.loadDesignFromBackend(this.currentDiagramType);
-        }
-      }
-    }
-
-    // Handle designGenerationKey changes - clear cache when designs are regenerated
-    if (changes['designGenerationKey']) {
-      const newKey = changes['designGenerationKey'].currentValue;
-      const oldKey = changes['designGenerationKey'].previousValue;
-      if (newKey !== null && newKey !== oldKey) {
-        console.debug(`[workspace-view] Design generation key changed from ${oldKey} to ${newKey}, clearing cache for fresh data`);
-        this.clearDesignCache();
-        // If we have a projectId, reload current diagram type from backend
-        if (this.projectId && this.currentDiagramType) {
-          this.loadDesignFromBackend(this.currentDiagramType);
-        }
-      }
-    }
-
-    // If mermaidSource changes and we have a projectId, it might be from a design regeneration
-    // Clear cache to force fresh fetch on next diagram type change
-    if (changes['mermaidSource'] && this.projectId) {
-      const newSource = changes['mermaidSource'].currentValue;
-      if (newSource && newSource.trim()) {
-        console.debug(`[workspace-view] mermaidSource updated, clearing cache to ensure fresh data`);
-        this.clearDesignCache();
-      }
-    }
-
     // Handle mermaidSource changes - highest priority as it's the primary way parent updates content
     if (changes['mermaidSource']) {
       const newSource = changes['mermaidSource'].currentValue;
-      // Only update if we have a non-empty string
-      if (newSource !== null && typeof newSource === 'string' && newSource.trim() !== '') {
-        // Store as last valid source and update editor
-        this.lastValidMermaidSource = newSource.trim();
-        this.setMermaidInput(newSource, false);
-      } else {
-        // If newSource is null/empty/undefined, restore from lastValidMermaidSource if available
-        // This prevents showing "No data" when we have a valid diagram stored
-        if (this.lastValidMermaidSource && this.isDefaultNoDataDiagram(this.mermaidInput)) {
-          this.setMermaidInput(this.lastValidMermaidSource, false);
+      if (newSource !== null && typeof newSource === 'string' && newSource.trim()) {
+        if (!this.isNoData(newSource)) {
+          this.setMermaidInput(newSource, false);
+        } else {
+          // If it's "No data", load default HLD
+          this.currentDiagramType = 'hld';
+          this.loadPredefinedDiagram('hld');
         }
-        // Otherwise, keep showing lastValidMermaidSource in renderMermaid()
+      } else if ((newSource === null || newSource === '') && this.mermaidInput) {
+        // Clear editor if source becomes null or empty, then load default
+        this.currentDiagramType = 'hld';
+        this.loadPredefinedDiagram('hld');
       }
     }
 
-    if (changes['stories'] && !this.mermaidEditorContent && !this.mermaidSource && !this.mermaidInput && !this.lastValidMermaidSource) {
-      this.generateDefaultMermaid();
+    if ((changes['stories'] || changes['features']) && this.currentDiagramType === 'lld') {
+      this.loadPredefinedDiagram('lld');
+    }
+
+    if (changes['stories'] && !this.mermaidEditorContent && !this.mermaidSource && !this.mermaidInput) {
+      this.loadPredefinedDiagram('hld');
     }
 
     if (changes['visualization']) {
       this.visualizationData = this.visualization;
       if (this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
-        this.setMermaidInput(this.visualizationData.diagrams.mermaid, false);
+        if (!this.isNoData(this.visualizationData.diagrams.mermaid)) {
+          this.setMermaidInput(this.visualizationData.diagrams.mermaid, false);
+        } else {
+          // If it's "No data", load default HLD
+          this.currentDiagramType = 'hld';
+          this.loadPredefinedDiagram('hld');
+        }
       }
     }
 
-    if (changes['mermaidEditorContent']) {
-      const newContent = changes['mermaidEditorContent'].currentValue;
-      const oldContent = changes['mermaidEditorContent'].previousValue;
-      
-      // Always update if content has actually changed to ensure live preview updates dynamically
-      // This is critical for diagram type changes and regenerations
-      if (typeof newContent === 'string' && newContent.trim() !== '') {
-        const newTrimmed = newContent.trim();
-        const oldTrimmed = typeof oldContent === 'string' ? oldContent.trim() : '';
-        
-        // Update if content is different or if we don't have mermaidSource set
-        // mermaidSource has higher priority, but if it matches or is empty, use mermaidEditorContent
-        if (!this.mermaidSource || this.mermaidSource === newTrimmed || newTrimmed !== oldTrimmed) {
-          // Update the input and trigger render to ensure live preview updates
-          this.lastValidMermaidSource = newTrimmed;
-          this.setMermaidInput(newContent, false);
-        }
-      } else if (!newContent && this.lastValidMermaidSource && !this.isDefaultNoDataDiagram(this.mermaidInput)) {
-        // If newContent is empty but we have a valid source, keep showing it
-        // Don't clear the diagram unnecessarily
+    if (changes['mermaidEditorContent'] && typeof changes['mermaidEditorContent'].currentValue === 'string' && !this.mermaidSource) {
+      const content = changes['mermaidEditorContent'].currentValue;
+      if (content.trim() && !this.isNoData(content)) {
+        this.setMermaidInput(content, false);
+      } else if (!content.trim() || this.isNoData(content)) {
+        // If empty or "No data", load default HLD
+        this.currentDiagramType = 'hld';
+        this.loadPredefinedDiagram('hld');
       }
     }
   }
 
   ngAfterViewInit(): void {
     // If mermaidSource is provided initially, use it
-    if (this.mermaidSource !== null && typeof this.mermaidSource === 'string' && this.mermaidSource.trim() !== '' && !this.mermaidInput) {
-      this.lastValidMermaidSource = this.mermaidSource.trim();
+    if (this.mermaidSource !== null && typeof this.mermaidSource === 'string' && this.mermaidSource.trim() && !this.isNoData(this.mermaidSource)) {
       this.setMermaidInput(this.mermaidSource, false);
-    } else if (this.projectId && !this.mermaidInput && !this.mermaidEditorContent && !this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
-      // If we have a projectId, try to load designs from backend first
-      console.debug(`[workspace-view] Initial load with projectId, fetching designs from backend`);
-      this.currentDiagramType = 'hld';
-      this.loadDesignFromBackend('hld');
-    } else if (!this.mermaidInput && !this.mermaidEditorContent && !this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
-      // Load HLD diagram by default if no mermaid content exists (fallback for non-project contexts)
+    } else if (this.mermaidInput && !this.isNoData(this.mermaidInput)) {
+      // We have valid content in mermaidInput, render it
+      this.renderMermaid();
+    } else {
+      // No valid content, load default HLD diagram
       this.currentDiagramType = 'hld';
       this.loadPredefinedDiagram('hld');
-    } else {
-      this.renderMermaid();
     }
   }
 
@@ -337,48 +281,14 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
 
   protected onDiagramTypeChange(type: 'hld' | 'lld' | 'database'): void {
     if (this.currentDiagramType !== type) {
-      const previousType = this.currentDiagramType;
       this.currentDiagramType = type;
       this.isDiagramDropdownOpen = false;
       
-      // Emit event to parent FIRST to trigger diagram regeneration
-      // This will cause parent to call invokeAgent3 which updates workspaceMermaid signal
-      // The dynamically generated diagram will override any static template
+      // Load predefined diagram based on type
+      this.loadPredefinedDiagram(type);
+      
+      // Emit event to parent to trigger diagram regeneration
       this.diagramTypeChange.emit(type);
-      
-      // If we have a projectId, fetch designs from backend as a fallback
-      // But wait for dynamic generation first (it will update mermaidEditorContent)
-      if (this.projectId) {
-        console.debug(`[workspace-view] Diagram type changed from ${previousType} to ${type}, waiting for dynamic generation for project ${this.projectId}`);
-        // Wait a bit for dynamic generation, then fallback to backend if needed
-        setTimeout(() => {
-          // Only load from backend if mermaidEditorContent hasn't been updated yet
-          if (!this.mermaidEditorContent || this.mermaidEditorContent.trim() === '') {
-            console.debug(`[workspace-view] No dynamic content received, fetching from backend`);
-            this.loadDesignFromBackend(type);
-          } else {
-            console.debug(`[workspace-view] Dynamic content received, skipping backend fetch`);
-          }
-        }, 1000);
-      } else {
-        // For non-project contexts, show loading state while waiting for dynamic generation
-        console.debug(`[workspace-view] No projectId, waiting for dynamic diagram generation for ${type}`);
-        // Only use static template if dynamic generation fails
-        setTimeout(() => {
-          if (!this.mermaidEditorContent || this.mermaidEditorContent.trim() === '') {
-            console.warn(`[workspace-view] No dynamic content received after 1.5s, using static template for ${type}`);
-            this.loadPredefinedDiagram(type);
-          } else {
-            console.debug(`[workspace-view] Dynamic content received, skipping static template`);
-          }
-        }, 1500);
-      }
-      
-      // Force re-render to ensure preview updates when content arrives
-      // The actual content will come from mermaidEditorContent via ngOnChanges
-      setTimeout(() => {
-        void this.renderMermaid();
-      }, 100);
     }
   }
 
@@ -387,138 +297,25 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     this.regenerateDiagram.emit(this.currentDiagramType);
   }
 
-  /**
-   * Load design from backend for the given diagram type.
-   * Uses cached designs if available, otherwise fetches from API.
-   */
-  private loadDesignFromBackend(type: 'hld' | 'lld' | 'database'): void {
-    if (!this.projectId || this.isLoadingDesigns) {
-      console.warn(`[workspace-view] Cannot load design: projectId=${this.projectId}, isLoading=${this.isLoadingDesigns}`);
-      return;
-    }
-
-    // If we have cached designs, use them immediately
-    if (this.cachedDesigns) {
-      console.debug(`[workspace-view] Using cached designs for type ${type}`);
-      this.applyDesignFromCache(type);
-      return;
-    }
-
-    // Otherwise, fetch from backend
-    console.debug(`[workspace-view] Fetching designs from backend for project ${this.projectId}`);
-    this.isLoadingDesigns = true;
-    
-    this.designService.getLatestDesigns(this.projectId).subscribe({
-      next: (designs) => {
-        console.debug(`[workspace-view] Successfully fetched designs:`, {
-          hasHLD: !!designs.hld_mermaid,
-          hasLLD: !!designs.lld_mermaid,
-          hasDBD: !!designs.dbd_mermaid,
-          hldLength: designs.hld_mermaid?.length || 0,
-          lldLength: designs.lld_mermaid?.length || 0,
-          dbdLength: designs.dbd_mermaid?.length || 0,
-        });
-        
-        // Cache the designs
-        this.cachedDesigns = designs;
-        
-        // Apply the design for the requested type
-        this.applyDesignFromCache(type);
-        
-        // Update style config if available
-        if (designs.style_config) {
-          // Note: style_config is passed via @Input, so parent should handle this
-          console.debug(`[workspace-view] Style config available:`, designs.style_config);
-        }
-        
-        this.isLoadingDesigns = false;
-      },
-      error: (err) => {
-        console.error(`[workspace-view] Failed to fetch designs:`, err);
-        this.isLoadingDesigns = false;
-        
-        // Fallback to static template on error
-        console.warn(`[workspace-view] Falling back to static template for ${type}`);
-        this.loadPredefinedDiagram(type);
-      },
-    });
-  }
-
-  /**
-   * Apply design from cache for the given diagram type.
-   */
-  private applyDesignFromCache(type: 'hld' | 'lld' | 'database'): void {
-    if (!this.cachedDesigns) {
-      console.warn(`[workspace-view] No cached designs available`);
-      return;
-    }
-
-    let diagramContent = '';
-    const typeUpper = type.toUpperCase() as 'HLD' | 'LLD' | 'DBD';
-    
-    switch (typeUpper) {
-      case 'HLD':
-        diagramContent = this.cachedDesigns.hld_mermaid || '';
-        break;
-      case 'LLD':
-        diagramContent = this.cachedDesigns.lld_mermaid || '';
-        break;
-      case 'DBD':
-        diagramContent = this.cachedDesigns.dbd_mermaid || '';
-        break;
-    }
-
-    if (diagramContent && diagramContent.trim()) {
-      console.debug(`[workspace-view] Applying ${type} design (${diagramContent.length} chars)`);
-      // Validate that the diagram contains actual content, not just whitespace
-      const trimmed = diagramContent.trim();
-      if (trimmed.length < 10) {
-        console.warn(`[workspace-view] ${type} design seems too short (${trimmed.length} chars), may be invalid`);
-      }
-      this.setMermaidInput(diagramContent, true);
-      this.previewFitToContainer = true;
-      this.previewScale = 1;
-      this.mermaidError = null;
-      
-      const timeout = type === 'lld' ? 350 : 200;
-      setTimeout(() => {
-        this.applyPreviewScale();
-      }, timeout);
-    } else {
-      console.warn(`[workspace-view] No ${type} design available in cache, using static template`);
-      this.loadPredefinedDiagram(type);
-    }
-  }
-
-  /**
-   * Clear the cached designs (useful when designs are regenerated).
-   */
-  private clearDesignCache(): void {
-    console.debug(`[workspace-view] Clearing design cache`);
-    this.cachedDesigns = null;
-  }
-
-  /**
-   * Load predefined static diagram (fallback when no backend designs available).
-   */
   protected loadPredefinedDiagram(type: 'hld' | 'lld' | 'database'): void {
     let diagramContent = '';
     
     switch (type) {
       case 'hld':
-        diagramContent = DiagramDataService.getHLDDiagram();
+        // Pass features, stories, and prompt for dynamic HLD generation
+        diagramContent = DiagramDataService.getHLDDiagram(this.features, this.stories, this.prompt);
         break;
       case 'lld':
         // Pass actual features and stories for dynamic LLD generation
         diagramContent = DiagramDataService.getLLDDiagram(this.features, this.stories, this.prompt);
         break;
       case 'database':
-        diagramContent = DiagramDataService.getDBDDiagram();
+        // Pass features and stories for dynamic DBD generation
+        diagramContent = DiagramDataService.getDBDDiagram(this.features, this.stories);
         break;
     }
     
     if (diagramContent) {
-      console.debug(`[workspace-view] Using static template for ${type}`);
       this.setMermaidInput(diagramContent, true);
       // Reset zoom to show full diagram
       this.previewFitToContainer = true;
@@ -553,27 +350,6 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
 
   protected isDiagramTypeActive(type: string): boolean {
     return this.currentDiagramType === type;
-  }
-
-  protected shouldShowNoDiagramMessage(): boolean {
-    // Only show "No diagram available" if:
-    // 1. lastValidMermaidSource is null (never had a valid diagram)
-    // 2. mermaidInput is empty or is the default "No data" diagram
-    // 3. Not currently loading (mermaidSaving is false)
-    const isEmptyOrDefault = !this.mermaidInput.trim() || this.isDefaultNoDataDiagram(this.mermaidInput);
-    return this.lastValidMermaidSource === null && isEmptyOrDefault && !this.mermaidSaving;
-  }
-
-  /**
-   * Check if the given mermaid string is the default "No data" diagram.
-   */
-  private isDefaultNoDataDiagram(mermaid: string): boolean {
-    if (!mermaid) return false;
-    const trimmed = mermaid.trim().toLowerCase();
-    // Check for common "No data" patterns
-    return trimmed.includes('no data') || 
-           (trimmed.includes('graph') && trimmed.includes('a["no data"]')) ||
-           trimmed === 'graph td\na["no data"]';
   }
 
   @HostListener('document:click', ['$event'])
@@ -611,501 +387,82 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       });
   }
 
-  private generateDefaultMermaid(): void {
-    const lines: string[] = ['graph TD'];
-    const promptNode = this.escapeMermaidId('prompt');
-    const promptLabel = this.formatMermaidLabel(this.prompt || 'Customer Request');
-    lines.push(`${promptNode}["${promptLabel}"]`);
-
-    this.features.forEach((feature, index) => {
-      const featureId = this.escapeMermaidId(`feature_${index}`);
-      const featureLabel = this.formatMermaidLabel(feature.title || `Feature ${index + 1}`);
-      lines.push(`${promptNode} --> ${featureId}["${featureLabel}"]`);
-      this.stories
-        .filter((story) => story.featureTitle === feature.title)
-        .forEach((story, storyIndex) => {
-          const storyId = this.escapeMermaidId(`story_${index}_${storyIndex}`);
-          const storyLabel = this.formatMermaidLabel(story.userStory || `Story ${storyIndex + 1}`);
-          lines.push(`${featureId} --> ${storyId}["${storyLabel}"]`);
-        });
-    });
-
-    if (lines.length === 1) {
-      lines.push('A[No data]');
-    }
-
-    this.setMermaidInput(lines.join('\n'), true);
-  }
-
-  private formatMermaidLabel(value: string): string {
-    const trimmed = (value || '').trim();
-    if (!trimmed) {
-      return this.escapeHtml('Untitled');
-    }
-
-    const words = trimmed.split(/\s+/);
-    const lines: string[] = [];
-    let current = '';
-
-    words.forEach((word) => {
-      const candidate = current ? `${current} ${word}` : word;
-      if (candidate.length > this.mermaidLabelMaxChars && current) {
-        lines.push(current);
-        current = word;
-      } else {
-        current = candidate;
-      }
-    });
-
-    if (current) {
-      lines.push(current);
-    }
-
-    const escapedLines = lines.map((line) => this.escapeHtml(line));
-    return escapedLines.join('<br/>');
+  protected savePreviewDiagram(): void {
+    // Get the current diagram type label for filename
+    const diagramTypeLabel = this.getCurrentDiagramTypeLabel().replace(/\s+/g, '_');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+    const filename = `${diagramTypeLabel}_${timestamp}.mermaid`;
+    
+    // Create a blob with the mermaid content
+    const blob = new Blob([this.mermaidInput], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    
+    // Create a temporary anchor element and trigger download
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    
+    // Cleanup
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
   }
 
   private setMermaidInput(value: string, emitEvent: boolean): void {
-    let sanitized = this.sanitizeMermaidDefinition(value);
-    
-    // Fix common Mermaid syntax issues before rendering
-    sanitized = this.fixMermaidSyntax(sanitized);
-    
-    // Only update if content actually changed to avoid unnecessary re-renders
-    const sanitizedTrimmed = sanitized.trim();
-    const currentTrimmed = this.mermaidInput.trim();
-    
-    if (sanitizedTrimmed === currentTrimmed && currentTrimmed !== '') {
-      // Content hasn't changed, but ensure mermaid is rendered if needed
-      // This handles cases where the component might not have rendered yet
-      if (!this.mermaidContainer?.nativeElement.querySelector('.mermaid-svg-wrapper')) {
-        void this.renderMermaid();
-      }
-      return;
-    }
-    
-    this.mermaidInput = sanitized;
-    
-    // Update lastValidMermaidSource if we have a non-empty value
-    if (sanitizedTrimmed !== '') {
-      this.lastValidMermaidSource = sanitizedTrimmed;
-    }
-    
+    this.mermaidInput = this.sanitizeMermaidDefinition(value);
     this.updateLineNumbers();
     this.lineNumberOffset = 0;
     if (emitEvent) {
       this.mermaidChange.emit(this.mermaidInput);
     }
     this.mermaidError = null;
-    
-    // Always render when content changes to ensure live preview updates
     void this.renderMermaid();
-  }
-
-  /**
-   * Fix common Mermaid syntax issues in generated diagrams.
-   * Handles malformed node shapes, missing brackets, and subgraph formatting.
-   */
-  private fixMermaidSyntax(mermaid: string): string {
-    if (!mermaid || !mermaid.trim()) {
-      return mermaid;
-    }
-
-    const lines = mermaid.split('\n');
-    const fixedLines: string[] = [];
-    let inSubgraph = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i];
-      const stripped = line.trim();
-
-      // Skip empty lines and comments
-      if (!stripped || stripped.startsWith('%%')) {
-        fixedLines.push(line);
-        continue;
-      }
-
-      // Track subgraph state
-      if (stripped.startsWith('subgraph')) {
-        inSubgraph = true;
-        fixedLines.push(line);
-        continue;
-      } else if (stripped === 'end') {
-        inSubgraph = false;
-        fixedLines.push(line);
-        continue;
-      }
-
-      // Fix malformed node shapes - must be complete
-      // Fix incomplete stadium: (["text -> (["text"])
-      if (stripped.includes('(["') && !stripped.match(/\(\["[^"]*"\]\)/)) {
-        const match = stripped.match(/\(\["([^"]*?)(?:"|$)/);
-        if (match) {
-          const text = match[1] || 'text';
-          // Replace the incomplete pattern with complete one
-          line = line.replace(/\(\["[^"]*?(?:"\]\)|$)/, `(["${text}"])`);
-        }
-      }
-
-      // Fix incomplete circle: ((text -> ((text))
-      // Must match complete pattern: ((text))
-      if (stripped.includes('((') && !stripped.match(/\(\([^)]+\)\)/)) {
-        const match = stripped.match(/\(\(([^)]*?)(?:\)|$)/);
-        if (match) {
-          const text = match[1] || 'text';
-          // Replace incomplete pattern
-          line = line.replace(/\(\([^)]*?(?:\)\)|$)/, `((${text}))`);
-        }
-      }
-
-      // Fix nodes inside subgraphs - CRITICAL: nodes MUST have node IDs
-      if (inSubgraph && stripped) {
-        const isDirection = stripped.startsWith('direction');
-        
-        // Check if this is a connection line
-        const isConnection = stripped.includes('-->') || stripped.includes('->') || stripped.includes('==>') || stripped.includes('-.->');
-        
-        // CRITICAL FIX: Nodes without node IDs inside subgraphs
-        // Pattern 1: ((Label)) without node ID - MUST FIX
-        const circleMatch = stripped.match(/^\s*\(\(([^)]+)\)\)\s*$/);
-        if (circleMatch && !isConnection) {
-          const label = circleMatch[1].trim();
-          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
-          line = `        ${nodeId}((${label}))`;
-          console.log(`[workspace-view] Fixed circle node without ID on line ${i + 1}: ((${label})) -> ${nodeId}((${label}))`);
-        }
-        
-        // Pattern 2: (["Label"]) without node ID
-        const stadiumMatch = stripped.match(/^\s*\(\["([^"]+)"\]\)\s*$/);
-        if (stadiumMatch && !isConnection) {
-          const label = stadiumMatch[1].trim();
-          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
-          line = `        ${nodeId}(["${label}"])`;
-          console.log(`[workspace-view] Fixed stadium node without ID on line ${i + 1}: (["${label}"]) -> ${nodeId}(["${label}"])`);
-        }
-        
-        // Pattern 3: [Label] without node ID
-        const rectMatch = stripped.match(/^\s*\[([^\]]+)\]\s*$/);
-        if (rectMatch && !isConnection) {
-          const label = rectMatch[1].trim();
-          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
-          line = `        ${nodeId}[${label}]`;
-          console.log(`[workspace-view] Fixed rectangle node without ID on line ${i + 1}: [${label}] -> ${nodeId}[${label}]`);
-        }
-        
-        // Pattern 4: {Label} without node ID
-        const diamondMatch = stripped.match(/^\s*\{([^}]+)\}\s*$/);
-        if (diamondMatch && !isConnection) {
-          const label = diamondMatch[1].trim();
-          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
-          line = `        ${nodeId}{${label}}`;
-          console.log(`[workspace-view] Fixed diamond node without ID on line ${i + 1}: {${label}} -> ${nodeId}{${label}}`);
-        }
-        
-        // Pattern 5: [/Label/] without node ID
-        const parallelogramMatch = stripped.match(/^\s*\[\/([^/]+)\/\]\s*$/);
-        if (parallelogramMatch && !isConnection) {
-          const label = parallelogramMatch[1].trim();
-          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
-          line = `        ${nodeId}[/${label}/]`;
-          console.log(`[workspace-view] Fixed parallelogram node without ID on line ${i + 1}: [/${label}/] -> ${nodeId}[/${label}/]`);
-        }
-        
-        // Pattern 6: [(Label)] without node ID (cylinder)
-        const cylinderMatch = stripped.match(/^\s*\[\(([^)]+)\)\]\s*$/);
-        if (cylinderMatch && !isConnection) {
-          const label = cylinderMatch[1].trim();
-          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
-          line = `        ${nodeId}[(${label})]`;
-          console.log(`[workspace-view] Fixed cylinder node without ID on line ${i + 1}: [(${label})] -> ${nodeId}[(${label})]`);
-        }
-        
-        // Check if node appears after subgraph label on same line (invalid syntax)
-        const nodeAfterSubgraphLabel = /\]\s+[\[\(]/.test(line);
-        if (nodeAfterSubgraphLabel) {
-          const parts = line.split(/\]\s+/);
-          if (parts.length > 1) {
-            fixedLines.push(parts[0] + ']');
-            line = '        ' + parts[1].trim();
-          }
-        }
-        
-        // Ensure proper indentation for all subgraph content
-        if (!isDirection && !line.startsWith('    ') && !line.startsWith('\t')) {
-          line = '        ' + line.trimStart();
-        }
-      }
-
-      // Fix ER diagram syntax errors (database diagrams)
-      if (mermaid.includes('erDiagram') || mermaid.includes('entityRelationshipDiagram')) {
-        // Fix attribute definitions with numbers: "uuid order_id1" -> "uuid order_id_1"
-        // Mermaid ER diagrams don't allow numbers directly after attribute names
-        line = line.replace(/(\w+)\s+(\w+)(\d+)(\s|$)/g, '$1 $2_$3$4');
-        // Fix: "uuid order_id FK" -> "uuid order_id FK" (keep FK separate)
-        // But fix: "uuid order_id1 FK" -> "uuid order_id_1 FK"
-        line = line.replace(/(\w+)\s+(\w+)(\d+)(\s+FK|\s+PK|\s*$)/g, '$1 $2_$3$4');
-      }
-
-      // Ensure proper spacing around arrows (but preserve existing spacing)
-      line = line.replace(/(\w+)(->|-->|==>|-.->)(\w+)/g, '$1 $2 $3');
-
-      fixedLines.push(line);
-    }
-
-    let fixedMermaid = fixedLines.join('\n');
-    
-    // Validate node references in connections
-    // Extract all defined node IDs
-    const nodeIds = new Set<string>();
-    const nodeIdPatterns = [
-      /^(\w+)\s*\(\(/,           // nodeId((
-      /^(\w+)\s*\(\[/,            // nodeId(["
-      /^(\w+)\s*\[/,              // nodeId[
-      /^(\w+)\s*\{/,              // nodeId{
-      /^(\w+)\s*\[\//,            // nodeId[/.../]
-      /^(\w+)\s*\[\(/,            // nodeId[(
-    ];
-    
-    for (const line of fixedLines) {
-      const stripped = line.trim();
-      if (!stripped || stripped.startsWith('%%') || stripped.startsWith('subgraph') || stripped === 'end') {
-        continue;
-      }
-      
-      // Extract node ID from various patterns
-      for (const pattern of nodeIdPatterns) {
-        const match = stripped.match(pattern);
-        if (match) {
-          nodeIds.add(match[1]);
-          break;
-        }
-      }
-    }
-    
-    // Validate connections - remove connections to non-existent nodes
-    const validatedLines: string[] = [];
-    for (let i = 0; i < fixedLines.length; i++) {
-      const line = fixedLines[i];
-      const stripped = line.trim();
-      
-      // Check if this is a connection line
-      // Pattern: NodeA --> NodeB
-      // Pattern: NodeA -->|label| NodeB
-      // Pattern: NodeA -->|label NodeB (incomplete label)
-      const connectionMatch = stripped.match(/^(\w+)\s*(-->|->|==>|-\.->)(\|[^|]*\|)?\s*(\w+)?/);
-      if (connectionMatch || stripped.includes('-->') || stripped.includes('->') || stripped.includes('==>') || stripped.includes('-.->')) {
-        // Extract source and destination more carefully
-        let sourceNode: string | null = null;
-        let destNode: string | null = null;
-        let arrowType: string | null = null;
-        let labelPart: string | null = null;
-        
-        if (connectionMatch) {
-          sourceNode = connectionMatch[1];
-          arrowType = connectionMatch[2];
-          labelPart = connectionMatch[3] || null;
-          destNode = connectionMatch[4] || null;
-        } else {
-          // Fallback: try to extract manually
-          const arrowMatch = stripped.match(/(-->|->|==>|-\.->)/);
-          if (arrowMatch) {
-            arrowType = arrowMatch[1];
-            const parts = stripped.split(arrowType);
-            if (parts.length >= 1) {
-              const sourcePart = parts[0].trim();
-              const sourceMatch = sourcePart.match(/(\w+)\s*$/);
-              if (sourceMatch) {
-                sourceNode = sourceMatch[1];
-              }
-            }
-            if (parts.length >= 2) {
-              const destPart = parts[1].trim();
-              // Remove label if present: |label|
-              const destPartClean = destPart.replace(/^\|[^|]*\|\s*/, '');
-              const destMatch = destPartClean.match(/^(\w+)/);
-              if (destMatch) {
-                destNode = destMatch[1];
-              }
-            }
-          }
-        }
-        
-        if (!sourceNode) {
-          validatedLines.push(line);
-          continue;
-        }
-        
-        // Check if source node exists
-        if (!nodeIds.has(sourceNode)) {
-          console.warn(`[workspace-view] Removing connection from undefined node: ${sourceNode} on line ${i + 1}`);
-          validatedLines.push(`%% Removed invalid connection: ${stripped}`);
-          continue;
-        }
-        
-        // Check for incomplete connections (missing destination)
-        if (arrowType) {
-          // Cases: "NodeA -->", "NodeA -->|label|", "NodeA -->|label" (incomplete label)
-          const hasIncompleteLabel = labelPart && !labelPart.endsWith('|');
-          const endsWithArrow = stripped.endsWith(arrowType) || stripped.endsWith(arrowType + '|');
-          const hasLabelButNoDest = labelPart && !destNode;
-          
-          if (endsWithArrow || hasIncompleteLabel || hasLabelButNoDest) {
-            console.warn(`[workspace-view] Removing incomplete connection on line ${i + 1}: ${stripped}`);
-            validatedLines.push(`%% Removed incomplete connection: ${stripped}`);
-            continue;
-          }
-        }
-        
-        // Check if destination node exists
-        if (destNode && !nodeIds.has(destNode)) {
-          console.warn(`[workspace-view] Removing connection to undefined node: ${destNode} on line ${i + 1}`);
-          validatedLines.push(`%% Removed invalid connection: ${stripped}`);
-          continue;
-        }
-      }
-      
-      validatedLines.push(line);
-    }
-    
-    fixedMermaid = validatedLines.join('\n');
-    
-    // Final pass: Fix any remaining issues with nodes in subgraphs
-    // Ensure nodes are on separate lines and properly indented
-    const finalLines = fixedMermaid.split('\n');
-    const finalFixed: string[] = [];
-    let inSubgraphFinal = false;
-    
-    for (let i = 0; i < finalLines.length; i++) {
-      let line = finalLines[i];
-      const stripped = line.trim();
-      
-      if (stripped.startsWith('subgraph')) {
-        inSubgraphFinal = true;
-        finalFixed.push(line);
-        continue;
-      } else if (stripped === 'end') {
-        inSubgraphFinal = false;
-        finalFixed.push(line);
-        continue;
-      }
-      
-      if (inSubgraphFinal && stripped) {
-        // If line contains a node definition but also other content, try to split it
-        // Pattern: "text"] nodeId((text)) - split at the ]
-        if (stripped.includes(']') && /\]\s+\w+\s*[\[\(]/.test(stripped)) {
-          const splitIndex = stripped.indexOf(']') + 1;
-          const before = stripped.substring(0, splitIndex);
-          const after = stripped.substring(splitIndex).trim();
-          finalFixed.push(before);
-          if (after) {
-            finalFixed.push('    ' + after);
-          }
-          continue;
-        }
-        
-        // Ensure standalone nodes in subgraphs are properly indented
-        if (stripped.match(/^\w+\s*(\(\(|\(\[|\[|\{)/) && !line.startsWith('    ')) {
-          line = '    ' + stripped;
-        }
-      }
-      
-      finalFixed.push(line);
-    }
-    
-    return finalFixed.join('\n');
   }
 
   async renderMermaid(): Promise<void> {
     if (!this.mermaidContainer) {
-      // If container is not ready, retry after a short delay
-      setTimeout(() => void this.renderMermaid(), 100);
       return;
-    }
-
-    // Priority order for source to render:
-    // 1. mermaidEditorContent (for live updates from parent)
-    // 2. mermaidInput (current editor content)
-    // 3. lastValidMermaidSource (fallback)
-    let sourceToRender = '';
-    
-    // Prefer mermaidEditorContent if it's available (for dynamic updates from parent)
-    if (this.mermaidEditorContent && typeof this.mermaidEditorContent === 'string' && this.mermaidEditorContent.trim()) {
-      const editorContent = this.mermaidEditorContent.trim();
-      if (!this.isDefaultNoDataDiagram(editorContent)) {
-        sourceToRender = editorContent;
-      }
-    }
-    
-    // Fall back to mermaidInput if no valid editorContent
-    if (!sourceToRender) {
-      sourceToRender = this.mermaidInput.trim();
-    }
-    
-    // If mermaidInput is empty or is the "No data" diagram, use lastValidMermaidSource instead
-    if (!sourceToRender || this.isDefaultNoDataDiagram(sourceToRender)) {
-      sourceToRender = this.lastValidMermaidSource || '';
-    }
-    
-    // Only show "No diagram available" if:
-    // 1. lastValidMermaidSource is null (never had a valid diagram)
-    // 2. Not currently loading (mermaidSaving is false)
-    if (!sourceToRender) {
-      if (this.lastValidMermaidSource === null && !this.mermaidSaving) {
-        this.mermaidContainer.nativeElement.innerHTML = '<p class="mermaid-placeholder">No diagram available.</p>';
-      }
-      // If we're loading or have a lastValidMermaidSource, don't show placeholder
-      // (will keep showing the last rendered diagram)
-      this.mermaidError = null;
-      return;
-    }
-    
-    // Sync mermaidInput with the source we're rendering (for editor display)
-    if (this.mermaidInput !== sourceToRender && sourceToRender !== '') {
-      this.mermaidInput = sourceToRender;
-      this.lastValidMermaidSource = sourceToRender;
-      this.updateLineNumbers();
     }
 
     // Configure Mermaid with better defaults for larger diagrams
     // Enhanced sizing for LLD diagrams
     const isLLD = this.currentDiagramType === 'lld' || 
-                  sourceToRender.includes('Feature Components') || 
-                  sourceToRender.includes('Story Components');
+                  this.mermaidInput.includes('Feature Components') || 
+                  this.mermaidInput.includes('Story Components');
+    const baseFontSize = isLLD ? '18px' : '16px';
     const padding = isLLD ? 30 : 20;
     const nodeSpacing = isLLD ? 60 : 50;
     const rankSpacing = isLLD ? 80 : 60;
     
-    // Generate Mermaid config from style configuration (if available)
-    // Use dynamic styles from backend, or fallback to default
-    const mermaidConfig = MermaidStyleService.generateMermaidConfig(
-      this.mermaidStyleConfig,
-      {
-        isLLD,
-        padding,
-        nodeSpacing,
-        rankSpacing,
+    mermaid.initialize({ 
+      startOnLoad: false, 
+      theme: this.previewTheme,
+      themeVariables: {
+        fontSize: baseFontSize,
+        fontFamily: 'Arial, sans-serif',
+        primaryColor: '#3b82f6',
+        primaryTextColor: '#fff',
+        primaryBorderColor: '#1e40af',
+        lineColor: '#64748b',
+        secondaryColor: '#10b981',
+        tertiaryColor: '#f59e0b',
+      },
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true,
+        curve: 'basis',
+        padding: padding,
+        nodeSpacing: nodeSpacing,
+        rankSpacing: rankSpacing,
       }
-    );
-    
-    // Override theme with previewTheme if user has manually selected it
-    // But prefer style config theme if available
-    if (this.mermaidStyleConfig) {
-      mermaidConfig.theme = this.mermaidStyleConfig.theme || this.previewTheme;
-    } else {
-      mermaidConfig.theme = this.previewTheme;
-    }
-    
-    // Always reinitialize Mermaid to ensure config changes are applied
-    // This is especially important for dynamic theme/style changes
-    mermaid.initialize(mermaidConfig as any);
+    } as any);
     this.mermaidInitialised = true;
 
-    const definition = sourceToRender.replace(/^\uFEFF/, '').trim();
+    const definition = this.mermaidInput.replace(/^\uFEFF/, '').trim();
     if (!definition) {
-      // This shouldn't happen due to check above, but handle it gracefully
-      if (this.lastValidMermaidSource === null && !this.mermaidSaving) {
-        this.mermaidContainer.nativeElement.innerHTML = '<p class="mermaid-placeholder">No diagram available.</p>';
-      }
+      this.mermaidContainer.nativeElement.innerHTML = '<p class="mermaid-placeholder">Enter Mermaid code to render a diagram.</p>';
       this.mermaidError = null;
       return;
     }
@@ -1120,9 +477,6 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       wrapper.innerHTML = svg;
       this.mermaidContainer.nativeElement.innerHTML = '';
       this.mermaidContainer.nativeElement.appendChild(wrapper);
-      
-      // Store as last valid source after successful render
-      this.lastValidMermaidSource = definition;
       
       // Add data attribute for LLD diagrams to help with styling
       if (this.currentDiagramType === 'lld') {
@@ -1147,50 +501,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       const message = error instanceof Error ? error.message : 'Mermaid syntax error. Please review the diagram definition.';
       this.mermaidError = message;
       this.mermaidContainer.nativeElement.innerHTML = '';
-      console.error('[workspace-view] Mermaid render error:', error);
-      
-      // Try to extract parse error details for debugging
-      if (error instanceof Error && error.message.includes('Parse error')) {
-        const parseErrorMatch = error.message.match(/Parse error on line (\d+):\s*(.+)/);
-        if (parseErrorMatch) {
-          const errorLine = parseInt(parseErrorMatch[1], 10);
-          const errorContext = parseErrorMatch[2];
-          console.error(`[workspace-view] Parse error details: Line ${errorLine}, Context: ${errorContext}`);
-          
-          // Try to fix and re-render once
-          if (errorLine > 0 && errorLine <= definition.split('\n').length) {
-            const lines = definition.split('\n');
-            const problematicLine = lines[errorLine - 1];
-            console.warn(`[workspace-view] Problematic line ${errorLine}: ${problematicLine}`);
-            
-            // Attempt automatic fix for common issues
-            let fixedDefinition = definition;
-            
-            // Fix nodes without IDs in subgraphs (most common issue)
-            if (errorContext.includes('((') || errorContext.includes('([')) {
-              console.log('[workspace-view] Attempting to fix nodes without IDs...');
-              fixedDefinition = this.fixMermaidSyntax(fixedDefinition);
-              
-              // Try rendering again with fixed definition
-              setTimeout(async () => {
-                try {
-                  await mermaid.parse(fixedDefinition);
-                  const { svg } = await mermaid.render(`mermaid-diagram-fixed-${this.mermaidRenderIndex++}`, fixedDefinition);
-                  const wrapper = document.createElement('div');
-                  wrapper.className = 'mermaid-svg-wrapper';
-                  wrapper.innerHTML = svg;
-                  this.mermaidContainer!.nativeElement.innerHTML = '';
-                  this.mermaidContainer!.nativeElement.appendChild(wrapper);
-                  this.mermaidError = null;
-                  console.log('[workspace-view] Successfully rendered after automatic fix');
-                } catch (retryError) {
-                  console.error('[workspace-view] Automatic fix failed:', retryError);
-                }
-              }, 100);
-            }
-          }
-        }
-      }
+      console.error('Mermaid render error:', error);
     }
   }
 
@@ -1202,31 +513,227 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       .replace(/`/g, '&#96;');
   }
 
-  private escapeMermaidId(value: string): string {
-    return value.replace(/[^a-zA-Z0-9_]/g, '_');
-  }
-
   private sanitizeMermaidDefinition(value: string): string {
     if (!value) {
       return '';
     }
 
-    const normalised = value.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-    const withQuotedNodes = normalised.replace(/\[(?!["!])([^\]\n]+?)\]/g, (_, label: string) => {
-      const escapedLabel = label.replace(/"/g, '\\"');
+    let normalised = value.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+    
+    // Fix common truncated CSS properties before other processing
+    normalised = normalised
+      .replace(/stroke-widt(?!h)/gi, 'stroke-width')
+      .replace(/stroke-wid(?!th)/gi, 'stroke-width')
+      .replace(/stroke-w(?!idth)/gi, 'stroke-width')
+      .replace(/font-weigh(?!t)/gi, 'font-weight')
+      .replace(/font-siz(?!e)/gi, 'font-size')
+      .replace(/font-famil(?!y)/gi, 'font-family')
+      .replace(/border-radi(?!us)/gi, 'border-radius')
+      .replace(/stroke-das(?!harray)/gi, 'stroke-dasharray');
+
+    // Fix erDiagram formatting issues
+    // 1. Ensure newline between closing } and next entity
+    normalised = normalised.replace(/}\s+([A-Z_][A-Z_0-9]*)\s*\{/g, '}\n\n    $1 {\n');
+    
+    // 2. Fix entity attributes with quotes and emojis - remove descriptions in quotes
+    // This handles patterns like: varchar status "✅ Status"
+    normalised = normalised.replace(/(\w+\s+\w+\s+[A-Z]{2,})\s+"[^"]*"/g, '$1');
+    
+    // 3. Fix relationship labels with quotes - replace with underscores
+    normalised = normalised.replace(/:\s+"([^"]+)"/g, (match, label) => {
+      return ': ' + label.replace(/[^a-zA-Z0-9_]/g, '_');
+    });
+    
+    // Fix node labels: ensure proper spacing after "]" before next node
+    normalised = normalised.replace(/"\]\s+([A-Z_a-z0-9]+)\[/g, '"]\n    $1[');
+    
+    // Remove lines that are just node IDs followed by opening bracket without proper syntax
+    // Pattern: SomeID[ without closing or content on same line after a closing quote
+    normalised = normalised.replace(/"\]\s*\n\s*([A-Z_a-z0-9]+)\[\s*$/gm, '"]');
+
+    // Enhanced node label quoting with better escape handling
+    const withQuotedNodes = normalised.replace(/\[(?!["!])([^\]\n]+?)\]/g, (match, label: string) => {
+      // Skip if already quoted
+      if (label.startsWith('"') && label.endsWith('"')) {
+        return match;
+      }
+      // Properly escape quotes and special characters, remove <br/> tags
+      const escapedLabel = label
+        .replace(/<br\s*\/?>/gi, ' ') // Remove <br/> tags, replace with space
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, ' ')
+        .replace(/\s+/g, ' ') // Normalize multiple spaces
+        .trim();
       return `["${escapedLabel}"]`;
     });
 
     const withQuotedParticipants = withQuotedNodes.replace(
       /(participant\s+[^\s]+\s+as\s+)([^"\n][^\n]*)/g,
-      (_, prefix: string, label: string) => {
+      (match, prefix: string, label: string) => {
         const trimmedLabel = label.trim();
-        const escaped = trimmedLabel.replace(/"/g, '\\"');
+        // Skip if already quoted
+        if (trimmedLabel.startsWith('"') && trimmedLabel.endsWith('"')) {
+          return match;
+        }
+        const escaped = trimmedLabel
+          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"');
         return `${prefix}"${escaped}"`;
       },
     );
 
-    return withQuotedParticipants;
+    // Remove incomplete or malformed classDef and style statements
+    const lines = withQuotedParticipants.split('\n');
+    
+    // Detect diagram type from first line OR from current diagram type setting
+    const firstLine = lines[0]?.trim().toLowerCase() || '';
+    const isErDiagram = firstLine.includes('erdiagram') || firstLine.includes('entityrelationshipdiagram') || this.currentDiagramType === 'database';
+    const isClassDiagram = firstLine.includes('classdiagram');
+    
+    const cleanedLines = lines.filter((line, index) => {
+      const trimmed = line.trim();
+      
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith('%%')) {
+        return true;
+      }
+      
+      // For erDiagram: check for malformed entity definitions (but don't remove valid syntax!)
+      if (isErDiagram && index > 0) {
+        // Check for entity attributes with quoted descriptions containing emojis or special chars
+        // These should be simple: datatype field_name [PK|FK|UK]
+        if (/^\s*\w+\s+\w+\s+[A-Z]{2,}\s+"/.test(trimmed)) {
+          console.warn(`Mermaid sanitization: Removing erDiagram attribute with quoted description at ${index + 1}:`, trimmed.substring(0, 80));
+          return false;
+        }
+      }
+      
+      // For classDiagram: check for malformed member definitions
+      if (isClassDiagram && index > 0) {
+        // Check for class members appearing right after diagram declaration (without class definition)
+        const prevLine = index > 0 ? lines[index - 1].trim() : '';
+        if (prevLine.toLowerCase().includes('classdiagram') && /^\s*[+\-#~]/.test(trimmed)) {
+          console.warn(`Mermaid sanitization: Removing class member without class context at ${index + 1}:`, trimmed.substring(0, 80));
+          return false;
+        }
+      }
+      
+      // Check for style definitions (classDef or style commands)
+      if (trimmed.toLowerCase().includes('classdef') || trimmed.toLowerCase().startsWith('style ')) {
+        // Valid endings for complete style definitions
+        const validEndings = ['px', 'bold', 'italic', 'normal', 'lighter', 'bolder', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        
+        // Check for complete hex colors at the end (3 or 6 hex digits)
+        const hexColorEnding = /[#][0-9a-fA-F]{3}$|[#][0-9a-fA-F]{6}$/;
+        
+        // Check if line ends properly
+        const endsWithValid = validEndings.some(ending => trimmed.endsWith(ending)) || 
+                             hexColorEnding.test(trimmed);
+        
+        // Check for incomplete hex colors (# followed by 1-2 or 4-5 characters, or invalid chars)
+        const hasIncompleteHexColor = (
+          /#[0-9a-fA-F]{1,2}(?:[,\s]|$)/i.test(trimmed) && !/#[0-9a-fA-F]{3}(?:[,\s:]|$)|#[0-9a-fA-F]{6}(?:[,\s:]|$)/i.test(trimmed)
+        ) || /#[0-9a-fA-F]{4,5}(?:[,\s]|$)/i.test(trimmed);
+        
+        // Check for any remaining truncated properties (should be rare after our fix above)
+        const hasTruncatedProps = /stroke-widt(?!h)|font-weigh(?!t)|font-siz(?!e)|font-famil(?!y)|border-radi(?!us)/i.test(trimmed);
+        
+        // Check for incomplete property values (property: with nothing or only # after it)
+        const hasIncompleteValue = /:\s*$|:\s*#\s*$/.test(trimmed);
+        
+        // Check for trailing comma or colon (incomplete)
+        const hasTrailingComma = trimmed.endsWith(',');
+        const hasTrailingColon = trimmed.endsWith(':');
+        
+        // Check for properties with suspiciously short or invalid values
+        let hasInvalidPropertyValue = false;
+        if (trimmed.includes(':')) {
+          const properties = trimmed.split(',').map(p => p.trim());
+          for (const prop of properties) {
+            if (prop.includes(':')) {
+              const parts = prop.split(':', 2);
+              if (parts.length === 2) {
+                const propValue = parts[1].trim();
+                // Value is too short, ends with dash, or is empty
+                if (!propValue || propValue.length < 2 || propValue.endsWith('-')) {
+                  hasInvalidPropertyValue = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        // Check for style lines that have properties but don't end correctly
+        const hasProperties = /fill:|stroke:|color:|font-weight:|stroke-width:/i.test(trimmed);
+        
+        if (hasTruncatedProps || hasTrailingComma || hasTrailingColon || hasIncompleteValue || hasIncompleteHexColor || hasInvalidPropertyValue) {
+          console.warn(`Mermaid sanitization: Removing incomplete style definition at line ${index + 1}:`, trimmed.substring(0, 80));
+          return false; // Filter out this line
+        }
+        
+        // If it has style properties but doesn't end with a valid value, remove it
+        if (hasProperties && !endsWithValid) {
+          console.warn(`Mermaid sanitization: Removing malformed style definition at line ${index + 1}:`, trimmed.substring(0, 80));
+          return false;
+        }
+      }
+      
+      // Check for malformed node definitions with unclosed quotes or brackets
+      // IMPORTANT: Skip brace checking for erDiagram syntax which uses { in relationships and entity definitions
+      if (trimmed.includes('[') || trimmed.includes('(') || trimmed.includes('{')) {
+        const openBrackets = (trimmed.match(/\[/g) || []).length;
+        const closeBrackets = (trimmed.match(/\]/g) || []).length;
+        const openParens = (trimmed.match(/\(/g) || []).length;
+        const closeParens = (trimmed.match(/\)/g) || []).length;
+        const openBraces = (trimmed.match(/\{/g) || []).length;
+        const closeBraces = (trimmed.match(/\}/g) || []).length;
+        
+        // For erDiagram, { and } are part of the syntax (relationships and entity definitions)
+        // Skip brace checking for erDiagram lines
+        const isErDiagramRelationship = /\|\|--|\}o--|\}o\.\.|o\{--/.test(trimmed); // ERD relationship syntax
+        const isErDiagramEntityDef = isErDiagram && /^[A-Z_][A-Z_0-9]*\s*\{\s*$/.test(trimmed); // Entity definition
+        
+        // Check for mismatched brackets/parens/braces, but skip brace check for erDiagram
+        const bracketsMismatch = openBrackets !== closeBrackets;
+        const parensMismatch = openParens !== closeParens;
+        const bracesMismatch = !isErDiagram && (openBraces !== closeBraces); // Only check braces for non-erDiagram
+        
+        if (bracketsMismatch || parensMismatch || bracesMismatch) {
+          // Don't count subgraph lines or erDiagram syntax as errors
+          if (!trimmed.toLowerCase().startsWith('subgraph') && !isErDiagramRelationship && !isErDiagramEntityDef) {
+            console.warn(`Mermaid sanitization: Removing line with mismatched brackets at line ${index + 1}:`, trimmed.substring(0, 80));
+            return false;
+          }
+        }
+        
+        // Check for lines with node labels followed immediately by another node (no arrow)
+        // Pattern: ..."]  NodeName[ should be invalid (but not for erDiagram)
+        if (!isErDiagram && /"\]\s+[A-Z_a-z0-9]+\s*\[/.test(trimmed) && !/(-->|---|-\.|==>|===)/.test(trimmed)) {
+          console.warn(`Mermaid sanitization: Removing line with adjacent nodes without arrow at line ${index + 1}:`, trimmed.substring(0, 80));
+          return false;
+        }
+      }
+      
+      // Additional check: Lines that are just fragments or incomplete
+      // Example: lines ending with just "]  SomeText" without proper node definition
+      if (/"\]\s+[A-Z_a-z]+\s*$/.test(trimmed) && !trimmed.includes('-->') && !trimmed.includes('---')) {
+        console.warn(`Mermaid sanitization: Removing incomplete node definition at line ${index + 1}:`, trimmed.substring(0, 80));
+        return false;
+      }
+      
+      return true; // Keep this line
+    });
+
+    return cleanedLines.join('\n');
+  }
+
+  private isNoData(content: string): boolean {
+    if (!content) return false;
+    const normalized = content.replace(/\s/g, '').toLowerCase();
+    return normalized.includes('graphtd') && normalized.includes('a[nodata]');
   }
 
   private updateLineNumbers(): void {
