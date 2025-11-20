@@ -96,7 +96,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       const newProjectId = changes['projectId'].currentValue;
       const oldProjectId = changes['projectId'].previousValue;
       if (newProjectId !== oldProjectId) {
-        console.log(`[workspace-view] Project ID changed from ${oldProjectId} to ${newProjectId}, clearing cache`);
+        console.debug(`[workspace-view] Project ID changed from ${oldProjectId} to ${newProjectId}, clearing cache`);
         this.clearDesignCache();
         // If we have a projectId, try to load designs
         if (newProjectId && this.currentDiagramType) {
@@ -110,7 +110,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       const newKey = changes['designGenerationKey'].currentValue;
       const oldKey = changes['designGenerationKey'].previousValue;
       if (newKey !== null && newKey !== oldKey) {
-        console.log(`[workspace-view] Design generation key changed from ${oldKey} to ${newKey}, clearing cache for fresh data`);
+        console.debug(`[workspace-view] Design generation key changed from ${oldKey} to ${newKey}, clearing cache for fresh data`);
         this.clearDesignCache();
         // If we have a projectId, reload current diagram type from backend
         if (this.projectId && this.currentDiagramType) {
@@ -124,7 +124,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     if (changes['mermaidSource'] && this.projectId) {
       const newSource = changes['mermaidSource'].currentValue;
       if (newSource && newSource.trim()) {
-        console.log(`[workspace-view] mermaidSource updated, clearing cache to ensure fresh data`);
+        console.debug(`[workspace-view] mermaidSource updated, clearing cache to ensure fresh data`);
         this.clearDesignCache();
       }
     }
@@ -160,17 +160,24 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
 
     if (changes['mermaidEditorContent']) {
       const newContent = changes['mermaidEditorContent'].currentValue;
-      // Always update if we have a new non-empty string, regardless of mermaidSource
-      // This ensures live preview updates when diagram type changes
+      const oldContent = changes['mermaidEditorContent'].previousValue;
+      
+      // Always update if content has actually changed to ensure live preview updates dynamically
+      // This is critical for diagram type changes and regenerations
       if (typeof newContent === 'string' && newContent.trim() !== '') {
-        // Only skip if mermaidSource is explicitly set (higher priority)
-        // Otherwise update from mermaidEditorContent
-        if (!this.mermaidSource) {
-          this.setMermaidInput(newContent, false);
-        } else if (this.mermaidSource === newContent.trim()) {
-          // If mermaidSource matches, still update to ensure rendering
+        const newTrimmed = newContent.trim();
+        const oldTrimmed = typeof oldContent === 'string' ? oldContent.trim() : '';
+        
+        // Update if content is different or if we don't have mermaidSource set
+        // mermaidSource has higher priority, but if it matches or is empty, use mermaidEditorContent
+        if (!this.mermaidSource || this.mermaidSource === newTrimmed || newTrimmed !== oldTrimmed) {
+          // Update the input and trigger render to ensure live preview updates
+          this.lastValidMermaidSource = newTrimmed;
           this.setMermaidInput(newContent, false);
         }
+      } else if (!newContent && this.lastValidMermaidSource && !this.isDefaultNoDataDiagram(this.mermaidInput)) {
+        // If newContent is empty but we have a valid source, keep showing it
+        // Don't clear the diagram unnecessarily
       }
     }
   }
@@ -182,7 +189,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       this.setMermaidInput(this.mermaidSource, false);
     } else if (this.projectId && !this.mermaidInput && !this.mermaidEditorContent && !this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
       // If we have a projectId, try to load designs from backend first
-      console.log(`[workspace-view] Initial load with projectId, fetching designs from backend`);
+      console.debug(`[workspace-view] Initial load with projectId, fetching designs from backend`);
       this.currentDiagramType = 'hld';
       this.loadDesignFromBackend('hld');
     } else if (!this.mermaidInput && !this.mermaidEditorContent && !this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
@@ -330,21 +337,48 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
 
   protected onDiagramTypeChange(type: 'hld' | 'lld' | 'database'): void {
     if (this.currentDiagramType !== type) {
+      const previousType = this.currentDiagramType;
       this.currentDiagramType = type;
       this.isDiagramDropdownOpen = false;
       
-      // If we have a projectId, fetch designs from backend instead of using static templates
+      // Emit event to parent FIRST to trigger diagram regeneration
+      // This will cause parent to call invokeAgent3 which updates workspaceMermaid signal
+      // The dynamically generated diagram will override any static template
+      this.diagramTypeChange.emit(type);
+      
+      // If we have a projectId, fetch designs from backend as a fallback
+      // But wait for dynamic generation first (it will update mermaidEditorContent)
       if (this.projectId) {
-        console.log(`[workspace-view] Diagram type changed to ${type}, fetching from backend for project ${this.projectId}`);
-        this.loadDesignFromBackend(type);
+        console.debug(`[workspace-view] Diagram type changed from ${previousType} to ${type}, waiting for dynamic generation for project ${this.projectId}`);
+        // Wait a bit for dynamic generation, then fallback to backend if needed
+        setTimeout(() => {
+          // Only load from backend if mermaidEditorContent hasn't been updated yet
+          if (!this.mermaidEditorContent || this.mermaidEditorContent.trim() === '') {
+            console.debug(`[workspace-view] No dynamic content received, fetching from backend`);
+            this.loadDesignFromBackend(type);
+          } else {
+            console.debug(`[workspace-view] Dynamic content received, skipping backend fetch`);
+          }
+        }, 1000);
       } else {
-        console.log(`[workspace-view] No projectId available, using static template for ${type}`);
-        // Load predefined diagram based on type (fallback for non-project contexts)
-        this.loadPredefinedDiagram(type);
+        // For non-project contexts, show loading state while waiting for dynamic generation
+        console.debug(`[workspace-view] No projectId, waiting for dynamic diagram generation for ${type}`);
+        // Only use static template if dynamic generation fails
+        setTimeout(() => {
+          if (!this.mermaidEditorContent || this.mermaidEditorContent.trim() === '') {
+            console.warn(`[workspace-view] No dynamic content received after 1.5s, using static template for ${type}`);
+            this.loadPredefinedDiagram(type);
+          } else {
+            console.debug(`[workspace-view] Dynamic content received, skipping static template`);
+          }
+        }, 1500);
       }
       
-      // Emit event to parent to trigger diagram regeneration
-      this.diagramTypeChange.emit(type);
+      // Force re-render to ensure preview updates when content arrives
+      // The actual content will come from mermaidEditorContent via ngOnChanges
+      setTimeout(() => {
+        void this.renderMermaid();
+      }, 100);
     }
   }
 
@@ -365,18 +399,18 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
 
     // If we have cached designs, use them immediately
     if (this.cachedDesigns) {
-      console.log(`[workspace-view] Using cached designs for type ${type}`);
+      console.debug(`[workspace-view] Using cached designs for type ${type}`);
       this.applyDesignFromCache(type);
       return;
     }
 
     // Otherwise, fetch from backend
-    console.log(`[workspace-view] Fetching designs from backend for project ${this.projectId}`);
+    console.debug(`[workspace-view] Fetching designs from backend for project ${this.projectId}`);
     this.isLoadingDesigns = true;
     
     this.designService.getLatestDesigns(this.projectId).subscribe({
       next: (designs) => {
-        console.log(`[workspace-view] Successfully fetched designs:`, {
+        console.debug(`[workspace-view] Successfully fetched designs:`, {
           hasHLD: !!designs.hld_mermaid,
           hasLLD: !!designs.lld_mermaid,
           hasDBD: !!designs.dbd_mermaid,
@@ -394,7 +428,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
         // Update style config if available
         if (designs.style_config) {
           // Note: style_config is passed via @Input, so parent should handle this
-          console.log(`[workspace-view] Style config available:`, designs.style_config);
+          console.debug(`[workspace-view] Style config available:`, designs.style_config);
         }
         
         this.isLoadingDesigns = false;
@@ -404,7 +438,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
         this.isLoadingDesigns = false;
         
         // Fallback to static template on error
-        console.log(`[workspace-view] Falling back to static template for ${type}`);
+        console.warn(`[workspace-view] Falling back to static template for ${type}`);
         this.loadPredefinedDiagram(type);
       },
     });
@@ -435,7 +469,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     }
 
     if (diagramContent && diagramContent.trim()) {
-      console.log(`[workspace-view] Applying ${type} design (${diagramContent.length} chars)`);
+      console.debug(`[workspace-view] Applying ${type} design (${diagramContent.length} chars)`);
       // Validate that the diagram contains actual content, not just whitespace
       const trimmed = diagramContent.trim();
       if (trimmed.length < 10) {
@@ -460,7 +494,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
    * Clear the cached designs (useful when designs are regenerated).
    */
   private clearDesignCache(): void {
-    console.log(`[workspace-view] Clearing design cache`);
+    console.debug(`[workspace-view] Clearing design cache`);
     this.cachedDesigns = null;
   }
 
@@ -484,7 +518,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     }
     
     if (diagramContent) {
-      console.log(`[workspace-view] Using static template for ${type}`);
+      console.debug(`[workspace-view] Using static template for ${type}`);
       this.setMermaidInput(diagramContent, true);
       // Reset zoom to show full diagram
       this.previewFitToContainer = true;
@@ -637,11 +671,24 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     // Fix common Mermaid syntax issues before rendering
     sanitized = this.fixMermaidSyntax(sanitized);
     
+    // Only update if content actually changed to avoid unnecessary re-renders
+    const sanitizedTrimmed = sanitized.trim();
+    const currentTrimmed = this.mermaidInput.trim();
+    
+    if (sanitizedTrimmed === currentTrimmed && currentTrimmed !== '') {
+      // Content hasn't changed, but ensure mermaid is rendered if needed
+      // This handles cases where the component might not have rendered yet
+      if (!this.mermaidContainer?.nativeElement.querySelector('.mermaid-svg-wrapper')) {
+        void this.renderMermaid();
+      }
+      return;
+    }
+    
     this.mermaidInput = sanitized;
     
     // Update lastValidMermaidSource if we have a non-empty value
-    if (sanitized.trim() !== '') {
-      this.lastValidMermaidSource = sanitized.trim();
+    if (sanitizedTrimmed !== '') {
+      this.lastValidMermaidSource = sanitizedTrimmed;
     }
     
     this.updateLineNumbers();
@@ -650,6 +697,8 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       this.mermaidChange.emit(this.mermaidInput);
     }
     this.mermaidError = null;
+    
+    // Always render when content changes to ensure live preview updates
     void this.renderMermaid();
   }
 
@@ -709,51 +758,92 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
         }
       }
 
-      // Fix nodes inside subgraphs - ensure proper formatting
+      // Fix nodes inside subgraphs - CRITICAL: nodes MUST have node IDs
       if (inSubgraph && stripped) {
         const isDirection = stripped.startsWith('direction');
-        
-        // Check if this is a standalone node definition (not a connection)
-        // Pattern: nodeId((text)) or nodeId(["text"]) or nodeId["text"] or nodeId{text}
-        // Also handle cases where there might be extra spaces or formatting issues
-        const standaloneNodePattern = /^\s*(\w+)\s*(\(\([^)]+\)\)|\(\["[^"]+"\]\)|\[[^\]]+\]|\{[^}]+\})\s*$/;
-        const isStandaloneNode = standaloneNodePattern.test(stripped);
-        
-        // Also check for nodes that might be on the same line as subgraph label
-        // Pattern: "subgraph label"] nodeId((text)) - this is invalid
-        const nodeAfterSubgraphLabel = /\]\s+(\w+)\s*(\(\(|\(\[|\[|\{)/.test(line);
         
         // Check if this is a connection line
         const isConnection = stripped.includes('-->') || stripped.includes('->') || stripped.includes('==>') || stripped.includes('-.->');
         
-        // If node appears after subgraph label on same line, split it
+        // CRITICAL FIX: Nodes without node IDs inside subgraphs
+        // Pattern 1: ((Label)) without node ID - MUST FIX
+        const circleMatch = stripped.match(/^\s*\(\(([^)]+)\)\)\s*$/);
+        if (circleMatch && !isConnection) {
+          const label = circleMatch[1].trim();
+          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
+          line = `        ${nodeId}((${label}))`;
+          console.log(`[workspace-view] Fixed circle node without ID on line ${i + 1}: ((${label})) -> ${nodeId}((${label}))`);
+        }
+        
+        // Pattern 2: (["Label"]) without node ID
+        const stadiumMatch = stripped.match(/^\s*\(\["([^"]+)"\]\)\s*$/);
+        if (stadiumMatch && !isConnection) {
+          const label = stadiumMatch[1].trim();
+          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
+          line = `        ${nodeId}(["${label}"])`;
+          console.log(`[workspace-view] Fixed stadium node without ID on line ${i + 1}: (["${label}"]) -> ${nodeId}(["${label}"])`);
+        }
+        
+        // Pattern 3: [Label] without node ID
+        const rectMatch = stripped.match(/^\s*\[([^\]]+)\]\s*$/);
+        if (rectMatch && !isConnection) {
+          const label = rectMatch[1].trim();
+          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
+          line = `        ${nodeId}[${label}]`;
+          console.log(`[workspace-view] Fixed rectangle node without ID on line ${i + 1}: [${label}] -> ${nodeId}[${label}]`);
+        }
+        
+        // Pattern 4: {Label} without node ID
+        const diamondMatch = stripped.match(/^\s*\{([^}]+)\}\s*$/);
+        if (diamondMatch && !isConnection) {
+          const label = diamondMatch[1].trim();
+          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
+          line = `        ${nodeId}{${label}}`;
+          console.log(`[workspace-view] Fixed diamond node without ID on line ${i + 1}: {${label}} -> ${nodeId}{${label}}`);
+        }
+        
+        // Pattern 5: [/Label/] without node ID
+        const parallelogramMatch = stripped.match(/^\s*\[\/([^/]+)\/\]\s*$/);
+        if (parallelogramMatch && !isConnection) {
+          const label = parallelogramMatch[1].trim();
+          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
+          line = `        ${nodeId}[/${label}/]`;
+          console.log(`[workspace-view] Fixed parallelogram node without ID on line ${i + 1}: [/${label}/] -> ${nodeId}[/${label}/]`);
+        }
+        
+        // Pattern 6: [(Label)] without node ID (cylinder)
+        const cylinderMatch = stripped.match(/^\s*\[\(([^)]+)\)\]\s*$/);
+        if (cylinderMatch && !isConnection) {
+          const label = cylinderMatch[1].trim();
+          const nodeId = label.replace(/[^a-zA-Z0-9_]/g, '_');
+          line = `        ${nodeId}[(${label})]`;
+          console.log(`[workspace-view] Fixed cylinder node without ID on line ${i + 1}: [(${label})] -> ${nodeId}[(${label})]`);
+        }
+        
+        // Check if node appears after subgraph label on same line (invalid syntax)
+        const nodeAfterSubgraphLabel = /\]\s+[\[\(]/.test(line);
         if (nodeAfterSubgraphLabel) {
           const parts = line.split(/\]\s+/);
           if (parts.length > 1) {
             fixedLines.push(parts[0] + ']');
-            line = '    ' + parts[1].trim();
+            line = '        ' + parts[1].trim();
           }
         }
         
-        // If it's a standalone node in a subgraph, ensure proper formatting
-        if (isStandaloneNode) {
-          const match = stripped.match(standaloneNodePattern);
-          if (match) {
-            const nodeId = match[1];
-            const nodeShape = match[2];
-            // Ensure proper indentation and formatting - must be on its own line
-            line = `    ${nodeId}${nodeShape}`;
-          }
-        } else if (isConnection && !line.startsWith('    ') && !isDirection) {
-          // Connections in subgraphs also need indentation
-          line = '    ' + line.trimStart();
-        } else if (!isConnection && !isStandaloneNode && !isDirection && !line.startsWith('    ')) {
-          // Other content in subgraphs (like node definitions) need indentation
-          // Match patterns like: nodeId((text)) or nodeId["text"] at start of line
-          if (stripped.match(/^\w+\s*[\[\(]/)) {
-            line = '    ' + line.trimStart();
-          }
+        // Ensure proper indentation for all subgraph content
+        if (!isDirection && !line.startsWith('    ') && !line.startsWith('\t')) {
+          line = '        ' + line.trimStart();
         }
+      }
+
+      // Fix ER diagram syntax errors (database diagrams)
+      if (mermaid.includes('erDiagram') || mermaid.includes('entityRelationshipDiagram')) {
+        // Fix attribute definitions with numbers: "uuid order_id1" -> "uuid order_id_1"
+        // Mermaid ER diagrams don't allow numbers directly after attribute names
+        line = line.replace(/(\w+)\s+(\w+)(\d+)(\s|$)/g, '$1 $2_$3$4');
+        // Fix: "uuid order_id FK" -> "uuid order_id FK" (keep FK separate)
+        // But fix: "uuid order_id1 FK" -> "uuid order_id_1 FK"
+        line = line.replace(/(\w+)\s+(\w+)(\d+)(\s+FK|\s+PK|\s*$)/g, '$1 $2_$3$4');
       }
 
       // Ensure proper spacing around arrows (but preserve existing spacing)
@@ -763,6 +853,121 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     }
 
     let fixedMermaid = fixedLines.join('\n');
+    
+    // Validate node references in connections
+    // Extract all defined node IDs
+    const nodeIds = new Set<string>();
+    const nodeIdPatterns = [
+      /^(\w+)\s*\(\(/,           // nodeId((
+      /^(\w+)\s*\(\[/,            // nodeId(["
+      /^(\w+)\s*\[/,              // nodeId[
+      /^(\w+)\s*\{/,              // nodeId{
+      /^(\w+)\s*\[\//,            // nodeId[/.../]
+      /^(\w+)\s*\[\(/,            // nodeId[(
+    ];
+    
+    for (const line of fixedLines) {
+      const stripped = line.trim();
+      if (!stripped || stripped.startsWith('%%') || stripped.startsWith('subgraph') || stripped === 'end') {
+        continue;
+      }
+      
+      // Extract node ID from various patterns
+      for (const pattern of nodeIdPatterns) {
+        const match = stripped.match(pattern);
+        if (match) {
+          nodeIds.add(match[1]);
+          break;
+        }
+      }
+    }
+    
+    // Validate connections - remove connections to non-existent nodes
+    const validatedLines: string[] = [];
+    for (let i = 0; i < fixedLines.length; i++) {
+      const line = fixedLines[i];
+      const stripped = line.trim();
+      
+      // Check if this is a connection line
+      // Pattern: NodeA --> NodeB
+      // Pattern: NodeA -->|label| NodeB
+      // Pattern: NodeA -->|label NodeB (incomplete label)
+      const connectionMatch = stripped.match(/^(\w+)\s*(-->|->|==>|-\.->)(\|[^|]*\|)?\s*(\w+)?/);
+      if (connectionMatch || stripped.includes('-->') || stripped.includes('->') || stripped.includes('==>') || stripped.includes('-.->')) {
+        // Extract source and destination more carefully
+        let sourceNode: string | null = null;
+        let destNode: string | null = null;
+        let arrowType: string | null = null;
+        let labelPart: string | null = null;
+        
+        if (connectionMatch) {
+          sourceNode = connectionMatch[1];
+          arrowType = connectionMatch[2];
+          labelPart = connectionMatch[3] || null;
+          destNode = connectionMatch[4] || null;
+        } else {
+          // Fallback: try to extract manually
+          const arrowMatch = stripped.match(/(-->|->|==>|-\.->)/);
+          if (arrowMatch) {
+            arrowType = arrowMatch[1];
+            const parts = stripped.split(arrowType);
+            if (parts.length >= 1) {
+              const sourcePart = parts[0].trim();
+              const sourceMatch = sourcePart.match(/(\w+)\s*$/);
+              if (sourceMatch) {
+                sourceNode = sourceMatch[1];
+              }
+            }
+            if (parts.length >= 2) {
+              const destPart = parts[1].trim();
+              // Remove label if present: |label|
+              const destPartClean = destPart.replace(/^\|[^|]*\|\s*/, '');
+              const destMatch = destPartClean.match(/^(\w+)/);
+              if (destMatch) {
+                destNode = destMatch[1];
+              }
+            }
+          }
+        }
+        
+        if (!sourceNode) {
+          validatedLines.push(line);
+          continue;
+        }
+        
+        // Check if source node exists
+        if (!nodeIds.has(sourceNode)) {
+          console.warn(`[workspace-view] Removing connection from undefined node: ${sourceNode} on line ${i + 1}`);
+          validatedLines.push(`%% Removed invalid connection: ${stripped}`);
+          continue;
+        }
+        
+        // Check for incomplete connections (missing destination)
+        if (arrowType) {
+          // Cases: "NodeA -->", "NodeA -->|label|", "NodeA -->|label" (incomplete label)
+          const hasIncompleteLabel = labelPart && !labelPart.endsWith('|');
+          const endsWithArrow = stripped.endsWith(arrowType) || stripped.endsWith(arrowType + '|');
+          const hasLabelButNoDest = labelPart && !destNode;
+          
+          if (endsWithArrow || hasIncompleteLabel || hasLabelButNoDest) {
+            console.warn(`[workspace-view] Removing incomplete connection on line ${i + 1}: ${stripped}`);
+            validatedLines.push(`%% Removed incomplete connection: ${stripped}`);
+            continue;
+          }
+        }
+        
+        // Check if destination node exists
+        if (destNode && !nodeIds.has(destNode)) {
+          console.warn(`[workspace-view] Removing connection to undefined node: ${destNode} on line ${i + 1}`);
+          validatedLines.push(`%% Removed invalid connection: ${stripped}`);
+          continue;
+        }
+      }
+      
+      validatedLines.push(line);
+    }
+    
+    fixedMermaid = validatedLines.join('\n');
     
     // Final pass: Fix any remaining issues with nodes in subgraphs
     // Ensure nodes are on separate lines and properly indented
@@ -812,11 +1017,29 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
 
   async renderMermaid(): Promise<void> {
     if (!this.mermaidContainer) {
+      // If container is not ready, retry after a short delay
+      setTimeout(() => void this.renderMermaid(), 100);
       return;
     }
 
-    // Use lastValidMermaidSource if mermaidInput is empty or is the default "No data" diagram
-    let sourceToRender = this.mermaidInput.trim();
+    // Priority order for source to render:
+    // 1. mermaidEditorContent (for live updates from parent)
+    // 2. mermaidInput (current editor content)
+    // 3. lastValidMermaidSource (fallback)
+    let sourceToRender = '';
+    
+    // Prefer mermaidEditorContent if it's available (for dynamic updates from parent)
+    if (this.mermaidEditorContent && typeof this.mermaidEditorContent === 'string' && this.mermaidEditorContent.trim()) {
+      const editorContent = this.mermaidEditorContent.trim();
+      if (!this.isDefaultNoDataDiagram(editorContent)) {
+        sourceToRender = editorContent;
+      }
+    }
+    
+    // Fall back to mermaidInput if no valid editorContent
+    if (!sourceToRender) {
+      sourceToRender = this.mermaidInput.trim();
+    }
     
     // If mermaidInput is empty or is the "No data" diagram, use lastValidMermaidSource instead
     if (!sourceToRender || this.isDefaultNoDataDiagram(sourceToRender)) {
@@ -834,6 +1057,13 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       // (will keep showing the last rendered diagram)
       this.mermaidError = null;
       return;
+    }
+    
+    // Sync mermaidInput with the source we're rendering (for editor display)
+    if (this.mermaidInput !== sourceToRender && sourceToRender !== '') {
+      this.mermaidInput = sourceToRender;
+      this.lastValidMermaidSource = sourceToRender;
+      this.updateLineNumbers();
     }
 
     // Configure Mermaid with better defaults for larger diagrams
@@ -865,6 +1095,8 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       mermaidConfig.theme = this.previewTheme;
     }
     
+    // Always reinitialize Mermaid to ensure config changes are applied
+    // This is especially important for dynamic theme/style changes
     mermaid.initialize(mermaidConfig as any);
     this.mermaidInitialised = true;
 
@@ -915,7 +1147,50 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       const message = error instanceof Error ? error.message : 'Mermaid syntax error. Please review the diagram definition.';
       this.mermaidError = message;
       this.mermaidContainer.nativeElement.innerHTML = '';
-      console.error('Mermaid render error:', error);
+      console.error('[workspace-view] Mermaid render error:', error);
+      
+      // Try to extract parse error details for debugging
+      if (error instanceof Error && error.message.includes('Parse error')) {
+        const parseErrorMatch = error.message.match(/Parse error on line (\d+):\s*(.+)/);
+        if (parseErrorMatch) {
+          const errorLine = parseInt(parseErrorMatch[1], 10);
+          const errorContext = parseErrorMatch[2];
+          console.error(`[workspace-view] Parse error details: Line ${errorLine}, Context: ${errorContext}`);
+          
+          // Try to fix and re-render once
+          if (errorLine > 0 && errorLine <= definition.split('\n').length) {
+            const lines = definition.split('\n');
+            const problematicLine = lines[errorLine - 1];
+            console.warn(`[workspace-view] Problematic line ${errorLine}: ${problematicLine}`);
+            
+            // Attempt automatic fix for common issues
+            let fixedDefinition = definition;
+            
+            // Fix nodes without IDs in subgraphs (most common issue)
+            if (errorContext.includes('((') || errorContext.includes('([')) {
+              console.log('[workspace-view] Attempting to fix nodes without IDs...');
+              fixedDefinition = this.fixMermaidSyntax(fixedDefinition);
+              
+              // Try rendering again with fixed definition
+              setTimeout(async () => {
+                try {
+                  await mermaid.parse(fixedDefinition);
+                  const { svg } = await mermaid.render(`mermaid-diagram-fixed-${this.mermaidRenderIndex++}`, fixedDefinition);
+                  const wrapper = document.createElement('div');
+                  wrapper.className = 'mermaid-svg-wrapper';
+                  wrapper.innerHTML = svg;
+                  this.mermaidContainer!.nativeElement.innerHTML = '';
+                  this.mermaidContainer!.nativeElement.appendChild(wrapper);
+                  this.mermaidError = null;
+                  console.log('[workspace-view] Successfully rendered after automatic fix');
+                } catch (retryError) {
+                  console.error('[workspace-view] Automatic fix failed:', retryError);
+                }
+              }, 100);
+            }
+          }
+        }
+      }
     }
   }
 

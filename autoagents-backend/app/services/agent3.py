@@ -127,17 +127,23 @@ class Agent3Service:
         """Fix common Mermaid syntax issues in generated diagrams.
         
         Common issues:
-        - Nodes inside subgraphs without proper spacing/formatting
+        - Nodes inside subgraphs without node IDs (e.g., ((WebStorefront)) instead of WebStorefront((WebStorefront)))
         - Malformed node shapes like (["text or ((text))
         - Missing spaces between nodes and connections
+        - ER diagram syntax errors (attributes with numbers)
         """
         import re
+        
+        logger.debug(f"[agent3] _fix_mermaid_syntax: Starting fix | input_length={len(mermaid)} chars")
         
         lines = mermaid.split('\n')
         fixed_lines = []
         in_subgraph = False
+        node_id_map = {}  # Map of labels to node IDs for connections
+        fixes_applied = []
         
-        for line in lines:
+        for i, line in enumerate(lines):
+            original_line = line
             stripped = line.strip()
             
             # Skip empty lines and comments
@@ -155,46 +161,102 @@ class Agent3Service:
                 fixed_lines.append(line)
                 continue
             
-            # Fix nodes inside subgraphs - ensure proper formatting
+            # Fix nodes inside subgraphs - CRITICAL: nodes must have node IDs
             if in_subgraph:
-                # Fix malformed node definitions
-                # Pattern: nodeId((text)) or nodeId(["text or nodeId([text])
-                # Should be: nodeId((text)) or nodeId(["text"])
+                # Pattern 1: ((Label)) without node ID - MUST FIX
+                # Example: ((WebStorefront)) -> WebStorefront((WebStorefront))
+                circle_match = re.match(r'^\s*\(\(([^)]+)\)\)\s*$', stripped)
+                if circle_match:
+                    label = circle_match.group(1).strip()
+                    node_id = re.sub(r'[^a-zA-Z0-9_]', '_', label)  # Sanitize to valid ID
+                    line = f'        {node_id}(({label}))'
+                    node_id_map[label] = node_id
+                    fixes_applied.append(f"Line {i+1}: Fixed circle node without ID: (({label})) -> {node_id}(({label}))")
+                    logger.debug(f"[agent3] _fix_mermaid_syntax: Line {i+1} - Fixed circle node: (({label})) -> {node_id}(({label}))")
                 
-                # Fix incomplete stadium shapes: (["text -> (["text"])
-                line = re.sub(r'\(\["([^"]*?)$', r'(["text"])', line)
-                # Fix incomplete circle shapes: ((text -> ((text))
-                line = re.sub(r'\(\(([^)]*?)$', r'((text))', line)
+                # Pattern 2: (["Label"]) without node ID
+                stadium_match = re.match(r'^\s*\(\["([^"]+)"\]\)\s*$', stripped)
+                if stadium_match:
+                    label = stadium_match.group(1).strip()
+                    node_id = re.sub(r'[^a-zA-Z0-9_]', '_', label)
+                    line = f'        {node_id}(["{label}"])'
+                    node_id_map[label] = node_id
+                    fixes_applied.append(f"Line {i+1}: Fixed stadium node without ID: ([\"{label}\"]) -> {node_id}([\"{label}\"])")
+                    logger.debug(f"[agent3] _fix_mermaid_syntax: Line {i+1} - Fixed stadium node: ([\"{label}\"]) -> {node_id}([\"{label}\"])")
+                
+                # Pattern 3: [Label] without node ID
+                rect_match = re.match(r'^\s*\[([^\]]+)\]\s*$', stripped)
+                if rect_match:
+                    label = rect_match.group(1).strip()
+                    node_id = re.sub(r'[^a-zA-Z0-9_]', '_', label)
+                    line = f'        {node_id}[{label}]'
+                    node_id_map[label] = node_id
+                    fixes_applied.append(f"Line {i+1}: Fixed rectangle node without ID: [{label}] -> {node_id}[{label}]")
+                    logger.debug(f"[agent3] _fix_mermaid_syntax: Line {i+1} - Fixed rectangle node: [{label}] -> {node_id}[{label}]")
+                
+                # Pattern 4: {Label} without node ID
+                diamond_match = re.match(r'^\s*\{([^}]+)\}\s*$', stripped)
+                if diamond_match:
+                    label = diamond_match.group(1).strip()
+                    node_id = re.sub(r'[^a-zA-Z0-9_]', '_', label)
+                    line = f'        {node_id}{{{label}}}'
+                    node_id_map[label] = node_id
+                    fixes_applied.append(f"Line {i+1}: Fixed diamond node without ID: {{{label}}} -> {node_id}{{{label}}}")
+                    logger.debug(f"[agent3] _fix_mermaid_syntax: Line {i+1} - Fixed diamond node: {{{label}}} -> {node_id}{{{label}}}")
+                
+                # Pattern 5: [/Label/] without node ID
+                parallelogram_match = re.match(r'^\s*\[/([^/]+)/\]\s*$', stripped)
+                if parallelogram_match:
+                    label = parallelogram_match.group(1).strip()
+                    node_id = re.sub(r'[^a-zA-Z0-9_]', '_', label)
+                    line = f'        {node_id}[/{label}/]'
+                    node_id_map[label] = node_id
+                    fixes_applied.append(f"Line {i+1}: Fixed parallelogram node without ID: [/{label}/] -> {node_id}[/{label}/]")
+                    logger.debug(f"[agent3] _fix_mermaid_syntax: Line {i+1} - Fixed parallelogram node: [/{label}/] -> {node_id}[/{label}/]")
+                
+                # Pattern 6: [(Label)] without node ID (cylinder)
+                cylinder_match = re.match(r'^\s*\[\(([^)]+)\)\]\s*$', stripped)
+                if cylinder_match:
+                    label = cylinder_match.group(1).strip()
+                    node_id = re.sub(r'[^a-zA-Z0-9_]', '_', label)
+                    line = f'        {node_id}[({label})]'
+                    node_id_map[label] = node_id
+                    fixes_applied.append(f"Line {i+1}: Fixed cylinder node without ID: [({label})] -> {node_id}[({label})]")
+                    logger.debug(f"[agent3] _fix_mermaid_syntax: Line {i+1} - Fixed cylinder node: [({label})] -> {node_id}[({label})]")
                 
                 # Check if node appears after subgraph label on same line (invalid syntax)
-                # Pattern: "subgraph label"] nodeId((text)) - split into separate lines
-                if ']' in line and re.search(r'\]\s+\w+\s*[\[\(]', line):
+                if ']' in line and re.search(r'\]\s+[\[\(]', line):
                     parts = re.split(r'\]\s+', line, 1)
                     if len(parts) > 1:
                         fixed_lines.append(parts[0] + ']')
-                        line = '    ' + parts[1].strip()
-                
-                # Ensure nodes have proper spacing before them in subgraphs
-                if stripped and not stripped.startswith('direction') and not stripped.startswith('subgraph'):
-                    # Check if line starts with a node definition
-                    node_patterns = [
-                        r'^\s*\w+\s*\[',  # nodeId["text"]
-                        r'^\s*\w+\s*\(\(',  # nodeId((text))
-                        r'^\s*\w+\s*\(\[',  # nodeId(["text"])
-                        r'^\s*\w+\s*\{',  # nodeId{text}
-                    ]
-                    is_node = any(re.match(pattern, line) for pattern in node_patterns)
-                    
-                    if is_node and not line.startswith('    '):
-                        # Ensure proper indentation (4 spaces for subgraph content)
-                        # Also ensure node is properly formatted on its own line
-                        line = '    ' + line.lstrip()
+                        line = '        ' + parts[1].strip()
+                        fixes_applied.append(f"Line {i+1}: Split node from subgraph label")
             
-            # Fix common node syntax issues outside subgraphs too
-            # Fix malformed parentheses: ((text -> ((text))
-            line = re.sub(r'\(\(([^)]+?)(?<!\))\)(?!\))', r'((\1))', line)
-            # Fix malformed stadium: (["text -> (["text"])
-            line = re.sub(r'\(\["([^"]+?)(?<!")\]\)(?!")', r'(["\1"])', line)
+            # Fix connections that use shape syntax instead of node IDs
+            # Example: ((WebStorefront)) --> should be WebStorefront -->
+            if '-->' in line or '->' in line or '==>' in line:
+                for label, node_id in node_id_map.items():
+                    # Replace shape syntax with node ID in connections
+                    line = re.sub(rf'\(\({re.escape(label)}\)\)', node_id, line)
+                    line = re.sub(rf'\(\["{re.escape(label)}"\]\)', node_id, line)
+                    line = re.sub(rf'\[{re.escape(label)}\]', node_id, line)
+                    line = re.sub(rf'\{{{re.escape(label)}\}}', node_id, line)
+                    line = re.sub(rf'\[/{re.escape(label)}/\]', node_id, line)
+                    line = re.sub(rf'\[\({re.escape(label)}\)\]', node_id, line)
+            
+            # Fix ER diagram syntax - attributes cannot have numbers directly after them
+            # Pattern: attribute_name1 -> attribute_name_1 or attribute_name
+            if 'erDiagram' in mermaid or 'entityRelationshipDiagram' in mermaid:
+                # Fix attribute definitions: field_name1 -> field_name_1
+                # But preserve if it's already valid (field_name_1)
+                line = re.sub(r'(\w+)(\d+)(\s)', r'\1_\2\3', line)
+                # Fix in relationships: field_name1 -> field_name_1
+                line = re.sub(r'(\w+)(\d+)(\s*FK|\s*PK|\s*"|\s*$)', r'\1_\2\3', line)
+                # Fix attribute definitions that have numbers: "uuid order_id FK" -> "uuid order_id_FK"
+                # Mermaid ER diagrams require spaces between attribute parts
+                line = re.sub(r'(\w+)\s+(\w+)(\d+)(\s|$)', r'\1 \2_\3\4', line)
+                # Fix: "uuid order_id1" -> "uuid order_id_1"
+                line = re.sub(r'(\w+)\s+(\w+)(\d+)(\s|$)', r'\1 \2_\3\4', line)
             
             # Ensure proper spacing around arrows
             line = re.sub(r'(\w+)(->|-->|==>|-.->)(\w+)', r'\1 \2 \3', line)
@@ -203,13 +265,267 @@ class Agent3Service:
         
         fixed_mermaid = '\n'.join(fixed_lines)
         
-        # Additional fixes for common patterns
-        # Fix nodes that are missing closing brackets/parentheses
-        # Pattern: nodeId(["text without closing -> nodeId(["text"])
-        fixed_mermaid = re.sub(r'\(\["([^"]*?)(?<!")$', r'(["text"])', fixed_mermaid, flags=re.MULTILINE)
-        fixed_mermaid = re.sub(r'\(\(([^)]*?)(?<!\))$', r'((text))', fixed_mermaid, flags=re.MULTILINE)
+        # Validate node references in connections
+        # Extract all defined node IDs
+        node_ids = set()
+        node_id_patterns = [
+            r'^(\w+)\s*\(\(',           # nodeId((
+            r'^(\w+)\s*\(\[',            # nodeId(["
+            r'^(\w+)\s*\[',              # nodeId[
+            r'^(\w+)\s*\{',              # nodeId{
+            r'^(\w+)\s*\[\/',            # nodeId[/.../]
+            r'^(\w+)\s*\[\(',            # nodeId[(
+        ]
         
-        logger.debug(f"[agent3] Fixed Mermaid syntax issues (if any)")
+        for line in fixed_lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('%%') or stripped.startswith('subgraph') or stripped == 'end':
+                continue
+            
+            # Extract node ID from various patterns
+            for pattern in node_id_patterns:
+                match = re.match(pattern, stripped)
+                if match:
+                    node_ids.add(match.group(1))
+                    break
+        
+        # Validate connections - remove connections to non-existent nodes
+        validated_lines = []
+        for i, line in enumerate(fixed_lines):
+            stripped = line.strip()
+            
+            # Check if this is a connection line
+            # Pattern: NodeA --> NodeB
+            # Pattern: NodeA -->|label| NodeB
+            # Pattern: NodeA -->|label NodeB (incomplete label)
+            connection_match = re.match(r'^(\w+)\s*(-->|->|==>|-\.->)(\|[^|]*\|)?\s*(\w+)?', stripped)
+            if connection_match or '-->' in stripped or '->' in stripped or '==>' in stripped or '-.->' in stripped:
+                # Extract source and destination more carefully
+                source_node = None
+                dest_node = None
+                arrow_type = None
+                label_part = None
+                
+                if connection_match:
+                    source_node = connection_match.group(1)
+                    arrow_type = connection_match.group(2)
+                    label_part = connection_match.group(3)
+                    dest_node = connection_match.group(4)
+                else:
+                    # Fallback: try to extract manually
+                    arrow_match = re.search(r'(-->|->|==>|-\.->)', stripped)
+                    if arrow_match:
+                        arrow_type = arrow_match.group(1)
+                        parts = stripped.split(arrow_type)
+                        if len(parts) >= 1:
+                            source_part = parts[0].strip()
+                            source_match = re.search(r'(\w+)\s*$', source_part)
+                            if source_match:
+                                source_node = source_match.group(1)
+                        if len(parts) >= 2:
+                            dest_part = parts[1].strip()
+                            # Remove label if present: |label|
+                            dest_part_clean = re.sub(r'^\|[^|]*\|\s*', '', dest_part)
+                            dest_match = re.match(r'^(\w+)', dest_part_clean)
+                            if dest_match:
+                                dest_node = dest_match.group(1)
+                
+                if not source_node:
+                    validated_lines.append(line)
+                    continue
+                
+                # Check if source node exists
+                if source_node not in node_ids:
+                    logger.warning(f"[agent3] _fix_mermaid_syntax: Removing connection from undefined node: {source_node} on line {i+1}")
+                    validated_lines.append(f"%% Removed invalid connection: {stripped}")
+                    fixes_applied.append(f"Line {i+1}: Removed connection from undefined node: {source_node}")
+                    continue
+                
+                # Check for incomplete connections (missing destination)
+                if arrow_type:
+                    # Cases: "NodeA -->", "NodeA -->|label|", "NodeA -->|label" (incomplete label)
+                    has_incomplete_label = label_part and not label_part.endswith('|')
+                    ends_with_arrow = stripped.endswith(arrow_type) or stripped.endswith(arrow_type + '|')
+                    has_label_but_no_dest = label_part and not dest_node
+                    
+                    if ends_with_arrow or has_incomplete_label or has_label_but_no_dest:
+                        logger.warning(f"[agent3] _fix_mermaid_syntax: Removing incomplete connection on line {i+1}: {stripped[:50]}")
+                        validated_lines.append(f"%% Removed incomplete connection: {stripped}")
+                        fixes_applied.append(f"Line {i+1}: Removed incomplete connection")
+                        continue
+                
+                # Check if destination node exists
+                if dest_node and dest_node not in node_ids:
+                    logger.warning(f"[agent3] _fix_mermaid_syntax: Removing connection to undefined node: {dest_node} on line {i+1}")
+                    validated_lines.append(f"%% Removed invalid connection: {stripped}")
+                    fixes_applied.append(f"Line {i+1}: Removed connection to undefined node: {dest_node}")
+                    continue
+            
+            validated_lines.append(line)
+        
+        fixed_mermaid = '\n'.join(validated_lines)
+        
+        # Log fixes applied
+        if fixes_applied:
+            logger.info(f"[agent3] _fix_mermaid_syntax: Applied {len(fixes_applied)} fixes:")
+            for fix in fixes_applied[:10]:  # Log first 10 fixes
+                logger.debug(f"[agent3] _fix_mermaid_syntax: {fix}")
+            if len(fixes_applied) > 10:
+                logger.debug(f"[agent3] _fix_mermaid_syntax: ... and {len(fixes_applied) - 10} more fixes")
+        else:
+            logger.debug(f"[agent3] _fix_mermaid_syntax: No fixes needed")
+        
+        logger.debug(f"[agent3] _fix_mermaid_syntax: Complete | output_length={len(fixed_mermaid)} chars")
+        return fixed_mermaid
+
+    def _validate_mermaid_syntax(self, mermaid: str) -> dict:
+        """Validate Mermaid diagram syntax and check for truncation issues.
+        
+        Returns:
+            dict with keys:
+                - valid: bool - Whether diagram is valid
+                - errors: list - List of error messages
+                - warnings: list - List of warning messages
+                - incomplete_lines: list - Lines that appear incomplete
+                - truncation_point: int - Line number where truncation detected (-1 if none)
+        """
+        import re
+        
+        result = {
+            'valid': True,
+            'errors': [],
+            'warnings': [],
+            'incomplete_lines': [],
+            'truncation_point': -1,
+        }
+        
+        if not mermaid or not mermaid.strip():
+            result['valid'] = False
+            result['errors'].append('Diagram is empty')
+            return result
+        
+        lines = mermaid.split('\n')
+        in_subgraph = False
+        subgraph_stack = []
+        
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('%%'):
+                continue
+            
+            # Track subgraph state
+            if stripped.startswith('subgraph'):
+                in_subgraph = True
+                subgraph_stack.append(i)
+            elif stripped == 'end':
+                if in_subgraph:
+                    if subgraph_stack:
+                        subgraph_stack.pop()
+                        if not subgraph_stack:
+                            in_subgraph = False
+                else:
+                    result['warnings'].append(f"Line {i}: 'end' without matching 'subgraph'")
+            
+            # Check for incomplete arrows (most common truncation issue)
+            # Pattern: nodeId -->|label| (missing destination)
+            # Pattern: nodeId --> (missing destination)
+            # Pattern: nodeId -->|label (missing closing | and destination)
+            incomplete_arrow_patterns = [
+                r'\w+\s*-->\s*\|[^|]*$',  # -->|label without closing |
+                r'\w+\s*-->\s*\|[^|]*\|\s*$',  # -->|label| without destination
+                r'\w+\s*-->\s*$',  # --> without destination (at end of line)
+                r'\w+\s*->\s*$',  # -> without destination
+                r'\w+\s*==>\s*$',  # ==> without destination
+                r'\w+\s*-\.->\s*$',  # -.-> without destination
+            ]
+            
+            for pattern in incomplete_arrow_patterns:
+                if re.search(pattern, stripped):
+                    result['valid'] = False
+                    result['errors'].append(f"Line {i}: Incomplete arrow connection (truncated) - '{stripped[:50]}...'")
+                    result['incomplete_lines'].append(i)
+                    if result['truncation_point'] == -1:
+                        result['truncation_point'] = i
+                    break
+            
+            # Check for incomplete node definitions at end of file
+            if i == len(lines) and stripped:
+                # Last line should not be an incomplete connection
+                if any(stripped.endswith(arrow) for arrow in ['-->', '->', '==>', '-.->', '-->|']):
+                    result['valid'] = False
+                    result['errors'].append(f"Line {i}: Diagram ends with incomplete connection")
+                    result['incomplete_lines'].append(i)
+                    if result['truncation_point'] == -1:
+                        result['truncation_point'] = i
+        
+        # Check for unclosed subgraphs
+        if subgraph_stack:
+            result['valid'] = False
+            result['errors'].append(f"Unclosed subgraph(s) starting at line(s): {subgraph_stack}")
+            result['warnings'].append(f"Subgraph stack has {len(subgraph_stack)} unclosed subgraph(s)")
+        
+        # Check if diagram ends abruptly (last non-empty line is incomplete)
+        if lines:
+            last_non_empty = None
+            for i in range(len(lines) - 1, -1, -1):
+                if lines[i].strip() and not lines[i].strip().startswith('%%'):
+                    last_non_empty = (i + 1, lines[i].strip())
+                    break
+            
+            if last_non_empty:
+                line_num, last_line = last_non_empty
+                # If last line is a connection without label and seems cut off
+                if '-->' in last_line and len(last_line.split()) < 3:
+                    result['valid'] = False
+                    result['errors'].append(f"Line {line_num}: Diagram may be truncated - last line appears incomplete: '{last_line}'")
+                    if result['truncation_point'] == -1:
+                        result['truncation_point'] = line_num
+        
+        logger.debug(f"[agent3] _validate_mermaid_syntax: valid={result['valid']}, errors={len(result['errors'])}, warnings={len(result['warnings'])}")
+        if result['errors']:
+            logger.warning(f"[agent3] _validate_mermaid_syntax: Found {len(result['errors'])} errors")
+            for error in result['errors']:
+                logger.warning(f"[agent3] _validate_mermaid_syntax: {error}")
+        
+        return result
+
+    def _complete_truncated_diagram(self, mermaid: str, validation_result: dict) -> str:
+        """Attempt to fix/complete a truncated diagram by removing incomplete lines.
+        
+        Args:
+            mermaid: The truncated Mermaid diagram
+            validation_result: Result from _validate_mermaid_syntax
+            
+        Returns:
+            Fixed diagram with incomplete lines removed
+        """
+        if validation_result['truncation_point'] == -1:
+            return mermaid
+        
+        lines = mermaid.split('\n')
+        truncation_line = validation_result['truncation_point']
+        
+        logger.warning(f"[agent3] _complete_truncated_diagram: Removing lines from {truncation_line} onwards (incomplete)")
+        
+        # Remove incomplete lines
+        fixed_lines = lines[:truncation_line - 1]
+        
+        # Ensure subgraphs are closed
+        subgraph_count = sum(1 for line in fixed_lines if line.strip().startswith('subgraph'))
+        end_count = sum(1 for line in fixed_lines if line.strip() == 'end')
+        
+        # Add missing 'end' statements
+        missing_ends = subgraph_count - end_count
+        if missing_ends > 0:
+            logger.warning(f"[agent3] _complete_truncated_diagram: Adding {missing_ends} missing 'end' statement(s)")
+            for _ in range(missing_ends):
+                fixed_lines.append('end')
+        
+        fixed_mermaid = '\n'.join(fixed_lines).strip()
+        logger.info(f"[agent3] _complete_truncated_diagram: Removed {len(lines) - len(fixed_lines)} incomplete line(s)")
+        
         return fixed_mermaid
 
     async def generate_mermaid(
@@ -355,6 +671,12 @@ Note: Style will be automatically injected via %%init%% directive. Focus on diag
                 "- Use classDiagram, sequenceDiagram, or detailed flowchart syntax\n"
                 "- Apply appropriate shapes based on node type and architectural layer\n"
                 "- Use the shape mapping provided in the instructions above\n\n"
+                "CRITICAL SYNTAX REQUIREMENTS:\n"
+                "- All node connections MUST be complete: NodeA --> NodeB (NEVER: NodeA --> without destination)\n"
+                "- All subgraph blocks MUST be closed with 'end'\n"
+                "- All arrows must have both source and destination: NodeId1 --> NodeId2\n"
+                "- For nodes inside subgraphs, always use: NodeId((Label)) format, not just ((Label))\n"
+                "- Ensure the diagram is complete - never cut off mid-line or mid-connection\n\n"
                 "Output ONLY valid Mermaid code, no explanations. Do NOT include %%init%% directives (they will be added automatically)."
             )
         elif diagram_type.lower() == "database":
@@ -374,6 +696,10 @@ Note: Style will be automatically injected via %%init%% directive. Focus on diag
                 "- Data entities and their attributes\n"
                 "- Relationships (one-to-one, one-to-many, many-to-many)\n"
                 "- Use entityRelationshipDiagram syntax in Mermaid\n\n"
+                "CRITICAL SYNTAX REQUIREMENTS:\n"
+                "- All relationships MUST be complete: Entity1 ||--o{ Entity2 (NEVER: Entity1 ||--o{ without destination)\n"
+                "- All attribute names must be valid (no numbers directly after names: use order_id_1 not order_id1)\n"
+                "- Ensure the diagram is complete - never cut off mid-line or mid-relationship\n\n"
                 "Output ONLY valid Mermaid code, no explanations. Do NOT include %%init%% directives (they will be added automatically)."
             )
         else:  # Default to HLD
@@ -400,39 +726,82 @@ Note: Style will be automatically injected via %%init%% directive. Focus on diag
                 "- Apply appropriate shapes based on node type and architectural layer\n"
                 "- Use the shape mapping provided in the instructions above\n"
                 "- Controllers/APIs: ([ControllerName]), Services: [ServiceName], Decisions: {{DecisionName}}, Databases: [(DatabaseName)], External: [/ExternalName/], UI: ((UIName))\n\n"
+                "CRITICAL SYNTAX REQUIREMENTS:\n"
+                "- All node connections MUST be complete: NodeA --> NodeB (NEVER: NodeA --> without destination)\n"
+                "- All subgraph blocks MUST be closed with 'end'\n"
+                "- All arrows must have both source and destination: NodeId1 --> NodeId2\n"
+                "- For nodes inside subgraphs, always use: NodeId((Label)) format, not just ((Label))\n"
+                "- Ensure the diagram is complete - never cut off mid-line or mid-connection\n\n"
                 "Output ONLY valid Mermaid code, no explanations. Do NOT include %%init%% directives (they will be added automatically)."
             )
         
         logger.debug(f"[agent3] Prompts built | system_prompt_length={len(system_prompt)} | user_prompt_length={len(user_prompt)}")
 
-        try:
-            # Optimized max_tokens for faster responses
-            max_tokens = 1500
-            logger.info(f"[agent3] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.3")
-            logger.debug(f"[agent3] System prompt length: {len(system_prompt)} chars")
-            logger.debug(f"[agent3] User prompt length: {len(user_prompt)} chars")
-            response = await client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                temperature=0.3,  # Lower temperature for faster, more focused responses
-                system=system_prompt,
-                messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
-            )
-            usage = getattr(response, "usage", None)
-            if usage:
-                logger.info(f"[agent3] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
-            else:
-                logger.info("[agent3] API call successful")
-        except APIError as exc:
-            error_type = getattr(exc, 'type', 'unknown')
-            error_status = getattr(exc, 'status_code', None)
-            logger.error(f"[agent3] APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
-            raise RuntimeError(f"Agent-3 failed to generate diagram: {exc}") from exc
-
-        # STEP 4: Extract and clean Mermaid diagram
-        logger.debug("[agent3] STEP 4: Extracting Mermaid diagram from response")
-        mermaid = extract_text(response).strip()
-        logger.debug(f"[agent3] Raw response extracted | length={len(mermaid)} chars")
+        # STEP 4: Generate diagram with sufficient token limit to prevent truncation
+        initial_max_tokens = 8000  # Increased from 1500 to prevent truncation
+        max_tokens = initial_max_tokens
+        max_retries = 2
+        retry_count = 0
+        mermaid = None
+        
+        while retry_count <= max_retries:
+            try:
+                logger.info(f"[agent3] Attempting API call (attempt {retry_count + 1}/{max_retries + 1}) | model={self.model} | max_tokens={max_tokens} | temperature=0.3")
+                logger.debug(f"[agent3] System prompt length: {len(system_prompt)} chars")
+                logger.debug(f"[agent3] User prompt length: {len(user_prompt)} chars")
+                
+                response = await client.messages.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=0.3,  # Lower temperature for faster, more focused responses
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
+                )
+                
+                usage = getattr(response, "usage", None)
+                if usage:
+                    logger.info(f"[agent3] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens} | max_output={max_tokens}")
+                    # Check if we hit the token limit (indicates potential truncation)
+                    if usage.output_tokens >= max_tokens * 0.95:  # Used 95%+ of tokens
+                        logger.warning(f"[agent3] Output may be truncated - used {usage.output_tokens}/{max_tokens} tokens ({usage.output_tokens/max_tokens*100:.1f}%)")
+                else:
+                    logger.info("[agent3] API call successful")
+                
+                # Extract and clean Mermaid diagram
+                logger.debug("[agent3] STEP 4: Extracting Mermaid diagram from response")
+                mermaid = extract_text(response).strip()
+                logger.debug(f"[agent3] Raw response extracted | length={len(mermaid)} chars")
+                
+                if not mermaid:
+                    raise ValueError("Empty response from API")
+                
+                break  # Success, exit retry loop
+                
+            except APIError as exc:
+                error_type = getattr(exc, 'type', 'unknown')
+                error_status = getattr(exc, 'status_code', None)
+                
+                # If it's a token limit error, increase and retry
+                if error_type == 'rate_limit_error' or 'token' in str(exc).lower():
+                    retry_count += 1
+                    if retry_count <= max_retries:
+                        max_tokens = int(max_tokens * 1.5)  # Increase by 50%
+                        logger.warning(f"[agent3] Token limit error, retrying with max_tokens={max_tokens}")
+                        continue
+                
+                logger.error(f"[agent3] APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
+                raise RuntimeError(f"Agent-3 failed to generate diagram: {exc}") from exc
+            
+            except Exception as exc:
+                logger.error(f"[agent3] Unexpected error during API call: {exc}", exc_info=True)
+                if retry_count < max_retries:
+                    retry_count += 1
+                    logger.warning(f"[agent3] Retrying after error (attempt {retry_count}/{max_retries})")
+                    continue
+                raise
+        
+        if not mermaid:
+            raise RuntimeError("Failed to generate diagram after all retries")
         
         # Clean up mermaid code - remove markdown fences if present
         if mermaid.startswith("```"):
@@ -447,6 +816,44 @@ Note: Style will be automatically injected via %%init%% directive. Focus on diag
         
         # Fix common Mermaid syntax issues in generated diagrams
         mermaid = self._fix_mermaid_syntax(mermaid)
+        
+        # STEP 4.5: Validate diagram and handle truncation
+        logger.debug("[agent3] STEP 4.5: Validating Mermaid diagram syntax")
+        validation_result = self._validate_mermaid_syntax(mermaid)
+        
+        if not validation_result['valid']:
+            logger.warning(f"[agent3] Diagram validation failed with {len(validation_result['errors'])} error(s)")
+            
+            # Attempt to fix truncated diagram
+            if validation_result['truncation_point'] > 0:
+                logger.warning(f"[agent3] Detected truncation at line {validation_result['truncation_point']}, attempting to complete diagram")
+                mermaid = self._complete_truncated_diagram(mermaid, validation_result)
+                
+                # Re-validate after fix
+                validation_result = self._validate_mermaid_syntax(mermaid)
+                
+                if not validation_result['valid']:
+                    logger.error(f"[agent3] Diagram still invalid after completion attempt. Errors: {validation_result['errors']}")
+                    # Log all errors for debugging
+                    for error in validation_result['errors']:
+                        logger.error(f"[agent3] Validation error: {error}")
+                    
+                    # Log truncation point for debugging
+                    logger.error(f"[agent3] Diagram truncated at line {validation_result['truncation_point']}")
+                    logger.error(f"[agent3] Proceeding with fixed diagram (incomplete lines removed). Users may see truncated content.")
+                else:
+                    logger.info(f"[agent3] Successfully fixed truncated diagram")
+            else:
+                # Non-truncation errors - log but continue
+                for error in validation_result['errors']:
+                    logger.error(f"[agent3] Validation error: {error}")
+        else:
+            logger.debug("[agent3] Diagram validation passed")
+        
+        # Log any warnings even if valid
+        if validation_result['warnings']:
+            for warning in validation_result['warnings']:
+                logger.warning(f"[agent3] Validation warning: {warning}")
         
         # STEP 5: Apply style configuration to mermaid source using init directive
         logger.debug("[agent3] STEP 5: Applying style configuration to Mermaid diagram")

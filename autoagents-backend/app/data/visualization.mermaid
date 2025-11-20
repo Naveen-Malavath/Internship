@@ -1,172 +1,670 @@
-flowchart LR
+erDiagram
 %%{init: {'theme':'dark', 'themeVariables':{'primaryColor': '#2563EB', 'primaryTextColor': '#FFFFFF', 'primaryBorderColor': '#1E40AF', 'lineColor': '#3B82F6', 'secondaryColor': '#F97316', 'tertiaryColor': '#FB923C'}}}%%
 
-classDef primaryNode fill:#2563EB,stroke:#2563EB,stroke-width:2px,color:#fff
-classDef secondaryNode fill:#F97316,stroke:#F97316,stroke-width:2px,color:#fff
-classDef accentNode fill:#FB923C,stroke:#FB923C,stroke-width:2px,color:#fff
+    TENANT ||--o{ USER : "has"
+    TENANT ||--o{ BRAND : "owns"
+    TENANT ||--o{ REGION : "operates_in"
+    TENANT {
+        uuid tenant_id PK
+        string name
+        string domain
+        string status
+        timestamp created_at
+        timestamp updated_at
+    }
 
-    subgraph Presentation["Presentation Layer"]
-        ((WebStorefront))
-        ((MobileApp))
-        ((IoTDevice))
-        ((AdminUI))
-        ([APIGateway])
-        ([GraphQLEndpoint])
-        ([RESTEndpoint])
-        ([AuthController])
-        ([ProductController])
-        ([OrderController])
-        ([CartController])
-        ([InventoryController])
-        ([LoyaltyController])
-        ([PromotionController])
-    end
+    BRAND ||--o{ PRODUCT : "contains"
+    BRAND ||--o{ ORDER : "processes"
+    BRAND {
+        uuid brand_id PK
+        uuid tenant_id FK
+        string name
+        string code
+        json settings
+        timestamp created_at
+    }
 
-    subgraph Security["Security Layer"]
-        [AuthService]
-        [TokenValidator]
-        [RateLimiter]
-        {ValidateToken}
-        {CheckPermissions}
-        [(SessionStore)]
-    end
+    REGION {
+        uuid region_id PK
+        uuid tenant_id FK
+        string name
+        string code
+        string currency
+        string timezone
+        timestamp created_at
+    }
 
-    subgraph BusinessLogic["Business Logic Layer"]
-        [ProductCatalogService]
-        [OrderManagementService]
-        [InventoryOrchestrationService]
-        [PromotionEngine]
-        [LoyaltyEngine]
-        [PersonalizationService]
-        [CustomerDataService]
-        [PricingService]
-        [RecommendationService]
-        [CartService]
-        [CheckoutService]
-        [FulfillmentService]
-        [ReturnService]
-    end
+    USER ||--o{ ROLE_ASSIGNMENT : "has"
+    USER ||--o{ AUDIT_LOG : "performs"
+    USER ||--o{ CUSTOMER : "is"
+    USER {
+        uuid user_id PK
+        uuid tenant_id FK
+        string email
+        string password_hash
+        string first_name
+        string last_name
+        string status
+        timestamp last_login
+        timestamp created_at
+    }
 
-    subgraph MLServices["ML & AI Layer"]
-        [MLModelService]
-        [RealtimeInferenceEngine]
-        [BatchProcessingEngine]
-        [FeatureStore]
-        [ModelRegistry]
-        {SelectModel}
-    end
+    ROLE ||--o{ ROLE_ASSIGNMENT : "assigned_to"
+    ROLE ||--o{ PERMISSION : "has"
+    ROLE {
+        uuid role_id PK
+        uuid tenant_id FK
+        string name
+        string description
+        timestamp created_at
+    }
 
-    subgraph Integration["Integration Layer"]
-        [MarketplaceHub]
-        [AmazonConnector]
-        [eBayConnector]
-        [WalmartConnector]
-        [TransformationEngine]
-        [ConflictResolver]
-        {ValidateSync}
-    end
+    ROLE_ASSIGNMENT {
+        uuid assignment_id PK
+        uuid user_id FK
+        uuid role_id FK
+        timestamp assigned_at
+    }
 
-    subgraph EventBus["Event-Driven Architecture"]
-        [EventBroker]
-        [OrderEventStream]
-        [InventoryEventStream]
-        [CustomerEventStream]
-        [EventStore]
-        [EventProcessor]
-        [SagaOrchestrator]
-    end
+    PERMISSION {
+        uuid permission_id PK
+        uuid role_id FK
+        string resource
+        string action
+        json conditions
+    }
 
-    subgraph DataLayer["Data Layer"]
-        [(ProductDB)]
-        [(OrderDB)]
-        [(CustomerDB)]
-        [(InventoryDB)]
-        [(LoyaltyDB)]
-        [(PromotionDB)]
-        [(EventStoreDB)]
-        [(AnalyticsDB)]
-        [(RedisCache)]
-        [(SessionCache)]
-        [(InventoryCache)]
-    end
+    CUSTOMER ||--o{ ORDER : "places"
+    CUSTOMER ||--o{ CART : "has"
+    CUSTOMER ||--o{ WISHLIST : "maintains"
+    CUSTOMER ||--o{ LOYALTY_ACCOUNT : "owns"
+    CUSTOMER ||--o{ CUSTOMER_SEGMENT : "belongs_to"
+    CUSTOMER ||--o{ CONSENT : "provides"
+    CUSTOMER ||--o{ BROWSING_HISTORY : "generates"
+    CUSTOMER ||--o{ PAYMENT_METHOD : "saves"
+    CUSTOMER {
+        uuid customer_id PK
+        uuid user_id FK
+        string customer_type
+        string phone
+        date date_of_birth
+        decimal lifetime_value
+        timestamp first_purchase_at
+        timestamp last_purchase_at
+        int total_orders
+        timestamp created_at
+    }
 
-    subgraph ExternalSystems["External Systems"]
-        [/PaymentGateway/]
-        [/ShippingProvider/]
-        [/EmailService/]
-        [/SMSService/]
-        [/MarketingAutomation/]
-        [/WarehouseSystem/]
-        [/ThirdPartyFulfillment/]
-    end
+    CUSTOMER_SEGMENT {
+        uuid segment_id PK
+        uuid customer_id FK
+        string segment_name
+        json criteria
+        timestamp assigned_at
+    }
 
-    subgraph Observability["Observability Layer"]
-        [MetricsCollector]
-        [LogAggregator]
-        [TracingService]
-        [AlertManager]
-        [HealthChecker]
-        [(MetricsDB)]
-        [(LogStore)]
-        ((ObservabilityDashboard))
-    end
+    CONSENT {
+        uuid consent_id PK
+        uuid customer_id FK
+        string consent_type
+        boolean granted
+        string version
+        timestamp granted_at
+        timestamp expires_at
+    }
 
-    %% Presentation to Security
-    ((WebStorefront)) --> ([APIGateway])
-    ((MobileApp)) --> ([APIGateway])
-    ((IoTDevice)) --> ([APIGateway])
-    ((AdminUI)) --> ([APIGateway])
-    
-    ([APIGateway]) --> ([GraphQLEndpoint])
-    ([APIGateway]) --> ([RESTEndpoint])
-    ([APIGateway]) --> [AuthService]
-    
-    ([GraphQLEndpoint]) --> {ValidateToken}
-    ([RESTEndpoint]) --> {ValidateToken}
-    {ValidateToken} --> [TokenValidator]
-    [TokenValidator] --> [(SessionStore)]
-    
-    {ValidateToken} -->|Valid| [RateLimiter]
-    {ValidateToken} -->|Invalid| ([AuthController])
-    [RateLimiter] --> {CheckPermissions}
-    
-    %% API Controllers
-    {CheckPermissions} -->|Authorized| ([ProductController])
-    {CheckPermissions} -->|Authorized| ([OrderController])
-    {CheckPermissions} -->|Authorized| ([CartController])
-    {CheckPermissions} -->|Authorized| ([InventoryController])
-    {CheckPermissions} -->|Authorized| ([LoyaltyController])
-    {CheckPermissions} -->|Authorized| ([PromotionController])
-    
-    %% Controllers to Services
-    ([ProductController]) --> [ProductCatalogService]
-    ([OrderController]) --> [OrderManagementService]
-    ([CartController]) --> [CartService]
-    ([InventoryController]) --> [InventoryOrchestrationService]
-    ([LoyaltyController]) --> [LoyaltyEngine]
-    ([PromotionController]) --> [PromotionEngine]
-    
-    %% Product Catalog Flow
-    [ProductCatalogService] --> [(ProductDB)]
-    [ProductCatalogService] --> [(RedisCache)]
-    [ProductCatalogService] --> [PersonalizationService]
-    [ProductCatalogService] --> [EventBroker]
-    
-    %% Personalization Flow
-    [PersonalizationService] --> [RecommendationService]
-    [PersonalizationService] --> [CustomerDataService]
-    [RecommendationService] --> [MLModelService]
-    [MLModelService] --> {SelectModel}
-    {SelectModel} -->|Realtime| [RealtimeInferenceEngine]
-    {SelectModel} -->|Batch| [BatchProcessingEngine]
-    [RealtimeInferenceEngine] --> [FeatureStore]
-    [BatchProcessingEngine] --> [FeatureStore]
-    [FeatureStore] --> [(AnalyticsDB)]
-    [MLModelService] --> [ModelRegistry]
-    
-    %% Customer Data Platform
-    [CustomerDataService] --> [(CustomerDB)]
-    [CustomerDataService] --> [EventBroker]
-    [CustomerDataService] --> [(RedisCache)]
-    
-    %% Cart & Checkout Flow
+    BROWSING_HISTORY {
+        uuid history_id PK
+        uuid customer_id FK
+        uuid product_id FK
+        string action_type
+        json metadata
+        timestamp viewed_at
+    }
+
+    ADDRESS ||--o{ ORDER : "ships_to"
+    ADDRESS ||--o{ FULFILLMENT_CENTER : "located_at"
+    ADDRESS {
+        uuid address_id PK
+        uuid customer_id FK
+        string address_type
+        string line_one
+        string line_two
+        string city
+        string state
+        string postal_code
+        string country
+        decimal latitude
+        decimal longitude
+        boolean is_default
+        timestamp created_at
+    }
+
+    PRODUCT ||--o{ PRODUCT_VARIANT : "has"
+    PRODUCT ||--o{ PRODUCT_ATTRIBUTE : "has"
+    PRODUCT ||--o{ PRODUCT_CATEGORY : "belongs_to"
+    PRODUCT ||--o{ PRODUCT_IMAGE : "has"
+    PRODUCT ||--o{ INVENTORY_ITEM : "tracked_by"
+    PRODUCT ||--o{ CART_ITEM : "added_to"
+    PRODUCT ||--o{ ORDER_ITEM : "ordered_as"
+    PRODUCT ||--o{ RECOMMENDATION : "recommended_as"
+    PRODUCT ||--o{ DYNAMIC_PRICING : "priced_by"
+    PRODUCT {
+        uuid product_id PK
+        uuid brand_id FK
+        string sku
+        string name
+        text description
+        decimal base_price
+        string status
+        json metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    PRODUCT_VARIANT {
+        uuid variant_id PK
+        uuid product_id FK
+        string variant_sku
+        string name
+        decimal price
+        json attributes
+        timestamp created_at
+    }
+
+    PRODUCT_ATTRIBUTE {
+        uuid attribute_id PK
+        uuid product_id FK
+        string attribute_name
+        string attribute_value
+        string attribute_type
+        int sort_order
+    }
+
+    CATEGORY ||--o{ PRODUCT_CATEGORY : "contains"
+    CATEGORY ||--o{ CATEGORY : "has_parent"
+    CATEGORY {
+        uuid category_id PK
+        uuid parent_category_id FK
+        string name
+        string slug
+        text description
+        int level
+        int sort_order
+        timestamp created_at
+    }
+
+    PRODUCT_CATEGORY {
+        uuid product_category_id PK
+        uuid product_id FK
+        uuid category_id FK
+        boolean is_primary
+        timestamp assigned_at
+    }
+
+    PRODUCT_IMAGE {
+        uuid image_id PK
+        uuid product_id FK
+        string url
+        string alt_text
+        int sort_order
+        boolean is_primary
+        timestamp created_at
+    }
+
+    INVENTORY_ITEM ||--o{ INVENTORY_TRANSACTION : "has"
+    INVENTORY_ITEM {
+        uuid inventory_id PK
+        uuid product_id FK
+        uuid variant_id FK
+        uuid fulfillment_center_id FK
+        int quantity_available
+        int quantity_reserved
+        int quantity_on_order
+        int reorder_point
+        timestamp last_updated
+    }
+
+    FULFILLMENT_CENTER ||--o{ INVENTORY_ITEM : "stores"
+    FULFILLMENT_CENTER ||--o{ SHIPMENT : "ships_from"
+    FULFILLMENT_CENTER {
+        uuid fulfillment_center_id PK
+        uuid address_id FK
+        string name
+        string type
+        boolean is_active
+        json capabilities
+        timestamp created_at
+    }
+
+    INVENTORY_TRANSACTION {
+        uuid transaction_id PK
+        uuid inventory_id FK
+        string transaction_type
+        int quantity_change
+        string reason
+        uuid reference_id
+        timestamp created_at
+    }
+
+    CART ||--o{ CART_ITEM : "contains"
+    CART {
+        uuid cart_id PK
+        uuid customer_id FK
+        string session_id
+        string status
+        timestamp expires_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    CART_ITEM {
+        uuid cart_item_id PK
+        uuid cart_id FK
+        uuid product_id FK
+        uuid variant_id FK
+        int quantity
+        decimal unit_price
+        json customizations
+        timestamp added_at
+    }
+
+    WISHLIST {
+        uuid wishlist_id PK
+        uuid customer_id FK
+        uuid product_id FK
+        uuid variant_id FK
+        timestamp added_at
+    }
+
+    ORDER ||--o{ ORDER_ITEM : "contains"
+    ORDER ||--o{ PAYMENT : "paid_by"
+    ORDER ||--o{ SHIPMENT : "fulfilled_by"
+    ORDER ||--o{ ORDER_STATUS_HISTORY : "tracks"
+    ORDER {
+        uuid order_id PK
+        uuid customer_id FK
+        uuid brand_id FK
+        uuid address_id FK
+        string order_number
+        string status
+        decimal subtotal
+        decimal tax_amount
+        decimal shipping_amount
+        decimal discount_amount
+        decimal total_amount
+        string currency
+        json metadata
+        timestamp placed_at
+        timestamp created_at
+    }
+
+    ORDER_ITEM {
+        uuid order_item_id PK
+        uuid order_id FK
+        uuid product_id FK
+        uuid variant_id FK
+        int quantity
+        decimal unit_price
+        decimal discount_amount
+        decimal tax_amount
+        decimal total_amount
+        timestamp created_at
+    }
+
+    ORDER_STATUS_HISTORY {
+        uuid status_history_id PK
+        uuid order_id FK
+        string status
+        string notes
+        uuid changed_by FK
+        timestamp changed_at
+    }
+
+    PAYMENT ||--o{ PAYMENT_TRANSACTION : "has"
+    PAYMENT {
+        uuid payment_id PK
+        uuid order_id FK
+        uuid payment_method_id FK
+        string payment_gateway
+        decimal amount
+        string currency
+        string status
+        string transaction_reference
+        timestamp authorized_at
+        timestamp captured_at
+        timestamp created_at
+    }
+
+    PAYMENT_METHOD {
+        uuid payment_method_id PK
+        uuid customer_id FK
+        string method_type
+        string token
+        json details
+        boolean is_default
+        timestamp expires_at
+        timestamp created_at
+    }
+
+    PAYMENT_TRANSACTION {
+        uuid transaction_id PK
+        uuid payment_id FK
+        string transaction_type
+        decimal amount
+        string status
+        string gateway_response
+        timestamp processed_at
+    }
+
+    SHIPMENT ||--o{ SHIPMENT_ITEM : "contains"
+    SHIPMENT ||--o{ SHIPMENT_TRACKING : "tracked_by"
+    SHIPMENT {
+        uuid shipment_id PK
+        uuid order_id FK
+        uuid fulfillment_center_id FK
+        string shipment_number
+        string carrier
+        string service_level
+        decimal shipping_cost
+        string status
+        timestamp shipped_at
+        timestamp delivered_at
+        timestamp created_at
+    }
+
+    SHIPMENT_ITEM {
+        uuid shipment_item_id PK
+        uuid shipment_id FK
+        uuid order_item_id FK
+        int quantity
+        timestamp created_at
+    }
+
+    SHIPMENT_TRACKING {
+        uuid tracking_id PK
+        uuid shipment_id FK
+        string tracking_number
+        string status
+        string location
+        json event_data
+        timestamp event_at
+    }
+
+    TAX_CALCULATION {
+        uuid tax_calculation_id PK
+        uuid order_id FK
+        string tax_jurisdiction
+        decimal tax_rate
+        decimal taxable_amount
+        decimal tax_amount
+        json breakdown
+        timestamp calculated_at
+    }
+
+    FRAUD_CHECK {
+        uuid fraud_check_id PK
+        uuid order_id FK
+        string provider
+        decimal risk_score
+        string decision
+        json analysis
+        timestamp checked_at
+    }
+
+    LOYALTY_ACCOUNT ||--o{ LOYALTY_TRANSACTION : "has"
+    LOYALTY_ACCOUNT ||--o{ LOYALTY_TIER : "assigned_to"
+    LOYALTY_ACCOUNT {
+        uuid loyalty_account_id PK
+        uuid customer_id FK
+        int points_balance
+        int lifetime_points
+        string current_tier
+        timestamp tier_achieved_at
+        timestamp created_at
+    }
+
+    LOYALTY_TIER {
+        uuid tier_id PK
+        uuid loyalty_account_id FK
+        string tier_name
+        int points_required
+        json benefits
+        timestamp assigned_at
+    }
+
+    LOYALTY_TRANSACTION {
+        uuid transaction_id PK
+        uuid loyalty_account_id FK
+        uuid order_id FK
+        string transaction_type
+        int points_change
+        string reason
+        timestamp created_at
+    }
+
+    LOYALTY_REWARD {
+        uuid reward_id PK
+        string reward_name
+        string reward_type
+        int points_cost
+        json details
+        date valid_from
+        date valid_to
+        boolean is_active
+    }
+
+    LOYALTY_REDEMPTION {
+        uuid redemption_id PK
+        uuid loyalty_account_id FK
+        uuid reward_id FK
+        uuid order_id FK
+        int points_redeemed
+        string status
+        timestamp redeemed_at
+    }
+
+    RECOMMENDATION {
+        uuid recommendation_id PK
+        uuid customer_id FK
+        uuid product_id FK
+        string recommendation_type
+        decimal confidence_score
+        json context
+        timestamp generated_at
+        timestamp expires_at
+    }
+
+    DYNAMIC_PRICING {
+        uuid pricing_id PK
+        uuid product_id FK
+        uuid customer_id FK
+        decimal original_price
+        decimal adjusted_price
+        string pricing_rule
+        json factors
+        timestamp valid_from
+        timestamp valid_to
+    }
+
+    ML_MODEL {
+        uuid model_id PK
+        string model_name
+        string model_type
+        string version
+        json parameters
+        decimal accuracy_score
+        timestamp trained_at
+        timestamp deployed_at
+    }
+
+    PERSONALIZATION_PROFILE {
+        uuid profile_id PK
+        uuid customer_id FK
+        json preferences
+        json behavior_patterns
+        json segment_scores
+        timestamp last_updated
+    }
+
+    EVENT_LOG {
+        uuid event_id PK
+        string event_type
+        string source_system
+        json payload
+        string status
+        timestamp created_at
+        timestamp processed_at
+    }
+
+    WEBHOOK_SUBSCRIPTION {
+        uuid subscription_id PK
+        uuid tenant_id FK
+        string event_type
+        string endpoint_url
+        string secret
+        boolean is_active
+        timestamp created_at
+    }
+
+    WEBHOOK_DELIVERY {
+        uuid delivery_id PK
+        uuid subscription_id FK
+        uuid event_id FK
+        int attempt_count
+        string status
+        json response
+        timestamp delivered_at
+    }
+
+    REPORT_DEFINITION {
+        uuid report_id PK
+        uuid tenant_id FK
+        string report_name
+        string report_type
+        json query_definition
+        json parameters
+        string schedule
+        timestamp created_at
+    }
+
+    REPORT_EXECUTION {
+        uuid execution_id PK
+        uuid report_id FK
+        string status
+        string output_format
+        string file_url
+        timestamp started_at
+        timestamp completed_at
+    }
+
+    DATA_WAREHOUSE_FACT {
+        uuid fact_id PK
+        date fact_date
+        uuid customer_id FK
+        uuid product_id FK
+        uuid order_id FK
+        decimal revenue
+        decimal cost
+        int quantity
+        decimal profit
+        timestamp created_at
+    }
+
+    METRIC_SNAPSHOT {
+        uuid snapshot_id PK
+        string metric_name
+        string dimension
+        decimal value
+        date snapshot_date
+        timestamp created_at
+    }
+
+    PERFORMANCE_METRIC {
+        uuid metric_id PK
+        string metric_type
+        string endpoint
+        decimal response_time
+        int status_code
+        timestamp measured_at
+    }
+
+    ALERT_RULE {
+        uuid rule_id PK
+        string rule_name
+        string metric_type
+        string condition
+        decimal threshold
+        json notification_config
+        boolean is_active
+    }
+
+    ALERT_INCIDENT {
+        uuid incident_id PK
+        uuid rule_id FK
+        string severity
+        string status
+        json details
+        timestamp triggered_at
+        timestamp resolved_at
+    }
+
+    AUDIT_LOG {
+        uuid audit_id PK
+        uuid user_id FK
+        uuid tenant_id FK
+        string action
+        string resource_type
+        uuid resource_id
+        json changes
+        string ip_address
+        timestamp created_at
+    }
+
+    DATA_RETENTION_POLICY {
+        uuid policy_id PK
+        string data_type
+        int retention_days
+        string archive_strategy
+        timestamp created_at
+    }
+
+    DATA_DELETION_REQUEST {
+        uuid request_id PK
+        uuid customer_id FK
+        string request_type
+        string status
+        json scope
+        timestamp requested_at
+        timestamp completed_at
+    }
+
+    COMPLIANCE_REPORT {
+        uuid report_id PK
+        string report_type
+        date report_period
+        json findings
+        string status
+        timestamp generated_at
+    }
+
+    API_KEY {
+        uuid key_id PK
+        uuid tenant_id FK
+        string key_hash
+        string name
+        json scopes
+        int rate_limit
+        timestamp expires_at
+        timestamp created_at
+    }
+
+    API_REQUEST_LOG {
+        uuid log_id PK
+        uuid key_id FK
+        string endpoint
+        string method
+        int status_code
+        int response_time
+        timestamp created_at
+    }
