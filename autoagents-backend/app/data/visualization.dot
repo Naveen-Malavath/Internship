@@ -1,1 +1,4 @@
-digraph G { A -> B }
+digraph G {
+  // LLD diagram
+  label="Project";
+}

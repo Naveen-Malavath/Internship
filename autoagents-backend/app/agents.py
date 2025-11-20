@@ -10,7 +10,11 @@ from typing import Any
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
 
-from .services.claude_client import DEFAULT_CLAUDE_MODEL
+from .services.claude_client import (
+    DEFAULT_CLAUDE_MODEL,
+    coerce_json,
+    extract_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -438,19 +442,66 @@ class ClaudeVisualizationAgent:
             logger.info(f"[ClaudeVisualizationAgent] API call successful | run_id={run_id}")
         
         logger.debug(f"[ClaudeVisualizationAgent] Extracting and parsing response | run_id={run_id}")
-        text = ClaudeAgent._extract_text(response)
-        payload = ClaudeAgent._coerce_json(text)
+        try:
+            text = extract_text(response)
+            logger.debug(f"[ClaudeVisualizationAgent] Extracted response text: {len(text)} chars | preview: {text[:200]}...")
+        except RuntimeError as exc:
+            logger.error(f"[ClaudeVisualizationAgent] Failed to extract text from response: {exc}", exc_info=True)
+            raise RuntimeError(f"Failed to extract response from Claude API: {exc}") from exc
+        
+        try:
+            payload = coerce_json(text)
+            logger.debug(f"[ClaudeVisualizationAgent] Successfully parsed JSON: type={type(payload)} | keys={list(payload.keys()) if isinstance(payload, dict) else 'N/A'}")
+        except RuntimeError as exc:
+            logger.error(f"[ClaudeVisualizationAgent] Failed to parse JSON from response: {exc}", exc_info=True)
+            logger.debug(f"[ClaudeVisualizationAgent] Raw response text that failed (first 500): {text[:500]}")
+            logger.debug(f"[ClaudeVisualizationAgent] Raw response text that failed (last 500): {text[-500:] if len(text) > 500 else text}")
+            # Don't return fallback - raise error so caller knows it failed
+            raise RuntimeError(f"Failed to parse Claude JSON response: {exc}") from exc
 
-        diagrams = payload.get("diagrams", {}) if isinstance(payload, dict) else {}
-
+        # Validate payload structure
+        if not isinstance(payload, dict):
+            logger.error(f"[ClaudeVisualizationAgent] Payload is not a dict: type={type(payload)} | value={str(payload)[:200]}")
+            raise RuntimeError(f"Claude returned invalid response format. Expected dict, got {type(payload)}")
+        
+        diagrams = payload.get("diagrams", {})
+        if not isinstance(diagrams, dict):
+            logger.warning(f"[ClaudeVisualizationAgent] Diagrams is not a dict: type={type(diagrams)}, using empty dict")
+            diagrams = {}
+        
+        mermaid_raw = diagrams.get("mermaid", "")
+        dot_raw = diagrams.get("dot", "")
+        
+        # Validate mermaid and dot are non-empty strings
+        mermaid = mermaid_raw.strip() if isinstance(mermaid_raw, str) and mermaid_raw.strip() else "graph TD\nA[No data]"
+        dot = dot_raw.strip() if isinstance(dot_raw, str) and dot_raw.strip() else "digraph G { A -> B }"
+        
+        logger.debug(f"[ClaudeVisualizationAgent] Extracted diagrams - mermaid: {len(mermaid)} chars, dot: {len(dot)} chars")
+        if mermaid and mermaid != "graph TD\nA[No data]":
+            logger.debug(f"[ClaudeVisualizationAgent] Mermaid preview: {mermaid[:150]}...")
+        if dot and dot != "digraph G { A -> B }":
+            logger.debug(f"[ClaudeVisualizationAgent] DOT preview: {dot[:150]}...")
+        
+        summary = payload.get("summary", "")
+        if not summary or not isinstance(summary, str):
+            logger.warning(f"[ClaudeVisualizationAgent] Summary is missing or invalid, using default")
+            summary = "Visualization summary unavailable."
+        
+        callouts = payload.get("callouts", [])
+        if not isinstance(callouts, list):
+            logger.warning(f"[ClaudeVisualizationAgent] Callouts is not a list: type={type(callouts)}, using empty list")
+            callouts = []
+        callouts = [item for item in callouts if isinstance(item, str)]
+        
         visualization = VisualizationResult(
             run_id=run_id,
-            summary=payload.get("summary", "Visualization summary unavailable."),
-            mermaid=diagrams.get("mermaid", "graph TD\nA[No data]") if isinstance(diagrams, dict) else "graph TD\nA[No data]",
-            dot=diagrams.get("dot", "digraph G { A -> B }") if isinstance(diagrams, dict) else "digraph G { A -> B }",
-            callouts=[item for item in payload.get("callouts", []) if isinstance(item, str)],
+            summary=summary,
+            mermaid=mermaid,
+            dot=dot,
+            callouts=callouts,
             debug={
                 "raw_text_preview": text[:250],
+                "payload_keys": list(payload.keys()) if isinstance(payload, dict) else [],
             },
         )
         

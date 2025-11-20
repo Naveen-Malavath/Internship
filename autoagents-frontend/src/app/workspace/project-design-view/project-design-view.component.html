@@ -6,29 +6,29 @@
       type="button"
       class="project-design-view__generate-btn"
       (click)="onGenerateDesigns()"
-      [disabled]="isGenerating"
+      [disabled]="isLoadingDesigns"
     >
-      {{ isGenerating ? 'Generating...' : 'Generate Designs' }}
+      {{ isLoadingDesigns ? 'Loading...' : 'Generate Designs' }}
     </button>
   </header>
 
   <!-- Loading State -->
-  <div *ngIf="isLoading" class="project-design-view__message project-design-view__message--loading">
+  <div *ngIf="isLoadingDesigns" class="project-design-view__message project-design-view__message--loading">
     <p>Loading designs...</p>
   </div>
 
   <!-- Error State -->
-  <div *ngIf="error && !isLoading" class="project-design-view__message project-design-view__message--error">
+  <div *ngIf="error && !isLoadingDesigns" class="project-design-view__message project-design-view__message--error">
     <p>{{ error }}</p>
   </div>
 
   <!-- No Designs State -->
-  <div *ngIf="hasNoDesigns && !isLoading && !error" class="project-design-view__message project-design-view__message--info">
+  <div *ngIf="hasNoDesigns && !isLoadingDesigns && !error" class="project-design-view__message project-design-view__message--info">
     <p>No designs yet. Click "Generate Designs" to create HLD, LLD, and DBD diagrams.</p>
   </div>
 
   <!-- Design Type Selection -->
-  <div *ngIf="designs && !isLoading" class="project-design-view__tabs">
+  <div *ngIf="designs && !isLoadingDesigns" class="project-design-view__tabs">
     <button
       type="button"
       class="project-design-view__tab"
@@ -56,10 +56,15 @@
   </div>
 
   <!-- Mermaid Editor -->
-  <div *ngIf="designs && !isLoading" class="project-design-view__editor">
+  <!-- Show editor if we have designs OR if we have a currentMermaid (to preserve last diagram during loading/errors) -->
+  <!-- Editor remains visible during loading to show last diagram -->
+  <div *ngIf="designs || currentMermaid !== null" class="project-design-view__editor">
     <workspace-view
+      [projectId]="projectId"
       [mermaidSource]="currentMermaid"
-      [mermaidEditorContent]="currentMermaid"
+      [mermaidEditorContent]="currentMermaid ?? ''"
+      [mermaidStyleConfig]="currentStyleConfig"
+      [designGenerationKey]="designGenerationCounter"
       (mermaidChange)="onMermaidChange($event)"
     ></workspace-view>
   </div>

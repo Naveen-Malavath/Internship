@@ -65,9 +65,12 @@ def coerce_json(payload: str) -> dict:
     Handles markdown code blocks (```json ... ```) that Claude sometimes wraps around JSON.
     Also handles truncated responses by attempting to extract valid JSON from partial content.
     """
-    logger.debug(f"[claude_client] Parsing JSON payload: {len(payload)} chars, starts with: {payload[:100]}")
+    logger.debug(f"[claude_client] Parsing JSON payload: {len(payload)} chars")
+    logger.debug(f"[claude_client] Payload starts with: {payload[:150]}")
+    logger.debug(f"[claude_client] Payload ends with: {payload[-150:] if len(payload) > 150 else payload}")
     original_payload = payload
     stripped = payload.strip()
+    logger.debug(f"[claude_client] After initial strip: {len(stripped)} chars")
     
     # Remove markdown code blocks if present - handle various formats
     if stripped.startswith("```"):
@@ -107,10 +110,11 @@ def coerce_json(payload: str) -> dict:
     # Try parsing the stripped content directly
     try:
         result = json.loads(stripped)
-        logger.debug(f"[claude_client] Successfully parsed JSON directly")
+        logger.debug(f"[claude_client] Successfully parsed JSON directly | result type: {type(result)} | keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
         return result
     except json.JSONDecodeError as e:
-        logger.debug(f"[claude_client] Direct JSON parse failed: {e}, trying fallback extraction")
+        logger.debug(f"[claude_client] Direct JSON parse failed: {e} | error at position: {getattr(e, 'pos', 'unknown')}")
+        logger.debug(f"[claude_client] Trying fallback extraction methods...")
         pass
     
     # Fallback 1: Try to extract JSON between first { and last }
@@ -332,8 +336,13 @@ def coerce_json(payload: str) -> dict:
     
     # If all else fails, raise with helpful error message
     error_preview = original_payload[:500] if len(original_payload) > 500 else original_payload
-    logger.error(f"[claude_client] Failed to parse JSON after all attempts. Payload preview: {error_preview}...")
+    logger.error(f"[claude_client] Failed to parse JSON after all attempts")
+    logger.error(f"[claude_client] Payload length: {len(original_payload)} chars")
+    logger.error(f"[claude_client] Payload preview (first 500): {error_preview}")
+    logger.error(f"[claude_client] Payload preview (last 500): {original_payload[-500:] if len(original_payload) > 500 else original_payload}")
+    logger.error(f"[claude_client] Stripped payload length: {len(stripped)} chars")
     raise RuntimeError(
         f"Claude returned invalid or incomplete JSON. "
-        f"Response may be truncated. Preview: {error_preview}..."
+        f"Response may be truncated. Payload length: {len(original_payload)} chars. "
+        f"Preview: {error_preview}..."
     )

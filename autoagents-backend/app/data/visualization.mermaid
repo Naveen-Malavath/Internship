@@ -1,2 +1,172 @@
-graph TD
-A[No data]
+flowchart LR
+%%{init: {'theme':'dark', 'themeVariables':{'primaryColor': '#2563EB', 'primaryTextColor': '#FFFFFF', 'primaryBorderColor': '#1E40AF', 'lineColor': '#3B82F6', 'secondaryColor': '#F97316', 'tertiaryColor': '#FB923C'}}}%%
+
+classDef primaryNode fill:#2563EB,stroke:#2563EB,stroke-width:2px,color:#fff
+classDef secondaryNode fill:#F97316,stroke:#F97316,stroke-width:2px,color:#fff
+classDef accentNode fill:#FB923C,stroke:#FB923C,stroke-width:2px,color:#fff
+
+    subgraph Presentation["Presentation Layer"]
+        ((WebStorefront))
+        ((MobileApp))
+        ((IoTDevice))
+        ((AdminUI))
+        ([APIGateway])
+        ([GraphQLEndpoint])
+        ([RESTEndpoint])
+        ([AuthController])
+        ([ProductController])
+        ([OrderController])
+        ([CartController])
+        ([InventoryController])
+        ([LoyaltyController])
+        ([PromotionController])
+    end
+
+    subgraph Security["Security Layer"]
+        [AuthService]
+        [TokenValidator]
+        [RateLimiter]
+        {ValidateToken}
+        {CheckPermissions}
+        [(SessionStore)]
+    end
+
+    subgraph BusinessLogic["Business Logic Layer"]
+        [ProductCatalogService]
+        [OrderManagementService]
+        [InventoryOrchestrationService]
+        [PromotionEngine]
+        [LoyaltyEngine]
+        [PersonalizationService]
+        [CustomerDataService]
+        [PricingService]
+        [RecommendationService]
+        [CartService]
+        [CheckoutService]
+        [FulfillmentService]
+        [ReturnService]
+    end
+
+    subgraph MLServices["ML & AI Layer"]
+        [MLModelService]
+        [RealtimeInferenceEngine]
+        [BatchProcessingEngine]
+        [FeatureStore]
+        [ModelRegistry]
+        {SelectModel}
+    end
+
+    subgraph Integration["Integration Layer"]
+        [MarketplaceHub]
+        [AmazonConnector]
+        [eBayConnector]
+        [WalmartConnector]
+        [TransformationEngine]
+        [ConflictResolver]
+        {ValidateSync}
+    end
+
+    subgraph EventBus["Event-Driven Architecture"]
+        [EventBroker]
+        [OrderEventStream]
+        [InventoryEventStream]
+        [CustomerEventStream]
+        [EventStore]
+        [EventProcessor]
+        [SagaOrchestrator]
+    end
+
+    subgraph DataLayer["Data Layer"]
+        [(ProductDB)]
+        [(OrderDB)]
+        [(CustomerDB)]
+        [(InventoryDB)]
+        [(LoyaltyDB)]
+        [(PromotionDB)]
+        [(EventStoreDB)]
+        [(AnalyticsDB)]
+        [(RedisCache)]
+        [(SessionCache)]
+        [(InventoryCache)]
+    end
+
+    subgraph ExternalSystems["External Systems"]
+        [/PaymentGateway/]
+        [/ShippingProvider/]
+        [/EmailService/]
+        [/SMSService/]
+        [/MarketingAutomation/]
+        [/WarehouseSystem/]
+        [/ThirdPartyFulfillment/]
+    end
+
+    subgraph Observability["Observability Layer"]
+        [MetricsCollector]
+        [LogAggregator]
+        [TracingService]
+        [AlertManager]
+        [HealthChecker]
+        [(MetricsDB)]
+        [(LogStore)]
+        ((ObservabilityDashboard))
+    end
+
+    %% Presentation to Security
+    ((WebStorefront)) --> ([APIGateway])
+    ((MobileApp)) --> ([APIGateway])
+    ((IoTDevice)) --> ([APIGateway])
+    ((AdminUI)) --> ([APIGateway])
+    
+    ([APIGateway]) --> ([GraphQLEndpoint])
+    ([APIGateway]) --> ([RESTEndpoint])
+    ([APIGateway]) --> [AuthService]
+    
+    ([GraphQLEndpoint]) --> {ValidateToken}
+    ([RESTEndpoint]) --> {ValidateToken}
+    {ValidateToken} --> [TokenValidator]
+    [TokenValidator] --> [(SessionStore)]
+    
+    {ValidateToken} -->|Valid| [RateLimiter]
+    {ValidateToken} -->|Invalid| ([AuthController])
+    [RateLimiter] --> {CheckPermissions}
+    
+    %% API Controllers
+    {CheckPermissions} -->|Authorized| ([ProductController])
+    {CheckPermissions} -->|Authorized| ([OrderController])
+    {CheckPermissions} -->|Authorized| ([CartController])
+    {CheckPermissions} -->|Authorized| ([InventoryController])
+    {CheckPermissions} -->|Authorized| ([LoyaltyController])
+    {CheckPermissions} -->|Authorized| ([PromotionController])
+    
+    %% Controllers to Services
+    ([ProductController]) --> [ProductCatalogService]
+    ([OrderController]) --> [OrderManagementService]
+    ([CartController]) --> [CartService]
+    ([InventoryController]) --> [InventoryOrchestrationService]
+    ([LoyaltyController]) --> [LoyaltyEngine]
+    ([PromotionController]) --> [PromotionEngine]
+    
+    %% Product Catalog Flow
+    [ProductCatalogService] --> [(ProductDB)]
+    [ProductCatalogService] --> [(RedisCache)]
+    [ProductCatalogService] --> [PersonalizationService]
+    [ProductCatalogService] --> [EventBroker]
+    
+    %% Personalization Flow
+    [PersonalizationService] --> [RecommendationService]
+    [PersonalizationService] --> [CustomerDataService]
+    [RecommendationService] --> [MLModelService]
+    [MLModelService] --> {SelectModel}
+    {SelectModel} -->|Realtime| [RealtimeInferenceEngine]
+    {SelectModel} -->|Batch| [BatchProcessingEngine]
+    [RealtimeInferenceEngine] --> [FeatureStore]
+    [BatchProcessingEngine] --> [FeatureStore]
+    [FeatureStore] --> [(AnalyticsDB)]
+    [MLModelService] --> [ModelRegistry]
+    
+    %% Customer Data Platform
+    [CustomerDataService] --> [(CustomerDB)]
+    [CustomerDataService] --> [EventBroker]
+    [CustomerDataService] --> [(RedisCache)]
+    
+    %% Cart & Checkout Flow

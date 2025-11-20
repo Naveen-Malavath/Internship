@@ -238,7 +238,7 @@
                     class="workspace__action"
                     [class.workspace__action--primary]="currentDiagramType === 'hld'"
                     [class.workspace__action--outline]="currentDiagramType !== 'hld'"
-                    (click)="loadPredefinedDiagram('hld'); currentDiagramType = 'hld'"
+                    (click)="onDiagramTypeChange('hld')"
                   >
                     HLD
                   </button>
@@ -247,7 +247,7 @@
                     class="workspace__action"
                     [class.workspace__action--primary]="currentDiagramType === 'lld'"
                     [class.workspace__action--outline]="currentDiagramType !== 'lld'"
-                    (click)="loadPredefinedDiagram('lld'); currentDiagramType = 'lld'"
+                    (click)="onDiagramTypeChange('lld')"
                   >
                     LLD
                   </button>
@@ -256,7 +256,7 @@
                     class="workspace__action"
                     [class.workspace__action--primary]="currentDiagramType === 'database'"
                     [class.workspace__action--outline]="currentDiagramType !== 'database'"
-                    (click)="loadPredefinedDiagram('database'); currentDiagramType = 'database'"
+                    (click)="onDiagramTypeChange('database')"
                   >
                     DBD
                   </button>
@@ -318,8 +318,8 @@
               <div class="preview-scroll w-full h-full overflow-auto">
                 <div class="preview-canvas" [class.preview-canvas--fit]="previewFitToContainer" #mermaidContainer></div>
               </div>
-              <p *ngIf="!mermaidInput.trim()" class="preview-placeholder">
-                Enter Mermaid code to render a diagram.
+              <p *ngIf="shouldShowNoDiagramMessage()" class="preview-placeholder">
+                No diagram available.
               </p>
             </div>
 

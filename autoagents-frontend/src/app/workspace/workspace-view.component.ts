@@ -17,6 +17,9 @@ import mermaid from 'mermaid';
 
 import { AgentFeatureSpec, AgentStorySpec, AgentVisualizationResponse, ProjectWizardSubmission } from '../types';
 import { DiagramDataService } from '../diagram-data.service';
+import { MermaidStyleService, MermaidStyleConfig } from '../services/mermaid-style.service';
+import { DesignService, DesignResponse } from '../services/design.service';
+import { inject } from '@angular/core';
 
 @Component({
   selector: 'workspace-view',
@@ -31,8 +34,11 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   @Input() stories: AgentStorySpec[] = [];
   @Input() visualization: AgentVisualizationResponse | null = null;
   @Input() project: ProjectWizardSubmission | null = null;
+  @Input() projectId: string | null = null; // Project ID for fetching designs from backend
   @Input() mermaidEditorContent = '';
   @Input() mermaidSource: string | null = null;
+  @Input() mermaidStyleConfig: MermaidStyleConfig | null = null;
+  @Input() designGenerationKey: number | null = null; // Key to track design regenerations and clear cache
   @Input() mermaidSaving = false;
   @Input() mermaidUpdatedAt: string | null = null;
   @Input() mermaidSaveMessage: string | null = null;
@@ -49,11 +55,16 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   @ViewChild('mermaidContainer') private mermaidContainer?: ElementRef<HTMLDivElement>;
   @ViewChild('mermaidFileInput') private mermaidFileInput?: ElementRef<HTMLInputElement>;
 
+  private readonly designService = inject(DesignService);
+  private cachedDesigns: DesignResponse | null = null;
+  private isLoadingDesigns = false;
+
   protected mermaidInput = '';
   protected mermaidError: string | null = null;
   protected visualizationData: AgentVisualizationResponse | null = null;
   protected isDotCopied = false;
   protected isMermaidCopied = false;
+  private lastValidMermaidSource: string | null = null;
   protected previewTheme: 'dark' | 'light' = 'dark';
   protected currentDiagramType: 'hld' | 'lld' | 'database' = 'hld';
   protected isDiagramDropdownOpen = false;
@@ -80,18 +91,63 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   private readonly previewReadableScaleFloor = 0.65;
 
   ngOnChanges(changes: SimpleChanges): void {
-    // Handle mermaidSource changes - highest priority as it's the primary way parent updates content
-    if (changes['mermaidSource']) {
-      const newSource = changes['mermaidSource'].currentValue;
-      if (newSource !== null && typeof newSource === 'string') {
-        this.setMermaidInput(newSource, false);
-      } else if (newSource === null && this.mermaidInput) {
-        // Clear editor if source becomes null
-        this.setMermaidInput('', false);
+    // Handle projectId changes - clear cache when project changes
+    if (changes['projectId']) {
+      const newProjectId = changes['projectId'].currentValue;
+      const oldProjectId = changes['projectId'].previousValue;
+      if (newProjectId !== oldProjectId) {
+        console.log(`[workspace-view] Project ID changed from ${oldProjectId} to ${newProjectId}, clearing cache`);
+        this.clearDesignCache();
+        // If we have a projectId, try to load designs
+        if (newProjectId && this.currentDiagramType) {
+          this.loadDesignFromBackend(this.currentDiagramType);
+        }
       }
     }
 
-    if (changes['stories'] && !this.mermaidEditorContent && !this.mermaidSource && !this.mermaidInput) {
+    // Handle designGenerationKey changes - clear cache when designs are regenerated
+    if (changes['designGenerationKey']) {
+      const newKey = changes['designGenerationKey'].currentValue;
+      const oldKey = changes['designGenerationKey'].previousValue;
+      if (newKey !== null && newKey !== oldKey) {
+        console.log(`[workspace-view] Design generation key changed from ${oldKey} to ${newKey}, clearing cache for fresh data`);
+        this.clearDesignCache();
+        // If we have a projectId, reload current diagram type from backend
+        if (this.projectId && this.currentDiagramType) {
+          this.loadDesignFromBackend(this.currentDiagramType);
+        }
+      }
+    }
+
+    // If mermaidSource changes and we have a projectId, it might be from a design regeneration
+    // Clear cache to force fresh fetch on next diagram type change
+    if (changes['mermaidSource'] && this.projectId) {
+      const newSource = changes['mermaidSource'].currentValue;
+      if (newSource && newSource.trim()) {
+        console.log(`[workspace-view] mermaidSource updated, clearing cache to ensure fresh data`);
+        this.clearDesignCache();
+      }
+    }
+
+    // Handle mermaidSource changes - highest priority as it's the primary way parent updates content
+    if (changes['mermaidSource']) {
+      const newSource = changes['mermaidSource'].currentValue;
+      // Only update if we have a non-empty string
+      if (newSource !== null && typeof newSource === 'string' && newSource.trim() !== '') {
+        // Store as last valid source and update editor
+        this.lastValidMermaidSource = newSource.trim();
+        this.setMermaidInput(newSource, false);
+      } else {
+        // If newSource is null/empty/undefined, restore from lastValidMermaidSource if available
+        // This prevents showing "No data" when we have a valid diagram stored
+        if (this.lastValidMermaidSource && this.isDefaultNoDataDiagram(this.mermaidInput)) {
+          this.setMermaidInput(this.lastValidMermaidSource, false);
+        }
+        // Otherwise, keep showing lastValidMermaidSource in renderMermaid()
+      }
+    }
+
+    if (changes['stories'] && !this.mermaidEditorContent && !this.mermaidSource && !this.mermaidInput && !this.lastValidMermaidSource) {
       this.generateDefaultMermaid();
     }
 
@@ -102,17 +158,35 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       }
     }
 
-    if (changes['mermaidEditorContent'] && typeof changes['mermaidEditorContent'].currentValue === 'string' && !this.mermaidSource) {
-      this.setMermaidInput(changes['mermaidEditorContent'].currentValue, false);
+    if (changes['mermaidEditorContent']) {
+      const newContent = changes['mermaidEditorContent'].currentValue;
+      // Always update if we have a new non-empty string, regardless of mermaidSource
+      // This ensures live preview updates when diagram type changes
+      if (typeof newContent === 'string' && newContent.trim() !== '') {
+        // Only skip if mermaidSource is explicitly set (higher priority)
+        // Otherwise update from mermaidEditorContent
+        if (!this.mermaidSource) {
+          this.setMermaidInput(newContent, false);
+        } else if (this.mermaidSource === newContent.trim()) {
+          // If mermaidSource matches, still update to ensure rendering
+          this.setMermaidInput(newContent, false);
+        }
+      }
     }
   }
 
   ngAfterViewInit(): void {
     // If mermaidSource is provided initially, use it
-    if (this.mermaidSource !== null && typeof this.mermaidSource === 'string' && !this.mermaidInput) {
+    if (this.mermaidSource !== null && typeof this.mermaidSource === 'string' && this.mermaidSource.trim() !== '' && !this.mermaidInput) {
+      this.lastValidMermaidSource = this.mermaidSource.trim();
       this.setMermaidInput(this.mermaidSource, false);
+    } else if (this.projectId && !this.mermaidInput && !this.mermaidEditorContent && !this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
+      // If we have a projectId, try to load designs from backend first
+      console.log(`[workspace-view] Initial load with projectId, fetching designs from backend`);
+      this.currentDiagramType = 'hld';
+      this.loadDesignFromBackend('hld');
     } else if (!this.mermaidInput && !this.mermaidEditorContent && !this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
-      // Load HLD diagram by default if no mermaid content exists
+      // Load HLD diagram by default if no mermaid content exists (fallback for non-project contexts)
       this.currentDiagramType = 'hld';
       this.loadPredefinedDiagram('hld');
     } else {
@@ -259,8 +333,15 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       this.currentDiagramType = type;
       this.isDiagramDropdownOpen = false;
       
-      // Load predefined diagram based on type
-      this.loadPredefinedDiagram(type);
+      // If we have a projectId, fetch designs from backend instead of using static templates
+      if (this.projectId) {
+        console.log(`[workspace-view] Diagram type changed to ${type}, fetching from backend for project ${this.projectId}`);
+        this.loadDesignFromBackend(type);
+      } else {
+        console.log(`[workspace-view] No projectId available, using static template for ${type}`);
+        // Load predefined diagram based on type (fallback for non-project contexts)
+        this.loadPredefinedDiagram(type);
+      }
       
       // Emit event to parent to trigger diagram regeneration
       this.diagramTypeChange.emit(type);
@@ -272,6 +353,120 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     this.regenerateDiagram.emit(this.currentDiagramType);
   }
 
+  /**
+   * Load design from backend for the given diagram type.
+   * Uses cached designs if available, otherwise fetches from API.
+   */
+  private loadDesignFromBackend(type: 'hld' | 'lld' | 'database'): void {
+    if (!this.projectId || this.isLoadingDesigns) {
+      console.warn(`[workspace-view] Cannot load design: projectId=${this.projectId}, isLoading=${this.isLoadingDesigns}`);
+      return;
+    }
+
+    // If we have cached designs, use them immediately
+    if (this.cachedDesigns) {
+      console.log(`[workspace-view] Using cached designs for type ${type}`);
+      this.applyDesignFromCache(type);
+      return;
+    }
+
+    // Otherwise, fetch from backend
+    console.log(`[workspace-view] Fetching designs from backend for project ${this.projectId}`);
+    this.isLoadingDesigns = true;
+    
+    this.designService.getLatestDesigns(this.projectId).subscribe({
+      next: (designs) => {
+        console.log(`[workspace-view] Successfully fetched designs:`, {
+          hasHLD: !!designs.hld_mermaid,
+          hasLLD: !!designs.lld_mermaid,
+          hasDBD: !!designs.dbd_mermaid,
+          hldLength: designs.hld_mermaid?.length || 0,
+          lldLength: designs.lld_mermaid?.length || 0,
+          dbdLength: designs.dbd_mermaid?.length || 0,
+        });
+        
+        // Cache the designs
+        this.cachedDesigns = designs;
+        
+        // Apply the design for the requested type
+        this.applyDesignFromCache(type);
+        
+        // Update style config if available
+        if (designs.style_config) {
+          // Note: style_config is passed via @Input, so parent should handle this
+          console.log(`[workspace-view] Style config available:`, designs.style_config);
+        }
+        
+        this.isLoadingDesigns = false;
+      },
+      error: (err) => {
+        console.error(`[workspace-view] Failed to fetch designs:`, err);
+        this.isLoadingDesigns = false;
+        
+        // Fallback to static template on error
+        console.log(`[workspace-view] Falling back to static template for ${type}`);
+        this.loadPredefinedDiagram(type);
+      },
+    });
+  }
+
+  /**
+   * Apply design from cache for the given diagram type.
+   */
+  private applyDesignFromCache(type: 'hld' | 'lld' | 'database'): void {
+    if (!this.cachedDesigns) {
+      console.warn(`[workspace-view] No cached designs available`);
+      return;
+    }
+
+    let diagramContent = '';
+    const typeUpper = type.toUpperCase() as 'HLD' | 'LLD' | 'DBD';
+    
+    switch (typeUpper) {
+      case 'HLD':
+        diagramContent = this.cachedDesigns.hld_mermaid || '';
+        break;
+      case 'LLD':
+        diagramContent = this.cachedDesigns.lld_mermaid || '';
+        break;
+      case 'DBD':
+        diagramContent = this.cachedDesigns.dbd_mermaid || '';
+        break;
+    }
+
+    if (diagramContent && diagramContent.trim()) {
+      console.log(`[workspace-view] Applying ${type} design (${diagramContent.length} chars)`);
+      // Validate that the diagram contains actual content, not just whitespace
+      const trimmed = diagramContent.trim();
+      if (trimmed.length < 10) {
+        console.warn(`[workspace-view] ${type} design seems too short (${trimmed.length} chars), may be invalid`);
+      }
+      this.setMermaidInput(diagramContent, true);
+      this.previewFitToContainer = true;
+      this.previewScale = 1;
+      this.mermaidError = null;
+      
+      const timeout = type === 'lld' ? 350 : 200;
+      setTimeout(() => {
+        this.applyPreviewScale();
+      }, timeout);
+    } else {
+      console.warn(`[workspace-view] No ${type} design available in cache, using static template`);
+      this.loadPredefinedDiagram(type);
+    }
+  }
+
+  /**
+   * Clear the cached designs (useful when designs are regenerated).
+   */
+  private clearDesignCache(): void {
+    console.log(`[workspace-view] Clearing design cache`);
+    this.cachedDesigns = null;
+  }
+
+  /**
+   * Load predefined static diagram (fallback when no backend designs available).
+   */
   protected loadPredefinedDiagram(type: 'hld' | 'lld' | 'database'): void {
     let diagramContent = '';
     
@@ -289,6 +484,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     }
     
     if (diagramContent) {
+      console.log(`[workspace-view] Using static template for ${type}`);
       this.setMermaidInput(diagramContent, true);
       // Reset zoom to show full diagram
       this.previewFitToContainer = true;
@@ -323,6 +519,27 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
 
   protected isDiagramTypeActive(type: string): boolean {
     return this.currentDiagramType === type;
+  }
+
+  protected shouldShowNoDiagramMessage(): boolean {
+    // Only show "No diagram available" if:
+    // 1. lastValidMermaidSource is null (never had a valid diagram)
+    // 2. mermaidInput is empty or is the default "No data" diagram
+    // 3. Not currently loading (mermaidSaving is false)
+    const isEmptyOrDefault = !this.mermaidInput.trim() || this.isDefaultNoDataDiagram(this.mermaidInput);
+    return this.lastValidMermaidSource === null && isEmptyOrDefault && !this.mermaidSaving;
+  }
+
+  /**
+   * Check if the given mermaid string is the default "No data" diagram.
+   */
+  private isDefaultNoDataDiagram(mermaid: string): boolean {
+    if (!mermaid) return false;
+    const trimmed = mermaid.trim().toLowerCase();
+    // Check for common "No data" patterns
+    return trimmed.includes('no data') || 
+           (trimmed.includes('graph') && trimmed.includes('a["no data"]')) ||
+           trimmed === 'graph td\na["no data"]';
   }
 
   @HostListener('document:click', ['$event'])
@@ -415,7 +632,18 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   }
 
   private setMermaidInput(value: string, emitEvent: boolean): void {
-    this.mermaidInput = this.sanitizeMermaidDefinition(value);
+    let sanitized = this.sanitizeMermaidDefinition(value);
+    
+    // Fix common Mermaid syntax issues before rendering
+    sanitized = this.fixMermaidSyntax(sanitized);
+    
+    this.mermaidInput = sanitized;
+    
+    // Update lastValidMermaidSource if we have a non-empty value
+    if (sanitized.trim() !== '') {
+      this.lastValidMermaidSource = sanitized.trim();
+    }
+    
     this.updateLineNumbers();
     this.lineNumberOffset = 0;
     if (emitEvent) {
@@ -425,48 +653,227 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     void this.renderMermaid();
   }
 
+  /**
+   * Fix common Mermaid syntax issues in generated diagrams.
+   * Handles malformed node shapes, missing brackets, and subgraph formatting.
+   */
+  private fixMermaidSyntax(mermaid: string): string {
+    if (!mermaid || !mermaid.trim()) {
+      return mermaid;
+    }
+
+    const lines = mermaid.split('\n');
+    const fixedLines: string[] = [];
+    let inSubgraph = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      const stripped = line.trim();
+
+      // Skip empty lines and comments
+      if (!stripped || stripped.startsWith('%%')) {
+        fixedLines.push(line);
+        continue;
+      }
+
+      // Track subgraph state
+      if (stripped.startsWith('subgraph')) {
+        inSubgraph = true;
+        fixedLines.push(line);
+        continue;
+      } else if (stripped === 'end') {
+        inSubgraph = false;
+        fixedLines.push(line);
+        continue;
+      }
+
+      // Fix malformed node shapes - must be complete
+      // Fix incomplete stadium: (["text -> (["text"])
+      if (stripped.includes('(["') && !stripped.match(/\(\["[^"]*"\]\)/)) {
+        const match = stripped.match(/\(\["([^"]*?)(?:"|$)/);
+        if (match) {
+          const text = match[1] || 'text';
+          // Replace the incomplete pattern with complete one
+          line = line.replace(/\(\["[^"]*?(?:"\]\)|$)/, `(["${text}"])`);
+        }
+      }
+
+      // Fix incomplete circle: ((text -> ((text))
+      // Must match complete pattern: ((text))
+      if (stripped.includes('((') && !stripped.match(/\(\([^)]+\)\)/)) {
+        const match = stripped.match(/\(\(([^)]*?)(?:\)|$)/);
+        if (match) {
+          const text = match[1] || 'text';
+          // Replace incomplete pattern
+          line = line.replace(/\(\([^)]*?(?:\)\)|$)/, `((${text}))`);
+        }
+      }
+
+      // Fix nodes inside subgraphs - ensure proper formatting
+      if (inSubgraph && stripped) {
+        const isDirection = stripped.startsWith('direction');
+        
+        // Check if this is a standalone node definition (not a connection)
+        // Pattern: nodeId((text)) or nodeId(["text"]) or nodeId["text"] or nodeId{text}
+        // Also handle cases where there might be extra spaces or formatting issues
+        const standaloneNodePattern = /^\s*(\w+)\s*(\(\([^)]+\)\)|\(\["[^"]+"\]\)|\[[^\]]+\]|\{[^}]+\})\s*$/;
+        const isStandaloneNode = standaloneNodePattern.test(stripped);
+        
+        // Also check for nodes that might be on the same line as subgraph label
+        // Pattern: "subgraph label"] nodeId((text)) - this is invalid
+        const nodeAfterSubgraphLabel = /\]\s+(\w+)\s*(\(\(|\(\[|\[|\{)/.test(line);
+        
+        // Check if this is a connection line
+        const isConnection = stripped.includes('-->') || stripped.includes('->') || stripped.includes('==>') || stripped.includes('-.->');
+        
+        // If node appears after subgraph label on same line, split it
+        if (nodeAfterSubgraphLabel) {
+          const parts = line.split(/\]\s+/);
+          if (parts.length > 1) {
+            fixedLines.push(parts[0] + ']');
+            line = '    ' + parts[1].trim();
+          }
+        }
+        
+        // If it's a standalone node in a subgraph, ensure proper formatting
+        if (isStandaloneNode) {
+          const match = stripped.match(standaloneNodePattern);
+          if (match) {
+            const nodeId = match[1];
+            const nodeShape = match[2];
+            // Ensure proper indentation and formatting - must be on its own line
+            line = `    ${nodeId}${nodeShape}`;
+          }
+        } else if (isConnection && !line.startsWith('    ') && !isDirection) {
+          // Connections in subgraphs also need indentation
+          line = '    ' + line.trimStart();
+        } else if (!isConnection && !isStandaloneNode && !isDirection && !line.startsWith('    ')) {
+          // Other content in subgraphs (like node definitions) need indentation
+          // Match patterns like: nodeId((text)) or nodeId["text"] at start of line
+          if (stripped.match(/^\w+\s*[\[\(]/)) {
+            line = '    ' + line.trimStart();
+          }
+        }
+      }
+
+      // Ensure proper spacing around arrows (but preserve existing spacing)
+      line = line.replace(/(\w+)(->|-->|==>|-.->)(\w+)/g, '$1 $2 $3');
+
+      fixedLines.push(line);
+    }
+
+    let fixedMermaid = fixedLines.join('\n');
+    
+    // Final pass: Fix any remaining issues with nodes in subgraphs
+    // Ensure nodes are on separate lines and properly indented
+    const finalLines = fixedMermaid.split('\n');
+    const finalFixed: string[] = [];
+    let inSubgraphFinal = false;
+    
+    for (let i = 0; i < finalLines.length; i++) {
+      let line = finalLines[i];
+      const stripped = line.trim();
+      
+      if (stripped.startsWith('subgraph')) {
+        inSubgraphFinal = true;
+        finalFixed.push(line);
+        continue;
+      } else if (stripped === 'end') {
+        inSubgraphFinal = false;
+        finalFixed.push(line);
+        continue;
+      }
+      
+      if (inSubgraphFinal && stripped) {
+        // If line contains a node definition but also other content, try to split it
+        // Pattern: "text"] nodeId((text)) - split at the ]
+        if (stripped.includes(']') && /\]\s+\w+\s*[\[\(]/.test(stripped)) {
+          const splitIndex = stripped.indexOf(']') + 1;
+          const before = stripped.substring(0, splitIndex);
+          const after = stripped.substring(splitIndex).trim();
+          finalFixed.push(before);
+          if (after) {
+            finalFixed.push('    ' + after);
+          }
+          continue;
+        }
+        
+        // Ensure standalone nodes in subgraphs are properly indented
+        if (stripped.match(/^\w+\s*(\(\(|\(\[|\[|\{)/) && !line.startsWith('    ')) {
+          line = '    ' + stripped;
+        }
+      }
+      
+      finalFixed.push(line);
+    }
+    
+    return finalFixed.join('\n');
+  }
+
   async renderMermaid(): Promise<void> {
     if (!this.mermaidContainer) {
+      return;
+    }
+
+    // Use lastValidMermaidSource if mermaidInput is empty or is the default "No data" diagram
+    let sourceToRender = this.mermaidInput.trim();
+    
+    // If mermaidInput is empty or is the "No data" diagram, use lastValidMermaidSource instead
+    if (!sourceToRender || this.isDefaultNoDataDiagram(sourceToRender)) {
+      sourceToRender = this.lastValidMermaidSource || '';
+    }
+    
+    // Only show "No diagram available" if:
+    // 1. lastValidMermaidSource is null (never had a valid diagram)
+    // 2. Not currently loading (mermaidSaving is false)
+    if (!sourceToRender) {
+      if (this.lastValidMermaidSource === null && !this.mermaidSaving) {
+        this.mermaidContainer.nativeElement.innerHTML = '<p class="mermaid-placeholder">No diagram available.</p>';
+      }
+      // If we're loading or have a lastValidMermaidSource, don't show placeholder
+      // (will keep showing the last rendered diagram)
+      this.mermaidError = null;
       return;
     }
 
     // Configure Mermaid with better defaults for larger diagrams
     // Enhanced sizing for LLD diagrams
     const isLLD = this.currentDiagramType === 'lld' || 
-                  this.mermaidInput.includes('Feature Components') || 
-                  this.mermaidInput.includes('Story Components');
-    const baseFontSize = isLLD ? '18px' : '16px';
+                  sourceToRender.includes('Feature Components') || 
+                  sourceToRender.includes('Story Components');
     const padding = isLLD ? 30 : 20;
     const nodeSpacing = isLLD ? 60 : 50;
     const rankSpacing = isLLD ? 80 : 60;
     
-    mermaid.initialize({ 
-      startOnLoad: false, 
-      theme: this.previewTheme,
-      themeVariables: {
-        fontSize: baseFontSize,
-        fontFamily: 'Arial, sans-serif',
-        primaryColor: '#3b82f6',
-        primaryTextColor: '#fff',
-        primaryBorderColor: '#1e40af',
-        lineColor: '#64748b',
-        secondaryColor: '#10b981',
-        tertiaryColor: '#f59e0b',
-      },
-      flowchart: {
-        useMaxWidth: false,
-        htmlLabels: true,
-        curve: 'basis',
-        padding: padding,
-        nodeSpacing: nodeSpacing,
-        rankSpacing: rankSpacing,
+    // Generate Mermaid config from style configuration (if available)
+    // Use dynamic styles from backend, or fallback to default
+    const mermaidConfig = MermaidStyleService.generateMermaidConfig(
+      this.mermaidStyleConfig,
+      {
+        isLLD,
+        padding,
+        nodeSpacing,
+        rankSpacing,
       }
-    } as any);
+    );
+    
+    // Override theme with previewTheme if user has manually selected it
+    // But prefer style config theme if available
+    if (this.mermaidStyleConfig) {
+      mermaidConfig.theme = this.mermaidStyleConfig.theme || this.previewTheme;
+    } else {
+      mermaidConfig.theme = this.previewTheme;
+    }
+    
+    mermaid.initialize(mermaidConfig as any);
     this.mermaidInitialised = true;
 
-    const definition = this.mermaidInput.replace(/^\uFEFF/, '').trim();
+    const definition = sourceToRender.replace(/^\uFEFF/, '').trim();
     if (!definition) {
-      this.mermaidContainer.nativeElement.innerHTML = '<p class="mermaid-placeholder">Enter Mermaid code to render a diagram.</p>';
+      // This shouldn't happen due to check above, but handle it gracefully
+      if (this.lastValidMermaidSource === null && !this.mermaidSaving) {
+        this.mermaidContainer.nativeElement.innerHTML = '<p class="mermaid-placeholder">No diagram available.</p>';
+      }
       this.mermaidError = null;
       return;
     }
@@ -481,6 +888,9 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       wrapper.innerHTML = svg;
       this.mermaidContainer.nativeElement.innerHTML = '';
       this.mermaidContainer.nativeElement.appendChild(wrapper);
+      
+      // Store as last valid source after successful render
+      this.lastValidMermaidSource = definition;
       
       // Add data attribute for LLD diagrams to help with styling
       if (this.currentDiagramType === 'lld') {

@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 import anthropic
 from anthropic import APIError
+from bson import ObjectId
 from fastapi import HTTPException
 
 from .claude_client import (
@@ -88,6 +89,11 @@ class Agent2Service:
             max_tokens = 4000
             logger.info(f"[agent2] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.35")
             logger.debug(f"[agent2] User prompt length: {len(user_prompt)} chars")
+            logger.debug(f"[agent2] User prompt preview (first 300): {user_prompt[:300]}")
+            
+            import time
+            api_start_time = time.time()
+            
             response = await client.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
@@ -95,11 +101,14 @@ class Agent2Service:
                 system="Respond ONLY with valid JSON as specified. Be concise.",
                 messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
             )
+            
+            api_elapsed = time.time() - api_start_time
             usage = getattr(response, "usage", None)
             if usage:
-                logger.info(f"[agent2] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+                logger.info(f"[agent2] API call successful | elapsed={api_elapsed:.2f}s | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+                logger.debug(f"[agent2] Token usage: input={usage.input_tokens}, output={usage.output_tokens}, total={usage.input_tokens + usage.output_tokens}")
             else:
-                logger.info("[agent2] API call successful")
+                logger.info(f"[agent2] API call successful | elapsed={api_elapsed:.2f}s")
         except APIError as exc:
             error_type = getattr(exc, 'type', 'unknown')
             error_status = getattr(exc, 'status_code', None)
@@ -112,14 +121,20 @@ class Agent2Service:
         logger.debug("[agent2] Extracting and parsing response")
         try:
             response_text = extract_text(response)
+            logger.debug(f"[agent2] Extracted response text: {len(response_text)} chars | preview: {response_text[:200]}...")
             payload = coerce_json(response_text)
+            logger.debug(f"[agent2] Parsed JSON payload: type={type(payload)} | keys={list(payload.keys()) if isinstance(payload, dict) else 'N/A'}")
             stories = self._extract_story_payload(payload)
+            logger.debug(f"[agent2] Extracted {len(stories)} stories from payload")
+            if stories:
+                logger.debug(f"[agent2] First story sample: {stories[0] if stories else 'N/A'}")
         except RuntimeError as exc:
             logger.error(f"[agent2] Failed to parse response: {exc}", exc_info=True)
+            logger.debug(f"[agent2] Response text that failed: {response_text[:500] if 'response_text' in locals() else 'N/A'}")
             # Try to use fallback instead of failing completely
             logger.warning("[agent2] Using fallback story generation due to parsing error")
             stories = self._fallback_story_payload(normalized_features)
-        logger.debug(f"[agent2] Extracted {len(stories)} stories from payload")
+        logger.debug(f"[agent2] Total stories after extraction: {len(stories)}")
         if not stories:
             logger.warning("[agent2] Agent-2 returned no stories. Falling back to heuristic generation.")
             stories = self._fallback_story_payload(normalized_features)
@@ -128,10 +143,14 @@ class Agent2Service:
         features_by_title = {feature["title"].strip().lower(): feature for feature in normalized_features}
 
         cleaned: List[Dict] = []
-        for story in stories:
+        logger.debug(f"[agent2] Processing {len(stories)} stories for cleaning and feature matching")
+        for idx, story in enumerate(stories):
+            logger.debug(f"[agent2] Processing story {idx+1}/{len(stories)}: {story.get('story_text', 'N/A')[:50]}...")
             feature_data = self._match_feature(story, features_by_id, features_by_title)
             if feature_data is None:
+                logger.warning(f"[agent2] Story {idx+1} could not be matched to any feature, skipping")
                 continue
+            logger.debug(f"[agent2] Story {idx+1} matched to feature: {feature_data.get('title', 'N/A')}")
 
             story_text = (
                 story.get("story_text")
@@ -358,13 +377,11 @@ class Agent2Service:
 
 
 async def generate_stories_for_project(project_id: str, db):
-    """Generate and persist user stories for all features in a project."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="Claude API key not configured")
-
-    client = anthropic.Anthropic(api_key=api_key)
-
+    """Generate and persist user stories for all features in a project.
+    
+    This function uses Agent2Service to batch process all features in a single API call
+    instead of making sequential calls per feature, which is much faster.
+    """
     features_cursor = db["features"].find({"project_id": project_id}).sort("order_index", 1)
     features = await features_cursor.to_list(length=None)
     if not features:
@@ -372,73 +389,66 @@ async def generate_stories_for_project(project_id: str, db):
             status_code=400, detail="No features found for this project. Run Agent-1 first."
         )
 
-    created_stories: List[Dict[str, Any]] = []
+    # Get project prompt for context
+    project = await db["projects"].find_one({"_id": ObjectId(project_id)})
+    project_prompt = project.get("prompt") or project.get("description") or "" if project else ""
 
-    for feature in features:
-        feature_text = feature.get("feature_text") or ""
-        feature_id_str = str(feature.get("_id")) if feature.get("_id") is not None else ""
-
-        prompt = (
-            "You are an expert Agile business analyst.\n\n"
-            f"Feature: {feature_text}\n\n"
-            "Task:\n"
-            "Write 2–3 user stories in this exact format:\n"
-            '"As a <type of user>, I want <goal> so that <reason>."\n\n'
-            "For each user story, write 2–3 acceptance criteria as bullet points.\n\n"
-            "Return the result as plain text, with a blank line between each user story."
-        )
-
-        # Use debug model if available, otherwise default
-        model = os.getenv("CLAUDE_MODEL_DEBUG") or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
-        logger.debug(f"[agent2] generate_stories_for_project using model: {model} for feature: {feature_id_str}")
-        
-        try:
-            response = await client.messages.create(
-                model=model,
-                max_tokens=1000,
-                temperature=0.4,
-                messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
-            )
-            usage = getattr(response, "usage", None)
-            if usage:
-                logger.debug(f"[agent2] generate_stories_for_project API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
-        except anthropic.APIError as exc:
-            error_type = getattr(exc, 'type', 'unknown')
-            error_status = getattr(exc, 'status_code', None)
-            logger.error(f"[agent2] generate_stories_for_project APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
-            raise HTTPException(
-                status_code=500, detail="Claude API error while generating user stories"
-            ) from exc
-
-        response_text_parts: List[str] = []
-        for block in getattr(response, "content", []):
-            if getattr(block, "type", None) == "text" and getattr(block, "text", None):
-                response_text_parts.append(block.text)
-        response_text = "\n".join(response_text_parts).strip()
-        if not response_text:
-            continue
-
-        story_blocks = [block.strip() for block in response_text.split("\n\n") if block.strip()]
-
-        for block in story_blocks:
-            lines = [line.strip() for line in block.splitlines() if line.strip()]
-            if not lines:
-                continue
-
-            story_text = lines[0]
-            acceptance_criteria = "\n".join(lines[1:]) if len(lines) > 1 else ""
-
-            document = {
-                "project_id": project_id,
-                "feature_id": feature_id_str,
-                "story_text": story_text,
-                "acceptance_criteria": acceptance_criteria,
-                "created_at": datetime.datetime.utcnow(),
+    # Use Agent2Service which batches all features into a single API call
+    logger.info(f"[agent2] generate_stories_for_project: Using Agent2Service to batch process {len(features)} features")
+    logger.debug(f"[agent2] generate_stories_for_project: Project prompt length: {len(project_prompt)} chars")
+    agent2_service = Agent2Service()
+    
+    try:
+        # Convert features to the format expected by Agent2Service
+        feature_list = []
+        for idx, feature in enumerate(features):
+            feature_dict = {
+                "id": str(feature.get("_id", "")),
+                "title": feature.get("feature_text") or feature.get("title") or "Feature",
+                "description": feature.get("description") or feature.get("feature_text") or "",
             }
+            feature_list.append(feature_dict)
+            logger.debug(f"[agent2] generate_stories_for_project: Feature {idx+1}: id={feature_dict['id']}, title={feature_dict['title'][:50]}")
+        
+        logger.info(f"[agent2] generate_stories_for_project: Starting batch API call for {len(feature_list)} features")
+        import time
+        start_time = time.time()
+        
+        # Single API call for all features - much faster!
+        generated_stories = await agent2_service.generate_stories(feature_list, original_prompt=project_prompt)
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"[agent2] generate_stories_for_project: Generated {len(generated_stories)} stories in {elapsed_time:.2f}s (single batch)")
+        logger.debug(f"[agent2] generate_stories_for_project: Average time per feature: {elapsed_time/len(features):.2f}s")
+    except Exception as exc:
+        logger.error(f"[agent2] generate_stories_for_project: Failed to generate stories: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate user stories: {str(exc)}"
+        ) from exc
 
-            insert_result = await db["stories"].insert_one(document)
-            stored_doc = {**document, "_id": str(insert_result.inserted_id)}
-            created_stories.append(stored_doc)
+    # Delete existing stories for this project
+    await db["stories"].delete_many({"project_id": project_id})
 
+    # Insert new stories
+    created_stories: List[Dict[str, Any]] = []
+    now = datetime.datetime.utcnow()
+    
+    for story in generated_stories:
+        # Map feature_id back to MongoDB ObjectId string
+        feature_id_str = story.get("feature_id") or ""
+        
+        document = {
+            "project_id": project_id,
+            "feature_id": feature_id_str,
+            "story_text": story.get("story_text", ""),
+            "acceptance_criteria": story.get("acceptance_criteria", []),
+            "created_at": now,
+        }
+
+        insert_result = await db["stories"].insert_one(document)
+        stored_doc = {**document, "_id": str(insert_result.inserted_id)}
+        created_stories.append(stored_doc)
+
+    logger.info(f"[agent2] generate_stories_for_project: Persisted {len(created_stories)} stories to database")
     return created_stories
 

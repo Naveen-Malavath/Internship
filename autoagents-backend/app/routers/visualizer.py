@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..agents import ClaudeVisualizationAgent, FeatureSpec, StorySpec
 from ..services.claude_client import DEFAULT_CLAUDE_MODEL
+from ..services import Agent3Service
 from ..storage import load_agent1_features, load_agent2_stories, load_prompt, load_mermaid_asset, load_dot_asset, store_visualization_assets
 
 router = APIRouter(prefix="/agent/visualizer", tags=["legacy-visualizer"])
@@ -85,55 +86,102 @@ def _get_agent3() -> ClaudeVisualizationAgent:
 @router.post("", response_model=AgentVisualizationResponse)
 async def agent_visualizer(request: AgentVisualizationRequest) -> AgentVisualizationResponse:
     """Generate visualization artifacts with Agent_3 for legacy compatibility."""
-    agent_3 = _get_agent3()
-
+    import uuid
+    
+    # Determine diagram type (default to 'hld' if not provided)
+    diagram_type = (request.diagramType or "hld").lower()
+    valid_types = {"hld", "lld", "database"}
+    if diagram_type not in valid_types:
+        diagram_type = "hld"
+    
     feature_items = request.features or []
     story_items = request.stories or []
 
-    feature_specs = [
-        FeatureSpec(
-            title=item.title,
-            description=item.description,
-            acceptance_criteria=item.acceptanceCriteria,
-        )
+    # Convert to feature/story dicts for Agent3Service
+    feature_dicts = [
+        {
+            "title": item.title,
+            "feature_text": item.title,
+            "description": item.description,
+        }
         for item in feature_items
     ]
-    if not feature_specs:
+    if not feature_dicts:
+        # Load from snapshot and convert
         feature_specs = load_agent1_features()
+        feature_dicts = [
+            {
+                "title": feat.title,
+                "feature_text": feat.title,
+                "description": feat.description,
+            }
+            for feat in feature_specs
+        ]
 
-    story_specs = [
-        StorySpec(
-            feature_title=item.featureTitle,
-            user_story=item.userStory,
-            acceptance_criteria=item.acceptanceCriteria,
-            implementation_notes=item.implementationNotes,
-        )
+    story_dicts = [
+        {
+            "feature_id": item.featureTitle,
+            "story_text": item.userStory,
+            "user_story": item.userStory,
+            "acceptance_criteria": item.acceptanceCriteria,
+            "implementation_notes": item.implementationNotes,
+        }
         for item in story_items
     ]
-    if not story_specs:
+    if not story_dicts:
+        # Load from snapshot and convert
         story_specs = load_agent2_stories()
+        story_dicts = [
+            {
+                "feature_id": story.feature_title,
+                "story_text": story.user_story,
+                "user_story": story.user_story,
+                "acceptance_criteria": story.acceptance_criteria,
+                "implementation_notes": story.implementation_notes,
+            }
+            for story in story_specs
+        ]
 
-    if not feature_specs or not story_specs:
+    if not feature_dicts or not story_dicts:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Visualization requires approved features and stories.",
         )
 
+    # Get prompt from storage or use empty string
+    original_prompt = request.prompt or load_prompt() or ""
+    project_title = "Project"  # Default title for legacy endpoint
+
+    # Use Agent3Service for diagram type-aware generation
+    agent3_service = Agent3Service()
     try:
-        visualization = await agent_3.generate_visualization(feature_specs, story_specs)
+        mermaid_diagram = await agent3_service.generate_mermaid(
+            project_title=project_title,
+            features=feature_dicts,
+            stories=story_dicts,
+            diagram_type=diagram_type,
+            original_prompt=original_prompt,
+        )
+        
+        # Generate a simple DOT diagram as fallback (Agent3Service doesn't return DOT)
+        dot_diagram = f"digraph G {{\n  // {diagram_type.upper()} diagram\n  label=\"{project_title}\";\n}}"
+        
+        run_id = str(uuid.uuid4())
+        
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Failed to generate visualization: {exc}",
         ) from exc
 
-    store_visualization_assets(visualization.mermaid, visualization.dot)
+    # Store the newly generated visualization
+    store_visualization_assets(mermaid_diagram, dot_diagram)
     mermaid_text, mermaid_path, mermaid_updated_at = load_mermaid_asset()
     dot_text, dot_path, dot_updated_at = load_dot_asset()
 
     diagrams = VisualizationDiagram(
-        mermaid=mermaid_text or visualization.mermaid,
-        dot=dot_text or visualization.dot,
+        mermaid=mermaid_text or mermaid_diagram,
+        dot=dot_text or dot_diagram,
         mermaidPath=mermaid_path,
         dotPath=dot_path,
         mermaidUpdatedAt=mermaid_updated_at,
@@ -141,12 +189,12 @@ async def agent_visualizer(request: AgentVisualizationRequest) -> AgentVisualiza
     )
 
     return AgentVisualizationResponse(
-        run_id=visualization.run_id,
-        summary=visualization.summary,
+        run_id=run_id,
+        summary=f"Generated {diagram_type.upper()} diagram using Agent-3.",
         diagrams=diagrams,
-        callouts=visualization.callouts,
-        message="Generated visualization blueprint.",
-        debug=visualization.debug,
+        callouts=[],
+        message=f"Generated {diagram_type.upper()} visualization blueprint.",
+        debug={"diagram_type": diagram_type},
     )
 
 

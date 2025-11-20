@@ -128,14 +128,44 @@ async def get_latest_project_diagram(project_id: str) -> Dict[str, Any]:
 @router.post("/{project_id}/designs/generate")
 async def generate_project_designs(project_id: str) -> Dict[str, Any]:
     """Trigger Agent-3 to generate HLD, LLD, and DBD designs for a project."""
-    db = get_database()
-    designs = await generate_designs_for_project(project_id, db)
-    return designs
+    import logging
+    import time
+    
+    logger = logging.getLogger(__name__)
+    start_time = time.time()
+    
+    logger.info(f"[projects] Design generation requested | project_id={project_id}")
+    
+    try:
+        db = get_database()
+        designs = await generate_designs_for_project(project_id, db)
+        
+        elapsed = time.time() - start_time
+        logger.info(
+            f"[projects] Design generation completed | project_id={project_id} | "
+            f"elapsed={elapsed:.2f}s | has_hld={bool(designs.get('hld_mermaid'))} | "
+            f"has_lld={bool(designs.get('lld_mermaid'))} | has_dbd={bool(designs.get('dbd_mermaid'))}"
+        )
+        
+        return designs
+    except Exception as exc:
+        elapsed = time.time() - start_time
+        logger.error(
+            f"[projects] Design generation failed | project_id={project_id} | "
+            f"elapsed={elapsed:.2f}s | error={str(exc)}",
+            exc_info=True
+        )
+        raise
 
 
 @router.get("/{project_id}/designs")
 async def get_latest_project_designs(project_id: str) -> Dict[str, Any]:
     """Return the most recent designs for the project."""
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    logger.debug(f"[projects] Fetching latest designs | project_id={project_id}")
+    
     db = get_database()
     cursor = (
         db["designs"]
@@ -145,11 +175,19 @@ async def get_latest_project_designs(project_id: str) -> Dict[str, Any]:
     )
     records = await cursor.to_list(length=1)
     if not records:
+        logger.warning(f"[projects] No designs found | project_id={project_id}")
         raise HTTPException(
             status_code=404, detail="No designs found for this project. Run Agent-3 first."
         )
 
     design = dict(records[0])
     design["_id"] = str(design["_id"])
+    
+    logger.debug(
+        f"[projects] Designs retrieved | project_id={project_id} | "
+        f"has_hld={bool(design.get('hld_mermaid'))} | has_lld={bool(design.get('lld_mermaid'))} | "
+        f"has_dbd={bool(design.get('dbd_mermaid'))} | created_at={design.get('created_at')}"
+    )
+    
     return design
 

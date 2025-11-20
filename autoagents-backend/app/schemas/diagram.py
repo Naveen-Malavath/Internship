@@ -1,6 +1,7 @@
 """Pydantic model for Diagram documents."""
 
 from datetime import datetime
+from typing import Dict, Optional
 
 from pydantic import BaseModel
 
@@ -13,4 +14,5 @@ class DiagramModel(BaseModel):
     diagram_type: str
     mermaid_source: str
     created_at: datetime
+    style_config: Optional[Dict] = None  # Mermaid style configuration
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any, Literal, Optional
@@ -12,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..db import get_database
 from ..services.agent1 import Agent1Service
 from ..services.agent2 import Agent2Service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["legacy-agent"])
 _LEGACY_COLLECTION = "legacy_agent_runs"
@@ -80,8 +83,14 @@ async def legacy_generate_features(
     response: Response,
 ) -> AgentFeatureResponse:
     """Compatibility endpoint for the legacy frontend."""
+    logger.debug(f"[legacy-agent] /features endpoint called")
+    logger.debug(f"[legacy-agent] Request decision: {request.decision}")
+    logger.debug(f"[legacy-agent] Request prompt length: {len(request.prompt) if request.prompt else 0}")
+    logger.debug(f"[legacy-agent] Request run_id: {request.run_id}")
+    
     # Handle approval flow (keep/keep_all) by echoing features back.
     if request.decision in {"keep", "keep_all"}:
+        logger.debug(f"[legacy-agent] Handling keep/keep_all decision")
         if not request.run_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -109,31 +118,70 @@ async def legacy_generate_features(
 
     prompt = (request.prompt or "").strip()
     if not prompt:
+        logger.warning(f"[legacy-agent] Empty prompt provided")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A non-empty prompt is required to generate features.",
         )
 
+    logger.info(f"[legacy-agent] Generating features for prompt: {prompt[:100]}...")
     service = Agent1Service()
     try:
+        logger.debug(f"[legacy-agent] Starting feature generation for prompt length: {len(prompt)}")
         feature_texts = await service.generate_features(project_title="", project_prompt=prompt)
+        logger.info(f"[legacy-agent] Feature generation successful, got {len(feature_texts)} features")
+        logger.debug(f"[legacy-agent] Features: {feature_texts[:3] if feature_texts else 'none'}...")
     except RuntimeError as exc:  # Catch Claude runtime errors
-        import logging
-        logger = logging.getLogger(__name__)
-        error_detail = str(exc)
-        logger.error(f"Agent-1 RuntimeError: {error_detail}", exc_info=True)
-        logger.error(f"Error type: {type(exc).__name__}, Full traceback above")
-        # Include more details in response for debugging
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Agent-1 RuntimeError: {error_detail}",
-        ) from exc
-    except Exception as exc:  # Catch any other unexpected errors
-        import logging
-        logger = logging.getLogger(__name__)
         error_detail = str(exc)
         error_type = type(exc).__name__
-        logger.error(f"Agent-1 unexpected error ({error_type}): {error_detail}", exc_info=True)
+        
+        logger.error(f"[legacy-agent] Agent-1 RuntimeError caught")
+        logger.error(f"[legacy-agent] Error type: {error_type}")
+        logger.error(f"[legacy-agent] Error detail: {error_detail}")
+        logger.debug(f"[legacy-agent] Full exception traceback:", exc_info=True)
+        
+        # Check for specific error types to provide better HTTP status codes
+        error_detail_lower = error_detail.lower()
+        
+        # Credit balance errors should be 402 Payment Required or 503 Service Unavailable
+        if "credit balance" in error_detail_lower or "too low" in error_detail_lower:
+            logger.error(f"[legacy-agent] Credit balance error detected, returning 402 Payment Required")
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=error_detail,  # User-friendly message from agent1
+            ) from exc
+        
+        # Authentication errors should be 401 Unauthorized
+        if "authentication" in error_detail_lower or "api key" in error_detail_lower:
+            logger.error(f"[legacy-agent] Authentication error detected, returning 401 Unauthorized")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=error_detail,
+            ) from exc
+        
+        # Rate limit errors should be 429 Too Many Requests
+        if "rate limit" in error_detail_lower:
+            logger.error(f"[legacy-agent] Rate limit error detected, returning 429 Too Many Requests")
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=error_detail,
+            ) from exc
+        
+        # Generic service unavailable for other errors
+        logger.error(f"[legacy-agent] Generic service error, returning 503 Service Unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=error_detail,
+        ) from exc
+    except Exception as exc:  # Catch any other unexpected errors
+        error_detail = str(exc)
+        error_type = type(exc).__name__
+        
+        logger.error(f"[legacy-agent] Agent-1 unexpected error caught")
+        logger.error(f"[legacy-agent] Error type: {error_type}")
+        logger.error(f"[legacy-agent] Error detail: {error_detail}")
+        logger.debug(f"[legacy-agent] Full exception traceback:", exc_info=True)
+        
         # Include error type and details in response for debugging
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

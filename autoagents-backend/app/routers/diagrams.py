@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from ..db import get_database
 from ..schemas.diagram import DiagramModel
 from ..services import Agent3Service
+from ..services.style_config_generator import StyleConfigGenerator
 
 router = APIRouter(prefix="/projects/{project_id}/diagram", tags=["diagram"])
 agent3_service = Agent3Service()
@@ -56,8 +57,26 @@ async def generate_diagram(
     try:
         # Get original prompt from project for context
         original_prompt = project.get("prompt") or project.get("description") or ""
+        project_title = project.get("title", "")
+        
+        # Generate style configuration from prompt using StyleConfigGenerator
+        style_generator = StyleConfigGenerator(original_prompt, project_id)
+        full_config = style_generator.generate_full_config(features, stories)
+        style_config = {
+            "domain": full_config["domain"],
+            "theme": full_config["theme"],
+            "primaryColor": full_config["colors"]["primary"],
+            "secondaryColor": full_config["colors"]["secondary"],
+            "accentColor": full_config["colors"]["tertiary"],
+            "backgroundColor": "#ffffff",
+            "arrowStyle": "solid",
+            "fontSize": "16px",
+            "fontFamily": "Arial, sans-serif",
+            "nodeShape": "rect",
+        }
+        
         mermaid_source = await agent3_service.generate_mermaid(
-            project_title=project.get("title", ""),
+            project_title=project_title,
             features=features,
             stories=stories,
             diagram_type=diagram_type,
@@ -80,6 +99,7 @@ async def generate_diagram(
         "project_id": project_id,
         "diagram_type": diagram_type,
         "mermaid_source": mermaid_source,
+        "style_config": style_config,
         "created_at": datetime.utcnow(),
     }
 
