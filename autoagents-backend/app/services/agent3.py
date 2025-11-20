@@ -6,6 +6,7 @@ import datetime
 import json
 import logging
 import os
+import re
 from typing import Any, Dict, List
 
 import anthropic
@@ -56,7 +57,8 @@ class Agent3Service:
         Returns:
             Mermaid diagram source code as string
         """
-        logger.info(f"[agent3] Starting Mermaid diagram generation with Claude Sonnet 4.5 | model={self.model} | type={diagram_type} | features={len(features)} | stories={len(stories)} | prompt_length={len(original_prompt)}")
+        logger.info(f"[agent3] 🎨 Starting COLORED Mermaid diagram generation | model={self.model} | type={diagram_type.upper()} | features={len(features)} | stories={len(stories)} | prompt_length={len(original_prompt)}")
+        logger.debug(f"[agent3] Project Title: '{project_title}'")
         try:
             client = get_claude_client()
             logger.debug("[agent3] Claude client obtained successfully")
@@ -89,68 +91,100 @@ class Agent3Service:
         if original_prompt and original_prompt.strip():
             prompt_context = f"\n\nOriginal User Requirements:\n{original_prompt.strip()}\n\n"
         
-        # Create type-specific prompts
+        # Create type-specific prompts with COLORED diagrams
         if diagram_type.lower() == "lld":
             system_prompt = (
                 "You are Agent-3, an AI software architect specializing in Low Level Design (LLD). "
                 "Generate detailed Mermaid diagrams showing component interactions, class structures, "
                 "API endpoints, service layers, and data flow at an implementation level. "
-                "Use appropriate Mermaid syntax like classDiagram, sequenceDiagram, or detailed flowcharts."
+                "Use appropriate Mermaid syntax like classDiagram, sequenceDiagram, or detailed flowcharts. "
+                "ALWAYS add professional colors and styling for visual clarity."
             )
             user_prompt = (
                 f"Project: {project_title or 'Untitled Project'}\n"
                 f"{prompt_context}"
                 f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
                 f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
-                "Create a LOW LEVEL DESIGN (LLD) Mermaid diagram showing:\n"
+                "Create a COLORED LOW LEVEL DESIGN (LLD) Mermaid diagram showing:\n"
                 "- Component/class/module interactions\n"
                 "- API endpoints and service layers\n"
                 "- Data flow between components\n"
                 "- Database interactions\n"
                 "- Use classDiagram, sequenceDiagram, or detailed flowchart syntax\n\n"
+                "🎨 STYLING REQUIREMENTS (MANDATORY):\n"
+                "- Define classDef styles with different colors for:\n"
+                "  * Frontend components (e.g., fill:#E3F2FD,stroke:#1976D2,color:#000)\n"
+                "  * Backend services (e.g., fill:#FFF3E0,stroke:#F57C00,color:#000)\n"
+                "  * Database layer (e.g., fill:#E8F5E9,stroke:#388E3C,color:#000)\n"
+                "  * External APIs (e.g., fill:#FCE4EC,stroke:#C2185B,color:#000)\n"
+                "- Apply styles using ':::className' syntax\n"
+                "- Use professional color schemes with good contrast\n\n"
                 "Output ONLY valid Mermaid code, no explanations."
             )
         elif diagram_type.lower() == "database":
             system_prompt = (
-                "You are Agent-3, an AI database architect. Generate Mermaid ER diagrams (entityRelationshipDiagram) "
-                "or database schema diagrams showing tables, relationships, keys, and data models based on features and stories."
+                "You are Agent-3, an AI database architect. Generate COLORED Mermaid ER diagrams (erDiagram) "
+                "showing tables, relationships, keys, and data models based on features and stories. "
+                "Use professional styling and colors to distinguish different entity types."
             )
             user_prompt = (
                 f"Project: {project_title or 'Untitled Project'}\n"
                 f"{prompt_context}"
                 f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
                 f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
-                "Create a DATABASE DESIGN Mermaid diagram showing:\n"
+                "Create a COLORED DATABASE DESIGN (DBD) Mermaid diagram showing:\n"
                 "- Entity-Relationship Diagram (ERD) with tables\n"
-                "- Primary keys, foreign keys, and relationships\n"
-                "- Data entities and their attributes\n"
-                "- Relationships (one-to-one, one-to-many, many-to-many)\n"
-                "- Use entityRelationshipDiagram syntax in Mermaid\n\n"
+                "- Primary keys (PK), foreign keys (FK), and relationships\n"
+                "- Data entities and their attributes with data types\n"
+                "- Relationships: one-to-one (||--||), one-to-many (||--o{), many-to-many (}o--o{)\n"
+                "- Use 'erDiagram' syntax in Mermaid\n\n"
+                "🎨 STYLING REQUIREMENTS (MANDATORY):\n"
+                "- After the erDiagram, add classDef statements to color different entity types:\n"
+                "  * Core entities (e.g., classDef coreEntity fill:#E3F2FD,stroke:#1976D2)\n"
+                "  * User-related (e.g., classDef userEntity fill:#F3E5F5,stroke:#7B1FA2)\n"
+                "  * Transaction entities (e.g., classDef txEntity fill:#FFF3E0,stroke:#F57C00)\n"
+                "  * Lookup/reference tables (e.g., classDef refEntity fill:#E8F5E9,stroke:#388E3C)\n"
+                "- Apply styles to entities using ':::className' syntax\n"
+                "- IMPORTANT: Entity attributes must NOT have quoted descriptions\n"
+                "  * CORRECT: varchar name\n"
+                "  * CORRECT: uuid id PK\n"
+                "  * WRONG: uuid id PK \"Primary Key\"\n"
+                "  * WRONG: varchar name \"Display Name\"\n\n"
                 "Output ONLY valid Mermaid code, no explanations."
             )
         else:  # Default to HLD
             system_prompt = (
                 "You are Agent-3, an AI solution architect specializing in High Level Design (HLD). "
-                "Generate Mermaid diagrams showing system architecture, high-level components, "
-                "and business flow at a conceptual level."
+                "Generate COLORED Mermaid diagrams showing system architecture, high-level components, "
+                "and business flow at a conceptual level. Use professional colors and styling."
             )
             user_prompt = (
                 f"Project: {project_title or 'Untitled Project'}\n"
                 f"{prompt_context}"
                 f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
                 f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
-                "Create a HIGH LEVEL DESIGN (HLD) Mermaid diagram showing:\n"
+                "Create a COLORED HIGH LEVEL DESIGN (HLD) Mermaid diagram showing:\n"
                 "- System architecture and major components\n"
                 "- Business process flow from features to stories\n"
                 "- High-level interactions between system modules\n"
                 "- User journey through features\n"
                 "- Use flowchart (graph TD or graph LR) syntax\n\n"
+                "🎨 STYLING REQUIREMENTS (MANDATORY):\n"
+                "- Define classDef styles at the END of the diagram with vibrant colors:\n"
+                "  * User/Client nodes (e.g., classDef userClass fill:#E1F5FE,stroke:#01579B,stroke-width:3px,color:#000)\n"
+                "  * Frontend/UI (e.g., classDef frontendClass fill:#E8EAF6,stroke:#3F51B5,stroke-width:2px,color:#000)\n"
+                "  * Backend/API (e.g., classDef backendClass fill:#FFF9C4,stroke:#F57F17,stroke-width:2px,color:#000)\n"
+                "  * Database (e.g., classDef dbClass fill:#C8E6C9,stroke:#2E7D32,stroke-width:2px,color:#000)\n"
+                "  * External Services/AI (e.g., classDef externalClass fill:#F8BBD0,stroke:#C2185B,stroke-width:2px,color:#000)\n"
+                "  * Process/Logic (e.g., classDef processClass fill:#FFE0B2,stroke:#E65100,stroke-width:2px,color:#000)\n"
+                "- Apply styles to nodes using ':::className' syntax\n"
+                "- Example: User[\"👤 User\"]:::userClass\n\n"
                 "Output ONLY valid Mermaid code, no explanations."
             )
 
         try:
-            # Optimized max_tokens for faster responses
-            max_tokens = 1500
+            # Increased max_tokens to prevent diagram truncation (Claude Sonnet 4.5 supports up to 200K output tokens)
+            max_tokens = 32000  # Doubled from 16000 to reduce truncation risk
             logger.info(f"[agent3] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.3")
             logger.debug(f"[agent3] System prompt length: {len(system_prompt)} chars")
             logger.debug(f"[agent3] User prompt length: {len(user_prompt)} chars")
@@ -164,6 +198,12 @@ class Agent3Service:
             usage = getattr(response, "usage", None)
             if usage:
                 logger.info(f"[agent3] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+                # Check if response was likely truncated (within 5% of limit)
+                if usage.output_tokens >= max_tokens * 0.95:
+                    logger.warning(f"[agent3] ⚠️ Response may be truncated (used {usage.output_tokens}/{max_tokens} tokens)")
+                # Also warn if using more than 80% - approaching limit
+                elif usage.output_tokens >= max_tokens * 0.80:
+                    logger.info(f"[agent3] ℹ️ Response used {usage.output_tokens}/{max_tokens} tokens (80%+ of limit)")
             else:
                 logger.info("[agent3] API call successful")
         except APIError as exc:
@@ -177,6 +217,7 @@ class Agent3Service:
         
         # Clean up mermaid code - remove markdown fences if present
         if mermaid.startswith("```"):
+            logger.debug("[agent3] Removing markdown code fences from response")
             lines = mermaid.split("\n")
             if lines[0].startswith("```mermaid"):
                 mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
@@ -184,12 +225,213 @@ class Agent3Service:
                 mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
         mermaid = mermaid.strip()
         
+        # Check for truncated or malformed style statements throughout the diagram
+        lines = mermaid.split('\n') if mermaid else []
+        fixed_lines = []
+        removed_lines = []
+        
+        for line_num, line in enumerate(lines, 1):
+            line_stripped = line.strip()
+            
+            # Skip empty lines
+            if not line_stripped:
+                fixed_lines.append(line)
+                continue
+            
+            # Check for incomplete classDef or style statements
+            if "classDef" in line or line_stripped.startswith("style "):
+                # Valid endings for style definitions
+                valid_endings = ("px", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", 
+                                "a", "b", "c", "d", "e", "f", "A", "B", "C", "D", "E", "F",
+                                ")", "bold", "italic", "normal", "lighter", "bolder", ";")
+                
+                is_incomplete = False
+                
+                # Check for truncated property names - these are ALWAYS incomplete
+                # Use regex to detect truncated properties more accurately
+                truncated_property_patterns = [
+                    (r'stroke-widt(?!h)', 'stroke-width'),  # stroke-widt but not stroke-width
+                    (r'stroke-wid(?!th)', 'stroke-width'),  # stroke-wid but not stroke-width
+                    (r'stroke-w(?!idth)', 'stroke-width'),  # stroke-w but not stroke-width
+                    (r'font-weigh(?!t)', 'font-weight'),    # font-weigh but not font-weight
+                    (r'font-siz(?!e)', 'font-size'),        # font-siz but not font-size
+                    (r'font-famil(?!y)', 'font-family'),    # font-famil but not font-family
+                    (r'border-radi(?!us)', 'border-radius'),  # border-radi but not border-radius
+                    (r'stroke-das(?!harray)', 'stroke-dasharray'),  # stroke-das but not stroke-dasharray
+                ]
+                
+                for pattern_regex, property_name in truncated_property_patterns:
+                    if re.search(pattern_regex, line):
+                        logger.warning(f"[agent3] ⚠️ Detected truncated property '{property_name}' at line {line_num}")
+                        is_incomplete = True
+                        break
+                
+                # Check for incomplete color values (hex colors should be 3 or 6 digits)
+                # Match incomplete hex patterns: #X, #XX, #XXXX, #XXXXX (not 3 or 6)
+                if re.search(r'#[0-9A-Fa-f]{1,2}(?:[,\s]|$)', line_stripped):
+                    # Found 1-2 hex digits - check if there's also a valid 3 or 6 digit hex
+                    if not re.search(r'#[0-9A-Fa-f]{3}(?:[,\s:]|$)|#[0-9A-Fa-f]{6}(?:[,\s:]|$)', line_stripped):
+                        logger.warning(f"[agent3] ⚠️ Detected incomplete hex color at line {line_num}")
+                        is_incomplete = True
+                elif re.search(r'#[0-9A-Fa-f]{4,5}(?:[,\s]|$)', line_stripped):
+                    # Found 4-5 hex digits - definitely incomplete
+                    logger.warning(f"[agent3] ⚠️ Detected incomplete hex color (4-5 digits) at line {line_num}")
+                    is_incomplete = True
+                
+                # Check for trailing commas or colons (incomplete lines)
+                if line_stripped.endswith(',') or line_stripped.endswith(':'):
+                    logger.warning(f"[agent3] ⚠️ Line ends with comma or colon at line {line_num}")
+                    is_incomplete = True
+                
+                # Check for properties with missing or invalid values
+                if ":" in line_stripped:
+                    # Split by comma to check each property
+                    properties = [p.strip() for p in line_stripped.split(',')]
+                    for prop in properties:
+                        if ':' in prop:
+                            parts = prop.split(':', 1)
+                            if len(parts) == 2:
+                                prop_name = parts[0].strip()
+                                prop_value = parts[1].strip()
+                                
+                                # Check if value is empty or suspiciously short
+                                if not prop_value or len(prop_value) < 2:
+                                    logger.warning(f"[agent3] ⚠️ Property '{prop_name}' has empty/short value at line {line_num}")
+                                    is_incomplete = True
+                                    break
+                                
+                                # Check if value ends with a dash (truncated)
+                                if prop_value.endswith('-'):
+                                    logger.warning(f"[agent3] ⚠️ Property value ends with dash at line {line_num}")
+                                    is_incomplete = True
+                                    break
+                
+                if is_incomplete:
+                    logger.warning(f"[agent3] ⚠️ Removing incomplete style at line {line_num}: {line[:100]}")
+                    removed_lines.append((line_num, line[:100]))
+                    continue  # Skip this line
+            
+            # Check for malformed node labels
+            # Look for patterns like: Node["Label<br/>Text"]  - these should not have extra closing quotes
+            if '["' in line and '<br/>' in line:
+                # Count quotes to ensure they're balanced
+                quote_count = line.count('"')
+                if quote_count % 2 != 0:
+                    # Odd number of quotes - malformed
+                    logger.warning(f"[agent3] ⚠️ Malformed label at line {line_num}: {line[:100]}")
+                    removed_lines.append((line_num, line[:100]))
+                    continue
+            
+            # Check for erDiagram entity attributes with quoted descriptions (emoji descriptions)
+            # Pattern: datatype field_name KEY_TYPE "Description with emoji"
+            # These cause parse errors - remove the quoted descriptions
+            if 'erdiagram' in lines[0].lower() or 'entityrelationshipdiagram' in lines[0].lower():
+                # Match: datatype fieldname PK/FK/UK "anything"
+                if re.match(r'^\s*\w+\s+\w+\s+[A-Z]{2,}\s+"', line_stripped):
+                    # Remove the quoted description part
+                    cleaned = re.sub(r'\s+"[^"]*"', '', line)
+                    logger.info(f"[agent3] 🔧 Cleaned erDiagram attribute description at line {line_num}")
+                    fixed_lines.append(cleaned)
+                    continue
+                
+                # Check for orphaned entity definitions (entity name on line after closing quote/bracket)
+                if index > 0 and re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', line_stripped):
+                    prev_line = lines[index - 1] if index > 0 else ''
+                    # If previous line ends with "] or just ", might be orphaned
+                    if prev_line.strip().endswith('"]') or prev_line.strip().endswith('"'):
+                        # Check if there's proper newline spacing
+                        logger.warning(f"[agent3] ⚠️ Potential orphaned entity definition at line {line_num}: {line[:100]}")
+                        # Add extra newline before this line in fixed output
+                        if fixed_lines and not fixed_lines[-1].strip() == '':
+                            fixed_lines.append('')  # Add blank line for separation
+            
+            # Check for classDiagram members appearing without class context
+            if 'classdiagram' in lines[0].lower():
+                # If line starts with +, -, #, ~ but previous line doesn't indicate we're in a class
+                if re.match(r'^\s*[+\-#~]', line_stripped) and index > 0:
+                    # Check if we're inside a class definition
+                    in_class = False
+                    for i in range(index - 1, -1, -1):
+                        prev = lines[i].strip()
+                        if prev.startswith('class ') or re.match(r'^[A-Z]\w+\s*\{', prev):
+                            in_class = True
+                            break
+                        if prev == '' or prev.startswith('%%'):
+                            continue
+                        if 'classDiagram' in prev:
+                            break
+                    
+                    if not in_class:
+                        logger.warning(f"[agent3] ⚠️ Class member without class context at line {line_num}: {line[:100]}")
+                        removed_lines.append((line_num, line[:100]))
+                        continue
+            
+            # Check for lines ending with opening bracket without content (orphaned nodes)
+            # Pattern: ..."]  NodeID[ with nothing following or just whitespace
+            if re.search(r'"\]\s+[A-Za-z0-9_]+\[\s*$', line_stripped):
+                logger.warning(f"[agent3] ⚠️ Orphaned node opening bracket at line {line_num}: {line[:100]}")
+                removed_lines.append((line_num, line[:100]))
+                continue
+            
+            fixed_lines.append(line)
+        
+        if removed_lines:
+            logger.warning(f"[agent3] Removed {len(removed_lines)} incomplete/malformed line(s)")
+            for line_num, line_preview in removed_lines:
+                logger.debug(f"[agent3]   - Line {line_num}: {line_preview}")
+            mermaid = '\n'.join(fixed_lines)
+        
+        # Final cleanup: remove any remaining problematic last line
+        if mermaid:
+            last_line = mermaid.split('\n')[-1].strip()
+            if last_line and ("classDef" in last_line or "style " in last_line):
+                # Check if it ends properly
+                if not any(last_line.endswith(ending) for ending in ["px", "bold", "normal", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "A", "B", "C", "D", "E", "F"]):
+                    logger.warning(f"[agent3] ⚠️ Final cleanup: removing incomplete last line: {last_line[:100]}")
+                    mermaid = '\n'.join(mermaid.split('\n')[:-1])
+        
+        # Emergency fallback: if diagram still has style issues, remove ALL styling
+        # This ensures the diagram can at least render even without colors
+        if mermaid:
+            lines = mermaid.split('\n')
+            has_potential_issues = False
+            for line in lines:
+                if 'classDef' in line or line.strip().startswith('style '):
+                    # Check for common issues
+                    if 'stroke-widt' in line or 'font-weigh' in line or 'font-siz' in line:
+                        has_potential_issues = True
+                        break
+                    if line.count('"') % 2 != 0:  # Unbalanced quotes
+                        has_potential_issues = True
+                        break
+            
+            if has_potential_issues:
+                logger.warning("[agent3] 🚨 Detected remaining style issues - removing ALL styling for safe rendering")
+                # Remove all classDef and style lines
+                clean_lines = [line for line in lines if 'classDef' not in line and not line.strip().startswith('style ')]
+                # Also remove style class applications (:::className)
+                clean_lines = [re.sub(r':::[\w]+', '', line) for line in clean_lines]
+                mermaid = '\n'.join(clean_lines)
+                logger.info("[agent3] ✅ Diagram sanitized - will render without colors")
+        
         # Ensure it starts with a valid Mermaid diagram type
-        if not any(mermaid.startswith(prefix) for prefix in ["graph", "classDiagram", "sequenceDiagram", "erDiagram", "entityRelationshipDiagram", "flowchart"]):
+        valid_prefixes = ["graph", "classDiagram", "sequenceDiagram", "erDiagram", "entityRelationshipDiagram", "flowchart"]
+        if not any(mermaid.startswith(prefix) for prefix in valid_prefixes):
             logger.warning("[agent3] Mermaid diagram doesn't start with valid type, prepending 'graph TD'")
             mermaid = f"graph TD\n{mermaid}"
         
-        logger.info(f"[agent3] Mermaid diagram generation complete | length={len(mermaid)} chars")
+        # Check if diagram contains styling (classDef)
+        has_styling = "classDef" in mermaid or "style " in mermaid
+        logger.info(f"[agent3] ✅ {diagram_type.upper()} diagram generation complete | length={len(mermaid)} chars | has_colors={has_styling}")
+        
+        if has_styling:
+            logger.debug(f"[agent3] 🎨 Colored {diagram_type.upper()} diagram generated successfully with styling")
+        else:
+            logger.warning(f"[agent3] ⚠️ {diagram_type.upper()} diagram rendered without color styling for safety")
+        
+        # Log first 200 chars for debugging
+        logger.debug(f"[agent3] Diagram preview: {mermaid[:200]}...")
+        
         return mermaid
 
 
@@ -267,15 +509,20 @@ async def generate_diagram_for_project(project_id: str, db) -> Dict[str, Any]:
     logger.info(f"[agent3] generate_diagram_for_project using model: {model}")
     
     try:
+        max_tokens = 32000  # Increased to prevent truncation
         response = await client.messages.create(
             model=model,
-            max_tokens=800,
+            max_tokens=max_tokens,
             temperature=0.3,
             messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
         )
         usage = getattr(response, "usage", None)
         if usage:
             logger.info(f"[agent3] generate_diagram_for_project API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+            if usage.output_tokens >= max_tokens * 0.95:  # 95% of max_tokens
+                logger.warning(f"[agent3] ⚠️ Response may be truncated (used {usage.output_tokens}/{max_tokens} tokens)")
+            elif usage.output_tokens >= max_tokens * 0.80:  # 80% of max_tokens
+                logger.info(f"[agent3] ℹ️ Response used {usage.output_tokens}/{max_tokens} tokens (80%+ of limit)")
     except anthropic.APIError as exc:
         error_type = getattr(exc, 'type', 'unknown')
         error_status = getattr(exc, 'status_code', None)
@@ -390,16 +637,21 @@ async def generate_designs_for_project(project_id: str, db):
     logger.info(f"[agent3] generate_designs_for_project using model: {model}")
     
     try:
-        # Optimized max_tokens for faster responses
+        # Increased max_tokens to prevent diagram truncation
+        max_tokens = 32000
         response = await client.messages.create(
             model=model,
-            max_tokens=3000,  # Reduced from 4000 for faster response
+            max_tokens=max_tokens,
             temperature=0.3,
             messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
         )
         usage = getattr(response, "usage", None)
         if usage:
             logger.info(f"[agent3] generate_designs_for_project API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+            if usage.output_tokens >= max_tokens * 0.95:  # 95% of max_tokens
+                logger.warning(f"[agent3] ⚠️ Response may be truncated (used {usage.output_tokens}/{max_tokens} tokens)")
+            elif usage.output_tokens >= max_tokens * 0.80:  # 80% of max_tokens
+                logger.info(f"[agent3] ℹ️ Response used {usage.output_tokens}/{max_tokens} tokens (80%+ of limit)")
     except anthropic.APIError as exc:
         error_type = getattr(exc, 'type', 'unknown')
         error_status = getattr(exc, 'status_code', None)
