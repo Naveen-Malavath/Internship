@@ -109,7 +109,7 @@
           </header>
           <p *ngIf="!stories.length" class="empty-hint">Approve stories to populate the dashboard.</p>
           <div class="dashboard-scroll" *ngIf="stories.length">
-            <article class="story-chip" *ngFor="let story of stories">
+            <article class="story-chip" *ngFor="let story of stories; let storyIndex = index">
               <header>
                 <h3>{{ story.featureTitle }}</h3>
                 <p>{{ story.userStory }}</p>
@@ -128,6 +128,16 @@
                   <li *ngFor="let note of story.implementationNotes">{{ note }}</li>
                 </ol>
               </div>
+
+              <feedback-chatbot
+                [itemId]="'story-' + storyIndex"
+                itemType="story"
+                [projectId]="projectId || ''"
+                [originalContent]="story"
+                [projectContext]="prompt"
+                (contentRegenerated)="onStoryRegenerated($event, storyIndex)"
+                (errorOccurred)="onFeedbackError($event)"
+              ></feedback-chatbot>
             </article>
           </div>
         </section>
@@ -322,6 +332,23 @@
                 No diagram available.
               </p>
             </div>
+
+            <feedback-chatbot
+              *ngIf="visualizationData"
+              [itemId]="'visualization-' + currentDiagramType"
+              itemType="visualization"
+              [projectId]="projectId || ''"
+              [originalContent]="{
+                mermaid: mermaidInput,
+                diagramType: currentDiagramType,
+                features: features,
+                stories: stories,
+                prompt: prompt
+              }"
+              [projectContext]="prompt"
+              (contentRegenerated)="onVisualizationRegenerated($event)"
+              (errorOccurred)="onFeedbackError($event)"
+            ></feedback-chatbot>
 
             <div class="studio-panel__insights" *ngIf="visualizationData as viz">
               <section class="preview-summary">

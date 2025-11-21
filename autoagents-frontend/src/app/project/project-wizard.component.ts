@@ -22,6 +22,7 @@ import {
   generateProjectKey,
 } from './project-wizard.data';
 import { FeatureFormComponent } from '../features/feature-form.component';
+import { FeedbackChatbotComponent } from '../feedback/feedback-chatbot.component';
 
 type WizardStory = {
   id: string;
@@ -40,7 +41,7 @@ type WizardFeature = {
 @Component({
   selector: 'project-wizard',
   standalone: true,
-  imports: [CommonModule, FormsModule, FeatureFormComponent],
+  imports: [CommonModule, FormsModule, FeatureFormComponent, FeedbackChatbotComponent],
   templateUrl: './project-wizard.component.html',
   styleUrl: './project-wizard.component.scss',
 })
@@ -824,6 +825,49 @@ export class ProjectWizardComponent {
   private featureKey(detail: AgentFeatureDetail): string {
     const base = detail.key?.trim().toLowerCase() || detail.summary.trim().toLowerCase();
     return base.replace(/[^a-z0-9]+/g, '-');
+  }
+
+  protected onFeatureRegenerated(regeneratedContent: any, featureIndex: number): void {
+    console.debug('[ProjectWizard] Feature regenerated', { featureIndex, regeneratedContent });
+    if (this.wizardFeatures[featureIndex]) {
+      this.wizardFeatures[featureIndex] = {
+        ...this.wizardFeatures[featureIndex],
+        detail: {
+          ...this.wizardFeatures[featureIndex].detail,
+          ...regeneratedContent,
+        },
+      };
+    }
+  }
+
+  protected onStoryRegenerated(regeneratedContent: any, featureIndex: number, storyIndex: number): void {
+    console.debug('[ProjectWizard] Story regenerated', { featureIndex, storyIndex, regeneratedContent });
+    const feature = this.wizardFeatures[featureIndex];
+    if (feature && feature.stories[storyIndex]) {
+      this.wizardFeatures[featureIndex] = {
+        ...feature,
+        stories: feature.stories.map((story, idx) =>
+          idx === storyIndex
+            ? {
+                ...story,
+                spec: {
+                  ...story.spec,
+                  ...regeneratedContent,
+                },
+              }
+            : story,
+        ),
+      };
+    }
+  }
+
+  protected onFeedbackError(error: string): void {
+    console.error('[ProjectWizard] Feedback error', { error });
+    // Error will be displayed by the FeedbackChatbot component
+  }
+
+  protected getProjectContext(): string {
+    return this.aiSummary.customPrompt || this.aiSummary.executiveSummary || this.details.description || '';
   }
 
 }

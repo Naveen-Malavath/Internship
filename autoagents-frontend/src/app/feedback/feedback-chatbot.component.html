@@ -1,0 +1,121 @@
+<div class="feedback-chatbot" [class.feedback-chatbot--expanded]="isExpanded()">
+  <!-- Compact button trigger -->
+  <button
+    type="button"
+    class="feedback-chatbot__trigger"
+    (click)="toggleExpanded()"
+    *ngIf="!isExpanded()"
+  >
+    <span class="feedback-chatbot__trigger-icon">💬</span>
+    <span class="feedback-chatbot__trigger-text">Provide Feedback</span>
+    <span class="feedback-chatbot__trigger-badge" *ngIf="regenerationCount() > 0">
+      {{ regenerationCount() }}
+    </span>
+  </button>
+
+  <!-- Expanded form -->
+  <div class="feedback-chatbot__expanded" *ngIf="isExpanded()">
+    <div class="feedback-chatbot__header">
+      <div class="feedback-chatbot__header-left">
+        <span class="feedback-chatbot__icon">💬</span>
+        <span class="feedback-chatbot__title">Provide Feedback</span>
+        <span class="regeneration-badge" *ngIf="regenerationCount() > 0">
+          {{ regenerationCount() }} regenerated
+        </span>
+      </div>
+      <button
+        type="button"
+        class="feedback-chatbot__close"
+        (click)="toggleExpanded()"
+        aria-label="Close feedback"
+      >
+        ×
+      </button>
+    </div>
+
+    <div class="feedback-chatbot__messages" *ngIf="errorMessage() || successMessage()">
+      <div class="message message--error" *ngIf="errorMessage()" (click)="clearMessages()">
+        <span>{{ errorMessage() }}</span>
+        <button type="button" class="message__close" aria-label="Close">×</button>
+      </div>
+      <div class="message message--success" *ngIf="successMessage()" (click)="clearMessages()">
+        <span>{{ successMessage() }}</span>
+        <button type="button" class="message__close" aria-label="Close">×</button>
+      </div>
+    </div>
+
+    <div class="feedback-chatbot__form">
+      <div class="feedback-chatbot__input-wrapper">
+        <textarea
+          [(ngModel)]="feedbackText"
+          placeholder="Describe how you'd like this improved..."
+          class="feedback-chatbot__input"
+          rows="2"
+          [disabled]="isSubmitting() || isRegenerating()"
+        ></textarea>
+      </div>
+
+      <div class="feedback-chatbot__actions">
+        <button
+          type="button"
+          class="btn btn--primary"
+          (click)="onSubmitFeedback()"
+          [disabled]="!feedbackText().trim() || isSubmitting() || isRegenerating()"
+        >
+          <span *ngIf="!isSubmitting()">Submit</span>
+          <span *ngIf="isSubmitting()">...</span>
+        </button>
+
+        <button
+          type="button"
+          class="btn btn--secondary"
+          (click)="regenerateContent()"
+          [disabled]="isRegenerating() || isSubmitting()"
+          *ngIf="feedbackHistory().length > 0"
+        >
+          <span *ngIf="!isRegenerating()">Regenerate</span>
+          <span *ngIf="isRegenerating()">...</span>
+        </button>
+
+        <button
+          type="button"
+          class="btn btn--ghost"
+          (click)="undoLastRegeneration()"
+          [disabled]="previousVersions().length === 0 || isRegenerating() || isSubmitting()"
+          *ngIf="previousVersions().length > 0"
+        >
+          Undo
+        </button>
+      </div>
+    </div>
+
+    <div class="feedback-chatbot__history" *ngIf="feedbackHistory().length > 0">
+      <button
+        type="button"
+        class="feedback-chatbot__history-toggle"
+        (click)="toggleHistory()"
+      >
+        <span>Feedback History</span>
+        <span>{{ isHistoryExpanded() ? '▼' : '▶' }}</span>
+      </button>
+      <div class="history-list" *ngIf="isHistoryExpanded()">
+        <div
+          class="history-item"
+          *ngFor="let entry of feedbackHistory(); let i = index"
+        >
+          <div class="history-item__header">
+            <span class="history-item__timestamp">{{ entry.timestamp | date: 'short' }}</span>
+            <span class="history-item__status" [class]="'status--' + entry.status">
+              {{ entry.status }}
+            </span>
+          </div>
+          <div class="history-item__feedback">{{ entry.feedback }}</div>
+          <div class="history-item__regenerated" *ngIf="entry.regeneratedAt">
+            Regenerated: {{ entry.regeneratedAt | date: 'short' }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

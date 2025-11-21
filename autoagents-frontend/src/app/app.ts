@@ -38,6 +38,7 @@ import {
   ProjectWizardSubmissionPayload,
 } from './types';
 import { StoryFormComponent } from './stories/story-form.component';
+import { FeedbackChatbotComponent } from './feedback/feedback-chatbot.component';
 
 type StoryFormContext =
   | { scope: 'wizard'; featureIndex: number; storyIndex: number; originalStory: AgentStorySpec }
@@ -50,7 +51,7 @@ type StoryFormContextInput =
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, WorkspaceViewComponent, ProjectWizardComponent, FeatureFormComponent, StoryFormComponent],
+  imports: [CommonModule, WorkspaceViewComponent, ProjectWizardComponent, FeatureFormComponent, StoryFormComponent, FeedbackChatbotComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
@@ -2413,5 +2414,90 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
           console.error('[mermaid:fetch:error]', error);
         },
       });
+  }
+
+  protected onFeatureRegenerated(regeneratedContent: any, messageIdx: number, featureIdx: number): void {
+    console.debug('[App] Feature regenerated', { messageIdx, featureIdx, regeneratedContent });
+    
+    // Update the feature in the message
+    this.chatMessages.update((messages) => {
+      const updated = [...messages];
+      if (updated[messageIdx] && updated[messageIdx].features) {
+        const features = [...updated[messageIdx].features!];
+        if (features[featureIdx]) {
+          features[featureIdx] = {
+            ...features[featureIdx],
+            ...regeneratedContent,
+          };
+          updated[messageIdx] = {
+            ...updated[messageIdx],
+            features,
+          };
+        }
+      }
+      return updated;
+    });
+
+    // Update latestFeatures if this is the latest message
+    const latestMessage = this.chatMessages()[this.chatMessages().length - 1];
+    if (latestMessage && latestMessage.features && latestMessage.features[featureIdx]) {
+      this.latestFeatures.update((features) => {
+        const updated = [...features];
+        // Find matching feature by title or index
+        if (updated[featureIdx]) {
+          updated[featureIdx] = {
+            ...updated[featureIdx],
+            ...regeneratedContent,
+          };
+        }
+        return updated;
+      });
+      this.resetAgent1Selections(this.latestFeatures());
+    }
+  }
+
+  protected onStoryRegenerated(regeneratedContent: any, messageIdx: number, storyIdx: number): void {
+    console.debug('[App] Story regenerated', { messageIdx, storyIdx, regeneratedContent });
+    
+    // Update the story in the message
+    this.chatMessages.update((messages) => {
+      const updated = [...messages];
+      if (updated[messageIdx] && updated[messageIdx].stories) {
+        const stories = [...updated[messageIdx].stories!];
+        if (stories[storyIdx]) {
+          stories[storyIdx] = {
+            ...stories[storyIdx],
+            ...regeneratedContent,
+          };
+          updated[messageIdx] = {
+            ...updated[messageIdx],
+            stories,
+          };
+        }
+      }
+      return updated;
+    });
+
+    // Update latestStories if this is the latest message
+    const latestMessage = this.chatMessages()[this.chatMessages().length - 1];
+    if (latestMessage && latestMessage.stories && latestMessage.stories[storyIdx]) {
+      this.latestStories.update((stories) => {
+        const updated = [...stories];
+        // Find matching story by featureTitle or index
+        if (updated[storyIdx]) {
+          updated[storyIdx] = {
+            ...updated[storyIdx],
+            ...regeneratedContent,
+          };
+        }
+        return updated;
+      });
+      this.resetAgent2Selections(this.latestStories());
+    }
+  }
+
+  protected onFeedbackError(error: string): void {
+    console.error('[App] Feedback error', { error });
+    // Could show a toast notification here
   }
 }

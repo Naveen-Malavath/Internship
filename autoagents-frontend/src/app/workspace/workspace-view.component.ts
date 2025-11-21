@@ -17,11 +17,12 @@ import mermaid from 'mermaid';
 
 import { AgentFeatureSpec, AgentStorySpec, AgentVisualizationResponse, ProjectWizardSubmission } from '../types';
 import { DiagramDataService } from '../diagram-data.service';
+import { FeedbackChatbotComponent } from '../feedback/feedback-chatbot.component';
 
 @Component({
   selector: 'workspace-view',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, FeedbackChatbotComponent],
   templateUrl: './workspace-view.component.html',
   styleUrl: './workspace-view.component.scss',
 })
@@ -31,11 +32,14 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   @Input() stories: AgentStorySpec[] = [];
   @Input() visualization: AgentVisualizationResponse | null = null;
   @Input() project: ProjectWizardSubmission | null = null;
+  @Input() projectId: string | null = null;
   @Input() mermaidEditorContent = '';
   @Input() mermaidSource: string | null = null;
   @Input() mermaidSaving = false;
   @Input() mermaidUpdatedAt: string | null = null;
   @Input() mermaidSaveMessage: string | null = null;
+  @Input() mermaidStyleConfig: any = null;
+  @Input() designGenerationKey: number | null = null;
   @Output() mermaidChange = new EventEmitter<string>();
   @Output() mermaidSave = new EventEmitter<string>();
   @Output() diagramTypeChange = new EventEmitter<string>();
@@ -46,6 +50,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   @Output() storyDismiss = new EventEmitter<{ feature: AgentFeatureSpec; story: AgentStorySpec }>();
   @Output() createProject = new EventEmitter<void>();
   @Output() regenerateDiagram = new EventEmitter<string>();
+  @Output() contentRegenerated = new EventEmitter<{ type: string; itemId: string; content: any }>();
   @ViewChild('mermaidContainer') private mermaidContainer?: ElementRef<HTMLDivElement>;
   @ViewChild('mermaidFileInput') private mermaidFileInput?: ElementRef<HTMLInputElement>;
 
@@ -591,13 +596,43 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     const firstLine = lines[0]?.trim().toLowerCase() || '';
     const isErDiagram = firstLine.includes('erdiagram') || firstLine.includes('entityrelationshipdiagram') || this.currentDiagramType === 'database';
     const isClassDiagram = firstLine.includes('classdiagram');
+    const isFlowchart = firstLine.includes('graph') || firstLine.includes('flowchart');
     
     const cleanedLines = lines.filter((line, index) => {
-      const trimmed = line.trim();
+      let trimmed = line.trim();
       
       // Skip empty lines and comments
       if (!trimmed || trimmed.startsWith('%%')) {
         return true;
+      }
+      
+      // Fix malformed node labels with escaped quotes and extra characters
+      // Pattern: Node[("Label\")"]        Text - escaped quotes followed by closing brackets
+      // Pattern: Node[("Database PostgreSQL\")"]        Knowledg - text after closing bracket
+      // Pattern: Node[("Label\")]"]        Text - double bracket with escaped quote
+      if (trimmed.includes('\\")"]') || (trimmed.includes('\\")') && trimmed.includes('"]'))) {
+        // Fix escaped quotes - handle double bracket pattern first: \")]\" -> ")]
+        let fixedLine = trimmed.replace(/\\"\)"\]\\"/g, '")]')
+                                  .replace(/\\"\)"\]/g, '")]')  // Fix single pattern
+                                  .replace(/\\"/g, '"');  // Fix remaining escaped quotes
+        
+        // Remove text after closing bracket that's not a connection
+        // Pattern: ...")]        Text (with spaces after closing bracket)
+        // Match: closing bracket ] followed by whitespace and text (not a connection arrow)
+        const trailingTextMatch = fixedLine.match(/"\]\s{2,}([A-Za-z][^\s]*)/);
+        if (trailingTextMatch) {
+          // Check if it's not a connection arrow
+          const afterMatch = fixedLine.substring(trailingTextMatch.index! + trailingTextMatch[0].length);
+          if (!afterMatch.match(/^\s*(--?>|==?>|--|-\.->)/)) {
+            // Remove text after closing bracket - it's malformed
+            fixedLine = fixedLine.substring(0, trailingTextMatch.index! + 2); // Keep the '"]'
+            console.warn(`[workspace-view] Fixed escaped quotes and removed trailing text at line ${index + 1}: ${trailingTextMatch[1]}`);
+          }
+        }
+        
+        // Update the line in the array and continue with fixed version
+        lines[index] = fixedLine;
+        trimmed = fixedLine.trim();
       }
       
       // For erDiagram: check for malformed entity definitions (but don't remove valid syntax!)
@@ -611,6 +646,18 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       }
       
       // For classDiagram: check for malformed member definitions
+      // Fix invalid class syntax in flowcharts (classDiagram syntax shouldn't appear in flowcharts)
+      // Pattern: "class X {        +method" - this is invalid in flowcharts and causes DIAMOND_START parse error
+      const classWithMethodMatch = trimmed.match(/^\s*class\s+(\w+)\s*\{\s+([+\-#~].*)/);
+      if (classWithMethodMatch) {
+        if (isFlowchart) {
+          // In flowcharts, class syntax with methods is invalid - remove it
+          console.warn(`[workspace-view] Removing invalid class syntax from flowchart at line ${index + 1}:`, trimmed.substring(0, 80));
+          return false;
+        }
+        // In classDiagram, backend will handle splitting it properly
+      }
+      
       if (isClassDiagram && index > 0) {
         // Check for class members appearing right after diagram declaration (without class definition)
         const prevLine = index > 0 ? lines[index - 1].trim() : '';
@@ -876,6 +923,56 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     }
 
     return { scale: Number(targetScale.toFixed(3)), overflowing: false };
+  }
+
+  protected shouldShowNoDiagramMessage(): boolean {
+    // Show "No diagram" message when:
+    // 1. There's no mermaid input content, or it's a "no data" placeholder
+    // 2. We're not currently saving/loading a diagram
+    if (this.mermaidSaving) {
+      return false; // Don't show "no diagram" while loading
+    }
+    
+    if (!this.mermaidInput || !this.mermaidInput.trim()) {
+      return true;
+    }
+    
+    return this.isNoData(this.mermaidInput);
+  }
+
+  onStoryRegenerated(regeneratedContent: any, storyIndex: number): void {
+    console.debug('[WorkspaceView] Story regenerated', { storyIndex, regeneratedContent });
+    if (this.stories[storyIndex]) {
+      // Update the story with regenerated content
+      this.stories[storyIndex] = {
+        ...this.stories[storyIndex],
+        ...regeneratedContent,
+      };
+      this.contentRegenerated.emit({
+        type: 'story',
+        itemId: `story-${storyIndex}`,
+        content: regeneratedContent,
+      });
+    }
+  }
+
+  onVisualizationRegenerated(regeneratedContent: any): void {
+    console.debug('[WorkspaceView] Visualization regenerated', { regeneratedContent });
+    if (regeneratedContent?.mermaid || regeneratedContent?.diagrams?.mermaid) {
+      const newMermaid = regeneratedContent.mermaid || regeneratedContent.diagrams?.mermaid || '';
+      this.setMermaidInput(newMermaid, true);
+      this.contentRegenerated.emit({
+        type: 'visualization',
+        itemId: `visualization-${this.currentDiagramType}`,
+        content: regeneratedContent,
+      });
+    }
+  }
+
+  onFeedbackError(error: string): void {
+    console.error('[WorkspaceView] Feedback error', { error });
+    this.mermaidError = error;
+    // Error will be displayed by the FeedbackChatbot component
   }
 }
 

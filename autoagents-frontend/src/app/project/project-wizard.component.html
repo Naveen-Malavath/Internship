@@ -370,6 +370,17 @@
                 {{ feature.approved ? 'Unapprove' : 'Approve feature' }}
               </button>
             </footer>
+
+            <feedback-chatbot
+              class="feedback-chatbot--inline"
+              [itemId]="'wizard-feature-' + idx"
+              itemType="feature"
+              [projectId]="''"
+              [originalContent]="feature.detail"
+              [projectContext]="getProjectContext()"
+              (contentRegenerated)="onFeatureRegenerated($event, idx)"
+              (errorOccurred)="onFeedbackError($event)"
+            ></feedback-chatbot>
           </article>
         </div>
 
@@ -459,6 +470,17 @@
                       <li *ngFor="let note of story.spec.implementationNotes">{{ note }}</li>
                     </ul>
                   </div>
+
+                  <feedback-chatbot
+                    class="feedback-chatbot--inline"
+                    [itemId]="'wizard-story-' + fIdx + '-' + sIdx"
+                    itemType="story"
+                    [projectId]="''"
+                    [originalContent]="story.spec"
+                    [projectContext]="getProjectContext()"
+                    (contentRegenerated)="onStoryRegenerated($event, fIdx, sIdx)"
+                    (errorOccurred)="onFeedbackError($event)"
+                  ></feedback-chatbot>
                 </div>
               </div>
               <ng-template #noStories>

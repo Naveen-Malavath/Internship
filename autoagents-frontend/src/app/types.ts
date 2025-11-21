@@ -215,3 +215,34 @@ export type AISuggestionResponse = {
   type: string;
 };
 
+// Feedback and Regeneration Types
+export type FeedbackRequest = {
+  itemId: string;
+  itemType: 'feature' | 'story' | 'visualization';
+  projectId: string;
+  feedback: string;
+  originalContent?: any;
+  projectContext?: string;
+  regenerate?: boolean;
+};
+
+export type FeedbackResponse = {
+  feedbackId: string;
+  regenerationCount: number;
+  autoRegenerate?: boolean;
+  regeneratedContent?: any;
+  version?: number;
+  message?: string;
+};
+
+export type FeedbackHistoryEntry = {
+  id: string;
+  itemId: string;
+  itemType: 'feature' | 'story' | 'visualization';
+  feedback: string;
+  timestamp: string;
+  status: 'submitted' | 'regenerated' | 'failed';
+  regeneratedAt?: string;
+  version?: number;
+};
+

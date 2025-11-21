@@ -121,7 +121,7 @@
                 <div class="feature-list" *ngIf="message.features?.length">
                   <article
                     class="feature-card"
-                    *ngFor="let feature of message.features"
+                    *ngFor="let feature of message.features; let featureIdx = index"
                     [class.feature-card--selectable]="canSelectFeatures(message)"
                     [class.feature-card--selected]="canSelectFeatures(message) && isFeatureSelected(feature)"
                   >
@@ -191,13 +191,25 @@
                         </p>
                       </div>
                     </ng-container>
+                    
+                    <feedback-chatbot
+                      *ngIf="agentStage() === 'agent1' && agent1AwaitingDecision()"
+                      class="feedback-chatbot--inline"
+                      [itemId]="'feature-' + idx + '-' + featureIdx"
+                      itemType="feature"
+                      [projectId]="''"
+                      [originalContent]="feature"
+                      [projectContext]="lastPrompt()"
+                      (contentRegenerated)="onFeatureRegenerated($event, idx, featureIdx)"
+                      (errorOccurred)="onFeedbackError($event)"
+                    ></feedback-chatbot>
                   </article>
                 </div>
 
                 <div class="story-list" *ngIf="message.stories?.length">
                   <article
                     class="story-card"
-                    *ngFor="let story of message.stories"
+                    *ngFor="let story of message.stories; let storyIdx = index"
                     [class.story-card--selectable]="canSelectStories(message)"
                     [class.story-card--selected]="canSelectStories(message) && isStorySelected(story)"
                   >
@@ -226,6 +238,18 @@
                         <li *ngFor="let note of story.implementationNotes">{{ note }}</li>
                       </ul>
                     </div>
+                    
+                    <feedback-chatbot
+                      *ngIf="agentStage() === 'agent2' && agent2AwaitingDecision()"
+                      class="feedback-chatbot--inline"
+                      [itemId]="'story-' + idx + '-' + storyIdx"
+                      itemType="story"
+                      [projectId]="''"
+                      [originalContent]="story"
+                      [projectContext]="lastPrompt()"
+                      (contentRegenerated)="onStoryRegenerated($event, idx, storyIdx)"
+                      (errorOccurred)="onFeedbackError($event)"
+                    ></feedback-chatbot>
                   </article>
                 </div>
               </div>
