@@ -8,9 +8,6 @@
   >
     <span class="feedback-chatbot__trigger-icon">💬</span>
     <span class="feedback-chatbot__trigger-text">Provide Feedback</span>
-    <span class="feedback-chatbot__trigger-badge" *ngIf="regenerationCount() > 0">
-      {{ regenerationCount() }}
-    </span>
   </button>
 
   <!-- Expanded form -->
@@ -19,9 +16,6 @@
       <div class="feedback-chatbot__header-left">
         <span class="feedback-chatbot__icon">💬</span>
         <span class="feedback-chatbot__title">Provide Feedback</span>
-        <span class="regeneration-badge" *ngIf="regenerationCount() > 0">
-          {{ regenerationCount() }} regenerated
-        </span>
       </div>
       <button
         type="button"

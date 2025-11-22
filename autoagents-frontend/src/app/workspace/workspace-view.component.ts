@@ -62,6 +62,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   protected previewTheme: 'dark' | 'light' = 'dark';
   protected currentDiagramType: 'hld' | 'lld' | 'database' = 'hld';
   protected isDiagramDropdownOpen = false;
+  private userSelectedDiagramType = false; // Flag to prevent overwriting when user explicitly selects type
   protected diagramTypes = [
     { value: 'hld', label: 'HLD', fullLabel: 'High Level Design', description: 'System architecture & business flow' },
     { value: 'lld', label: 'LLD', fullLabel: 'Low Level Design', description: 'Component interactions & implementation' },
@@ -113,13 +114,21 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
 
     if (changes['visualization']) {
       this.visualizationData = this.visualization;
-      if (this.visualizationData?.diagrams?.mermaid && !this.mermaidSource) {
+      // Only update if user hasn't explicitly selected a diagram type
+      if (this.visualizationData?.diagrams?.mermaid && !this.mermaidSource && !this.userSelectedDiagramType) {
         if (!this.isNoData(this.visualizationData.diagrams.mermaid)) {
           this.setMermaidInput(this.visualizationData.diagrams.mermaid, false);
+          this.userSelectedDiagramType = false; // Reset flag after accepting Agent3 response
         } else {
           // If it's "No data", load default HLD
           this.currentDiagramType = 'hld';
           this.loadPredefinedDiagram('hld');
+        }
+      } else if (this.userSelectedDiagramType && this.visualizationData?.diagrams?.mermaid) {
+        // User selected a type, so accept the Agent3 response for that type
+        if (!this.isNoData(this.visualizationData.diagrams.mermaid)) {
+          this.setMermaidInput(this.visualizationData.diagrams.mermaid, false);
+          this.userSelectedDiagramType = false; // Reset flag after accepting Agent3 response
         }
       }
     }
@@ -288,12 +297,14 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     if (this.currentDiagramType !== type) {
       this.currentDiagramType = type;
       this.isDiagramDropdownOpen = false;
+      this.userSelectedDiagramType = true; // Mark that user explicitly selected this type
       
-      // Load predefined diagram based on type
-      this.loadPredefinedDiagram(type);
-      
-      // Emit event to parent to trigger diagram regeneration
+      // Don't load static template - let Agent3 generate dynamically
+      // Emit event to parent to trigger Agent3 diagram generation
       this.diagramTypeChange.emit(type);
+      
+      // Show loading state while waiting for Agent3
+      this.mermaidError = null;
     }
   }
 

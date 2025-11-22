@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 from typing import Any, Dict, List
 
 import anthropic
@@ -224,6 +225,80 @@ class Agent3Service:
             elif lines[0].strip() == "```":
                 mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
         mermaid = mermaid.strip()
+        
+        # Remove emojis from all node labels to prevent parse errors
+        # This is a common source of Mermaid parse errors
+        def remove_emojis(text: str) -> str:
+            """Remove emojis and other non-ASCII symbols that can break Mermaid parsing."""
+            # Remove emojis and other symbols that might break parsing
+            # Keep only ASCII printable characters, newlines, and common punctuation
+            result = []
+            for char in text:
+                # Keep ASCII printable (32-126), newline (10), tab (9)
+                if ord(char) < 128 and (char.isprintable() or char in '\n\t'):
+                    result.append(char)
+                # Replace emojis and other non-ASCII with space
+                elif unicodedata.category(char) in ['So', 'Sk', 'Sm']:  # Symbol, Modifier, Mark
+                    result.append(' ')
+                else:
+                    result.append(' ')
+            return ''.join(result)
+        
+        # Apply emoji removal to node labels (inside quotes and brackets)
+        # Pattern: Node["Label with emoji"] or Node[("Label with emoji")]
+        def clean_node_labels(line: str) -> str:
+            """Remove emojis from node labels while preserving structure."""
+            # Match node definitions with labels: NodeID["label"] or NodeID[("label")]
+            # Pattern to match: identifier["text"] or identifier[("text")]
+            # Also handle cases with <br/> tags
+            pattern = r'(\w+)\[\(?"([^"]*)"\)?\]'
+            def replace_label(match):
+                node_id = match.group(1)
+                label = match.group(2)
+                cleaned_label = remove_emojis(label).strip()
+                # Preserve the original bracket style
+                original = match.group(0)
+                if '[("' in original:
+                    return f'{node_id}[("{cleaned_label}")]'
+                else:
+                    return f'{node_id}["{cleaned_label}"]'
+            return re.sub(pattern, replace_label, line)
+        
+        # Clean all lines - remove emojis from node labels
+        lines = mermaid.split('\n')
+        cleaned_lines = [clean_node_labels(line) for line in lines]
+        mermaid = '\n'.join(cleaned_lines)
+        
+        # Also clean erDiagram entity names (they don't use quotes but can have emojis)
+        # Pattern: ENTITY_NAME { or ENTITY_NAME ||--o{ OTHER_ENTITY
+        er_diagram_pattern = r'^(\s*)([A-Z_][A-Z_0-9]*)\s*(\{|\|\|--o\{|\}o--o\{)'
+        def clean_er_entity(match):
+            indent = match.group(1)
+            entity_name = match.group(2)
+            connector = match.group(3)
+            # Remove emojis from entity name
+            cleaned_name = remove_emojis(entity_name).strip().replace(' ', '_').upper()
+            # Ensure it's a valid identifier
+            cleaned_name = re.sub(r'[^A-Z_0-9]', '', cleaned_name)
+            if not cleaned_name:
+                cleaned_name = 'ENTITY'
+            return f'{indent}{cleaned_name} {connector}'
+        
+        # Apply erDiagram cleaning if it's an erDiagram
+        if 'erdiagram' in mermaid.lower() or 'entityrelationshipdiagram' in mermaid.lower():
+            lines = mermaid.split('\n')
+            er_cleaned = []
+            for line in lines:
+                if re.match(er_diagram_pattern, line, re.IGNORECASE):
+                    er_cleaned.append(re.sub(er_diagram_pattern, clean_er_entity, line, flags=re.IGNORECASE))
+                else:
+                    er_cleaned.append(line)
+            mermaid = '\n'.join(er_cleaned)
+        
+        # Replace special characters that can break parsing
+        # Replace & with 'and' in node labels
+        mermaid = re.sub(r'(\["[^"]*)"&([^"]*"\])', r'\1"and\2', mermaid)
+        mermaid = re.sub(r'(\[\(?"[^"]*)"&([^"]*"\)?\])', r'\1"and\2', mermaid)
         
         # Check for truncated or malformed style statements throughout the diagram
         lines = mermaid.split('\n') if mermaid else []

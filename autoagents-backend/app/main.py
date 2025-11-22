@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from .db import connect_to_mongo, close_mongo_connection
-from .routers import auth, projects, features, stories, diagrams, agent_legacy, status, visualizer, suggestions
+from .routers import auth, projects, features, stories, diagrams, agent_legacy, status, visualizer, suggestions, feedback
 
 # Load .env file from the backend directory (parent of app/)
 env_path = Path(__file__).parent.parent / ".env"
@@ -96,6 +96,7 @@ app.include_router(agent_legacy.router)
 app.include_router(status.router)
 app.include_router(visualizer.router)
 app.include_router(suggestions.router)
+app.include_router(feedback.router)
 
 
 @app.get("/")
