@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
 
 from ..agents import ClaudeVisualizationAgent, FeatureSpec, StorySpec
 from ..services.claude_client import DEFAULT_CLAUDE_MODEL
@@ -153,8 +156,18 @@ async def agent_visualizer(request: AgentVisualizationRequest) -> AgentVisualiza
     project_title = "Project"  # Default title for legacy endpoint
 
     # Use Agent3Service for diagram type-aware generation
-    agent3_service = Agent3Service()
+    # Check API key before initializing service
+    api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        logger.error("[visualizer] Claude API key not configured")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent_3 is unavailable. Missing Claude API configuration. Please set CLAUDE_API_KEY or ANTHROPIC_API_KEY environment variable.",
+        )
+    
     try:
+        logger.info(f"[visualizer] Generating {diagram_type.upper()} diagram | features={len(feature_dicts)} | stories={len(story_dicts)}")
+        agent3_service = Agent3Service()
         mermaid_diagram = await agent3_service.generate_mermaid(
             project_title=project_title,
             features=feature_dicts,
@@ -167,11 +180,36 @@ async def agent_visualizer(request: AgentVisualizationRequest) -> AgentVisualiza
         dot_diagram = f"digraph G {{\n  // {diagram_type.upper()} diagram\n  label=\"{project_title}\";\n}}"
         
         run_id = str(uuid.uuid4())
+        logger.info(f"[visualizer] Successfully generated {diagram_type.upper()} diagram | mermaid_length={len(mermaid_diagram)}")
         
-    except Exception as exc:
+    except RuntimeError as exc:
+        # RuntimeError usually means API key or client initialization issue
+        logger.error(f"[visualizer] RuntimeError generating visualization: {exc}", exc_info=True)
+        error_msg = str(exc)
+        if "API key" in error_msg or "not configured" in error_msg:
+            detail = "Agent_3 is unavailable. Missing or invalid Claude API configuration."
+        else:
+            detail = f"Failed to initialize Agent_3: {error_msg}"
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Failed to generate visualization: {exc}",
+            detail=detail,
+        ) from exc
+    except Exception as exc:
+        # Catch any other exceptions (API errors, network issues, etc.)
+        logger.error(f"[visualizer] Exception generating visualization: {type(exc).__name__}: {exc}", exc_info=True)
+        error_msg = str(exc)
+        # Provide more specific error messages
+        if "API key" in error_msg or "authentication" in error_msg.lower():
+            detail = "Authentication failed. Please check your Claude API key."
+        elif "rate limit" in error_msg.lower() or "429" in error_msg:
+            detail = "Rate limit exceeded. Please try again in a moment."
+        elif "timeout" in error_msg.lower() or "network" in error_msg.lower():
+            detail = "Network error. Please check your connection and try again."
+        else:
+            detail = f"Failed to generate visualization: {error_msg}"
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail,
         ) from exc
 
     # Store the newly generated visualization
