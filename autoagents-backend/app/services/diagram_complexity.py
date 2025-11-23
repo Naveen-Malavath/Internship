@@ -140,7 +140,7 @@ SHAPE VARIATION REQUIREMENTS:
 - Processes (business logic, transformations): Use rectangles - [Process]
 - Decisions (conditionals, branches): Use diamonds - {Decision}
 - Data stores (databases, caches, storage): Use cylinders - [(DataStore)]
-- External systems (APIs, third-party services): Use parallelograms/trapezoids - [/External\]
+- External systems (APIs, third-party services): Use parallelograms/trapezoids - [/External/]
 
 Apply shapes consistently throughout the diagram based on node function.
 """
