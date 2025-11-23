@@ -1,4 +1,4 @@
 digraph G {
-  // DATABASE diagram
+  // LLD diagram
   label="Project";
 }

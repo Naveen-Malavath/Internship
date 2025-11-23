@@ -21,12 +21,14 @@ async def connect_to_mongo() -> None:
     if _client is not None and _database is not None:
         return
 
-    mongo_uri = os.getenv("MONGO_URI")
-    db_name = os.getenv("MONGO_DB_NAME")
+    # Support both MONGO_URI and MONGODB_URL for flexibility
+    mongo_uri = os.getenv("MONGO_URI") or os.getenv("MONGODB_URL")
+    # Support both MONGO_DB_NAME and MONGODB_DB_NAME for flexibility
+    db_name = os.getenv("MONGO_DB_NAME") or os.getenv("MONGODB_DB_NAME")
 
     if not mongo_uri or not db_name:
         raise RuntimeError(
-            "MongoDB configuration missing (MONGO_URI/MONGO_DB_NAME). "
+            "MongoDB configuration missing (MONGO_URI/MONGODB_URL and MONGO_DB_NAME/MONGODB_DB_NAME). "
             "Please check your .env file in the autoagents-backend directory."
         )
 

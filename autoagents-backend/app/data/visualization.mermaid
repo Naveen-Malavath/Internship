@@ -1,159 +1,368 @@
-graph TD
-    %% User Touchpoints
-    Customer["Customer"]
-    Merchant["Merchant/Vendor"]
-    Developer["Third-Party Developer"]
-    Admin["Platform Admin"]
-
+classDiagram
     %% Frontend Layer
-    WebStorefront["Web Storefront"]
-    MobileStorefront["Mobile Storefront"]
-    IoTStorefront["IoT Storefront"]
-    VendorPortal["Vendor Portal"]
-    AdminDashboard["Admin Dashboard"]
+    class StorefrontApp {
+    +React
+    +authenticate()
+    +displayProducts()
+    +manageCart()
+    +processCheckout()
+    }
+
+    class AdminDashboard {
+    +ModularUI
+    +configureModules()
+    +viewAnalytics()
+    +manageWorkflows()
+    +generateReports()
+    }
+
+    class MobileApp {
+    +Native
+    +syncOfflineData()
+    +pushNotifications()
+    +biometricAuth()
+    }
 
     %% API Gateway Layer
-    APIGateway["Headless API Gateway<br/>(GraphQL/REST)<br/>Auth | Rate Limiting | Routing"]
+    class APIGateway {
+    +String
+    +Map
+    ~String
+    +AuthenticationFilter
+    +RateLimiter
+    +routeRequest(request)
+    +authenticateUser(token)
+    +applyRateLimit(userId)
+    +logRequest(request)
+    }
 
-    %% Core Commerce Services
-    ProductCatalog["Product Catalog Service<br/>Millions of SKUs<br/>Elastic Search <100ms<br/>Multi-language/Currency"]
-    InventoryEngine["Inventory Orchestration<br/>Real-time Aggregation<br/>Distributed Locking<br/>Smart Allocation"]
-    OrderManagement["Order Management System<br/>Multi-Channel Orders<br/>Fulfillment Workflows<br/>Returns & Exchanges"]
-    CheckoutPayment["Checkout & Payment<br/>Payment Orchestration<br/>Fraud Detection<br/>Tax & Shipping"]
-    LoyaltyEngine["Loyalty & Rewards<br/>Points & Tiers<br/>Referrals<br/>Personalized Rewards"]
+    class GraphQLEndpoint {
+    +Schema
+    +Resolver
+    +executeQuery(query)
+    +validateSchema()
+    +handleSubscriptions()
+    }
 
-    %% AI & Personalization Layer
-    AIPersonalization["AI Personalization Engine<br/>ML Models<br/>Behavior Analysis<br/>Dynamic Pricing<br/>Recommendations"]
+    class RESTEndpoint {
+    +Map
+    ~String
+    +handleGET(path, params)
+    +handlePOST(path, body)
+    +handlePUT(path, body)
+    +handleDELETE(path, params)
+    }
 
-    %% Content & Digital Assets
-    HeadlessCMS["Headless CMS<br/>Content Management<br/>Digital Assets<br/>CDN Integration<br/>Version Control"]
+    %% Core Microservices
+    class CatalogService {
+    +ProductRepository
+    +CategoryRepository
+    +SearchEngine
+    +createProduct(product)
+    +updateProduct(id, product)
+    +searchProducts(criteria)
+    +getProductHierarchy()
+    +manageVariants(productId)
+    }
 
-    %% Integration & Extensibility
-    IntegrationHub["API Marketplace<br/>Integration Hub<br/>SDK Libraries<br/>Webhook Management<br/>Sandbox Environment"]
+    class InventoryService {
+    +InventoryRepository
+    +AllocationEngine
+    +ReservationManager
+    +updateStock(sku, quantity)
+    +reserveInventory(items)
+    +releaseReservation(reservationId)
+    +syncAcrossChannels()
+    +getAvailability(sku)
+    }
 
-    %% Vendor Management
-    VendorManagement["Vendor Management<br/>Onboarding Workflows<br/>Commission Engine<br/>Automated Payouts"]
+    class OrderService {
+    +OrderRepository
+    +PaymentProcessor
+    +FulfillmentOrchestrator
+    +createOrder(orderData)
+    +updateOrderStatus(orderId, status)
+    +processPayment(paymentInfo)
+    +trackShipment(orderId)
+    +handleReturns(returnRequest)
+    }
 
-    %% Analytics & Monitoring
-    AnalyticsHub["Analytics & Reporting<br/>Real-time Dashboards<br/>Data Warehouse<br/>BI Layer<br/>Custom Reports"]
-    MonitoringSuite["Performance Monitoring<br/>Distributed Tracing<br/>API Metrics<br/>Automated Alerts<br/>CI/CD Integration"]
+    class PricingService {
+    +PriceRepository
+    +PromotionEngine
+    +TierCalculator
+    +calculatePrice(productId, customerId)
+    +applyPromotions(cartItems)
+    +getTierPricing(customerId)
+    +validatePriceRules()
+    }
+
+    class CustomerService {
+    +CustomerRepository
+    +ProfileManager
+    +PreferenceEngine
+    +createCustomer(customerData)
+    +updateProfile(customerId, profile)
+    +getPreferences(customerId)
+    +manageAddresses(customerId)
+    +handleAuthentication()
+    }
+
+    class LoyaltyService {
+    +LoyaltyRepository
+    +PointsCalculator
+    +RewardsEngine
+    +TierManager
+    +calculatePoints(transaction)
+    +redeemRewards(customerId, rewardId)
+    +updateTierStatus(customerId)
+    +trackEngagement(activity)
+    }
+
+    %% AI & Analytics Layer
+    class PersonalizationEngine {
+    +MLModelManager
+    +BehaviorTracker
+    +RecommendationService
+    +generateRecommendations(customerId)
+    +updateBehaviorModel(interaction)
+    +personalizeContent(customerId)
+    +optimizePricing(customerId)
+    }
+
+    class AnalyticsService {
+    +MetricsCollector
+    +ReportGenerator
+    +AlertManager
+    +collectMetrics(event)
+    +generateReport(criteria)
+    +sendAlert(condition)
+    +trackPerformance()
+    }
+
+    %% Integration Layer
+    class IntegrationHub {
+    +ConnectorRegistry
+    +MessageQueue
+    +TransformationEngine
+    +registerConnector(connector)
+    +processMessage(message)
+    +transformData(data, format)
+    +routeToDestination(message)
+    }
+
+    class PaymentConnector {
+    +PaymentGateway
+    +processPayment(paymentData)
+    +refundPayment(transactionId)
+    +validateCard(cardInfo)
+    }
+
+    class ShippingConnector {
+    +ShippingProvider
+    +calculateRates(shipment)
+    +createLabel(shipment)
+    +trackPackage(trackingId)
+    }
+
+    class ERPConnector {
+    +ERPSystem
+    +syncInventory()
+    +updateOrders()
+    +syncCustomers()
+    }
 
     %% Data Layer
-    ProductDB[("Product Database<br/>Flexible Schema")]
-    InventoryDB[("Inventory Database<br/>Multi-location")]
-    OrderDB[("Order Database<br/>Transaction Log")]
-    CustomerDB[("Customer Database<br/>Profile & History")]
-    AnalyticsDB[("Analytics Warehouse<br/>Aggregated Data")]
-    ContentDB[("Content Database<br/>Assets & Metadata")]
+    class ProductDatabase {
+    +products
+    +categories
+    +variants
+    +attributes
+    +executeQuery(sql)
+    +createIndex(field)
+    +optimizePerformance()
+    }
 
-    %% External Services
-    PaymentProviders["Payment Providers<br/>Multiple Gateways<br/>Digital Wallets<br/>BNPL"]
-    FulfillmentCenters["Fulfillment Centers<br/>Warehouses<br/>3PL Partners<br/>Stores"]
-    CDN["CDN Network<br/>Global Distribution<br/>Image Optimization"]
-    MLPlatform["ML Platform<br/>Training Pipeline<br/>Model Serving"]
+    class CustomerDatabase {
+    +customers
+    +profiles
+    +preferences
+    +addresses
+    +loyalty_accounts
+    +executeQuery(sql)
+    +encryptPII(data)
+    }
 
-    %% User Flows
-    Customer --> WebStorefront
-    Customer --> MobileStorefront
-    Customer --> IoTStorefront
-    Merchant --> VendorPortal
-    Developer --> IntegrationHub
-    Admin --> AdminDashboard
+    class OrderDatabase {
+    +orders
+    +order_items
+    +payments
+    +shipments
+    +executeQuery(sql)
+    +maintainConsistency()
+    }
 
-    %% Frontend to Gateway
-    WebStorefront --> APIGateway
-    MobileStorefront --> APIGateway
-    IoTStorefront --> APIGateway
-    VendorPortal --> APIGateway
+    class InventoryDatabase {
+    +inventory
+    +reservations
+    +allocations
+    +warehouses
+    +executeQuery(sql)
+    +handleConcurrency()
+    }
+
+    class AnalyticsDatabase {
+    +events
+    +metrics
+    +reports
+    +user_behavior
+    +executeQuery(sql)
+    +aggregateData()
+    }
+
+    %% Cache Layer
+    class RedisCache {
+    +String
+    +int
+    +set(key, value, ttl)
+    +get(key)
+    +delete(key)
+    +flushCache()
+    }
+
+    class ElasticsearchIndex {
+    +String
+    +indexDocument(doc)
+    +search(query)
+    +updateMapping()
+    +optimizeIndex()
+    }
+
+    %% Message Queue
+    class MessageBroker {
+    +Queue
+    +publishMessage(topic, message)
+    +subscribeToTopic(topic, handler)
+    +processDeadLetters()
+    +monitorQueues()
+    }
+
+    %% Multi-tenant Support
+    class TenantManager {
+    +TenantRepository
+    +ConfigurationManager
+    +DataIsolationLayer
+    +createTenant(tenantData)
+    +configureTenant(tenantId, config)
+    +isolateData(tenantId)
+    +manageBranding(tenantId)
+    }
+
+    %% Relationships
+    StorefrontApp --> APIGateway
     AdminDashboard --> APIGateway
+    MobileApp --> APIGateway
 
-    %% Gateway to Services
-    APIGateway --> ProductCatalog
-    APIGateway --> InventoryEngine
-    APIGateway --> OrderManagement
-    APIGateway --> CheckoutPayment
-    APIGateway --> LoyaltyEngine
-    APIGateway --> HeadlessCMS
-    APIGateway --> VendorManagement
-    APIGateway --> AIPersonalization
+    APIGateway --> GraphQLEndpoint
+    APIGateway --> RESTEndpoint
+    APIGateway --> TenantManager
 
-    %% Service Interactions
-    ProductCatalog --> ProductDB
-    ProductCatalog --> HeadlessCMS
-    
-    InventoryEngine --> InventoryDB
-    InventoryEngine --> FulfillmentCenters
-    
-    OrderManagement --> OrderDB
-    OrderManagement --> InventoryEngine
-    OrderManagement --> FulfillmentCenters
-    OrderManagement --> LoyaltyEngine
-    
-    CheckoutPayment --> PaymentProviders
-    CheckoutPayment --> OrderManagement
-    
-    AIPersonalization --> CustomerDB
-    AIPersonalization --> MLPlatform
-    AIPersonalization --> ProductCatalog
-    
-    HeadlessCMS --> ContentDB
-    HeadlessCMS --> CDN
-    
-    VendorManagement --> ProductCatalog
-    VendorManagement --> InventoryEngine
-    VendorManagement --> OrderManagement
-    
-    LoyaltyEngine --> CustomerDB
-    LoyaltyEngine --> OrderDB
+    GraphQLEndpoint --> CatalogService
+    GraphQLEndpoint --> InventoryService
+    GraphQLEndpoint --> OrderService
+    GraphQLEndpoint --> CustomerService
+    GraphQLEndpoint --> LoyaltyService
 
-    %% Analytics & Monitoring
-    ProductCatalog -.->|Metrics| AnalyticsHub
-    InventoryEngine -.->|Metrics| AnalyticsHub
-    OrderManagement -.->|Metrics| AnalyticsHub
-    CheckoutPayment -.->|Metrics| AnalyticsHub
-    LoyaltyEngine -.->|Metrics| AnalyticsHub
-    
-    AnalyticsHub --> AnalyticsDB
-    
-    APIGateway -.->|Traces| MonitoringSuite
-    ProductCatalog -.->|Traces| MonitoringSuite
-    InventoryEngine -.->|Traces| MonitoringSuite
-    OrderManagement -.->|Traces| MonitoringSuite
-    CheckoutPayment -.->|Traces| MonitoringSuite
+    RESTEndpoint --> CatalogService
+    RESTEndpoint --> InventoryService
+    RESTEndpoint --> OrderService
+    RESTEndpoint --> PricingService
+    RESTEndpoint --> CustomerService
+    RESTEndpoint --> LoyaltyService
 
-    %% Integration Hub Connections
-    IntegrationHub -.->|Webhooks| OrderManagement
-    IntegrationHub -.->|Webhooks| InventoryEngine
-    IntegrationHub -.->|SDK| APIGateway
+    CatalogService --> ProductDatabase
+    CatalogService --> ElasticsearchIndex
+    CatalogService --> RedisCache
+    CatalogService --> MessageBroker
 
-    %% Business Flow Annotations
-    subgraph "Customer Journey"
-        WebStorefront
-        MobileStorefront
-        IoTStorefront
-    end
+    InventoryService --> InventoryDatabase
+    InventoryService --> RedisCache
+    InventoryService --> MessageBroker
 
-    subgraph "Commerce Core"
-        ProductCatalog
-        InventoryEngine
-        OrderManagement
-        CheckoutPayment
-    end
+    OrderService --> OrderDatabase
+    OrderService --> IntegrationHub
+    OrderService --> MessageBroker
 
-    subgraph "Intelligence Layer"
-        AIPersonalization
-        LoyaltyEngine
-        AnalyticsHub
-    end
+    CustomerService --> CustomerDatabase
+    CustomerService --> RedisCache
+    CustomerService --> PersonalizationEngine
 
-    subgraph "Extensibility Platform"
-        IntegrationHub
-        VendorManagement
-    end
+    LoyaltyService --> CustomerDatabase
+    LoyaltyService --> MessageBroker
+    LoyaltyService --> AnalyticsService
 
-    subgraph "Observability"
-        MonitoringSuite
-        AnalyticsHub
-    end
+    PricingService --> ProductDatabase
+    PricingService --> PersonalizationEngine
+    PricingService --> RedisCache
 
-    %% Style Definitions
+    PersonalizationEngine --> AnalyticsDatabase
+    PersonalizationEngine --> CustomerDatabase
+    PersonalizationEngine --> MessageBroker
+
+    AnalyticsService --> AnalyticsDatabase
+    AnalyticsService --> MessageBroker
+
+    IntegrationHub --> PaymentConnector
+    IntegrationHub --> ShippingConnector
+    IntegrationHub --> ERPConnector
+    IntegrationHub --> MessageBroker
+
+    TenantManager --> ProductDatabase
+    TenantManager --> CustomerDatabase
+    TenantManager --> OrderDatabase
+    TenantManager --> InventoryDatabase
+
+    %% Styling
+    classDef frontend fill:#E3F2FD,stroke:#1976D2,color:#000
+    classDef gateway fill:#F3E5F5,stroke:#7B1FA2,color:#000
+    classDef service fill:#FFF3E0,stroke:#F57C00,color:#000
+    classDef ai fill:#E8F5E9,stroke:#388E3C,color:#000
+    classDef integration fill:#FCE4EC,stroke:#C2185B,color:#000
+    classDef database fill:#E0F2F1,stroke:#00695C,color:#000
+    classDef cache fill:#FFF8E1,stroke:#FF8F00,color:#000
+    classDef infrastructure fill:#EFEBE9,stroke:#5D4037,color:#000
+
+    StorefrontApp:::frontend
+    AdminDashboard:::frontend
+    MobileApp:::frontend
+
+    APIGateway:::gateway
+    GraphQLEndpoint:::gateway
+    RESTEndpoint:::gateway
+
+    CatalogService:::service
+    InventoryService:::service
+    OrderService:::service
+    PricingService:::service
+    CustomerService:::service
+    LoyaltyService:::service
+
+    PersonalizationEngine:::ai
+    AnalyticsService:::ai
+
+    IntegrationHub:::integration
+    PaymentConnector:::integration
+    ShippingConnector:::integration
+    ERPConnector:::integration
+
+    ProductDatabase:::database
+    CustomerDatabase:::database
+    OrderDatabase:::database
+    InventoryDatabase:::database
+    AnalyticsDatabase:::database
+
+    RedisCache:::cache
+    ElasticsearchIndex:::cache
+
+    MessageBroker:::infrastructure
+    TenantManager:::infrastructure

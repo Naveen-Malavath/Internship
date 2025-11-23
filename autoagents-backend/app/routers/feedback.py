@@ -15,15 +15,25 @@ from ..schemas.feedback import (
     FeedbackResponse,
     FeedbackHistoryEntry,
     RegenerationCountResponse,
+    ChatbotRequest,
+    ChatbotResponse,
+    FeedbackSuggestionRequest,
+    FeedbackSuggestionResponse,
+    RegenerationExplanationRequest,
+    RegenerationExplanationResponse,
+    ConversationHistoryResponse,
+    ChatMessage,
 )
 from ..services.feedback_service import FeedbackService
+from ..services.feedback_chatbot_service import FeedbackChatbotService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
-# Initialize feedback service
+# Initialize feedback services
 feedback_service = FeedbackService()
+chatbot_service = FeedbackChatbotService()
 
 
 @router.post("/submit", response_model=FeedbackResponse)
@@ -350,4 +360,315 @@ async def _get_regeneration_count(
         }
     )
     return count
+
+
+# ========================================
+# Chatbot Endpoints
+# ========================================
+
+@router.post("/chatbot/message", response_model=ChatbotResponse)
+async def send_chatbot_message(request: ChatbotRequest) -> ChatbotResponse:
+    """Send a message to the feedback chatbot and get AI response."""
+    logger.debug(
+        "[feedback-chatbot] Sending message to chatbot",
+        extra={
+            "messageLength": len(request.message),
+            "conversationId": request.conversationId,
+            "hasContext": bool(request.context),
+        },
+    )
+
+    try:
+        db = get_database()
+        
+        # Generate or use existing conversation ID
+        conversation_id = request.conversationId or str(uuid.uuid4())
+        
+        # Get existing conversation history if available
+        chat_history = []
+        if request.conversationId:
+            conversation = await db["chatbot_conversations"].find_one(
+                {"_id": conversation_id}
+            )
+            if conversation:
+                chat_history = conversation.get("messages", [])
+                logger.debug(
+                    f"[feedback-chatbot] Found existing conversation | messages={len(chat_history)}"
+                )
+        
+        # Build context from request
+        context = request.context or {}
+        if request.itemType:
+            context["itemType"] = request.itemType
+        if request.itemId:
+            context["itemId"] = request.itemId
+        if request.projectId:
+            context["projectId"] = request.projectId
+        
+        logger.debug(
+            "[feedback-chatbot] Calling chatbot service",
+            extra={
+                "conversationId": conversation_id,
+                "historyLength": len(chat_history),
+            },
+        )
+        
+        # Generate AI response
+        response = await chatbot_service.generate_response(
+            user_message=request.message,
+            chat_history=chat_history,
+            context=context,
+        )
+        
+        # Save conversation to database
+        timestamp = datetime.utcnow()
+        
+        # Add user message to history
+        chat_history.append({
+            "role": "user",
+            "content": request.message,
+            "timestamp": timestamp.isoformat(),
+        })
+        
+        # Add assistant response to history
+        chat_history.append({
+            "role": "assistant",
+            "content": response["response"],
+            "timestamp": response["timestamp"],
+        })
+        
+        # Update or create conversation
+        await db["chatbot_conversations"].update_one(
+            {"_id": conversation_id},
+            {
+                "$set": {
+                    "messages": chat_history,
+                    "updated_at": timestamp,
+                    "project_id": request.projectId,
+                    "item_id": request.itemId,
+                    "item_type": request.itemType,
+                },
+                "$setOnInsert": {
+                    "created_at": timestamp,
+                },
+            },
+            upsert=True,
+        )
+        
+        logger.info(
+            "[feedback-chatbot] Message sent and response generated",
+            extra={
+                "conversationId": conversation_id,
+                "messageId": response["message_id"],
+                "totalMessages": len(chat_history),
+            },
+        )
+        
+        return ChatbotResponse(
+            conversationId=conversation_id,
+            messageId=response["message_id"],
+            response=response["response"],
+            timestamp=response["timestamp"],
+            metadata=response.get("metadata"),
+        )
+    
+    except Exception as exc:
+        logger.error(
+            "[feedback-chatbot] Error processing chatbot message",
+            exc_info=True,
+            extra={"conversationId": request.conversationId},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process chatbot message: {str(exc)}",
+        ) from exc
+
+
+@router.post("/chatbot/suggest-improvements", response_model=FeedbackSuggestionResponse)
+async def suggest_feedback_improvements(
+    request: FeedbackSuggestionRequest,
+) -> FeedbackSuggestionResponse:
+    """Get AI suggestions to improve user feedback."""
+    logger.debug(
+        "[feedback-chatbot] Suggesting feedback improvements",
+        extra={
+            "feedbackLength": len(request.feedback),
+            "itemType": request.itemType,
+        },
+    )
+
+    try:
+        result = await chatbot_service.suggest_feedback_improvements(
+            original_feedback=request.feedback,
+            item_type=request.itemType,
+            item_content=request.itemContent,
+        )
+        
+        logger.info(
+            "[feedback-chatbot] Suggestions generated",
+            extra={"messageId": result["message_id"], "itemType": request.itemType},
+        )
+        
+        return FeedbackSuggestionResponse(
+            suggestions=result["suggestions"],
+            originalFeedback=result["original_feedback"],
+            itemType=result["item_type"],
+            messageId=result["message_id"],
+        )
+    
+    except Exception as exc:
+        logger.error(
+            "[feedback-chatbot] Error suggesting improvements",
+            exc_info=True,
+            extra={"itemType": request.itemType},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate suggestions: {str(exc)}",
+        ) from exc
+
+
+@router.post("/chatbot/explain-regeneration", response_model=RegenerationExplanationResponse)
+async def explain_regeneration(
+    request: RegenerationExplanationRequest,
+) -> RegenerationExplanationResponse:
+    """Get AI explanation of what changed in a regeneration and why."""
+    logger.debug(
+        "[feedback-chatbot] Explaining regeneration",
+        extra={"itemType": request.itemType},
+    )
+
+    try:
+        explanation = await chatbot_service.explain_regeneration(
+            item_type=request.itemType,
+            original_content=request.originalContent,
+            regenerated_content=request.regeneratedContent,
+            feedback=request.feedback,
+        )
+        
+        logger.info(
+            "[feedback-chatbot] Explanation generated",
+            extra={"itemType": request.itemType},
+        )
+        
+        return RegenerationExplanationResponse(
+            explanation=explanation,
+            itemType=request.itemType,
+        )
+    
+    except Exception as exc:
+        logger.error(
+            "[feedback-chatbot] Error generating explanation",
+            exc_info=True,
+            extra={"itemType": request.itemType},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate explanation: {str(exc)}",
+        ) from exc
+
+
+@router.get("/chatbot/conversation/{conversation_id}", response_model=ConversationHistoryResponse)
+async def get_conversation_history(conversation_id: str) -> ConversationHistoryResponse:
+    """Get the full history of a chatbot conversation."""
+    logger.debug(
+        "[feedback-chatbot] Getting conversation history",
+        extra={"conversationId": conversation_id},
+    )
+
+    try:
+        db = get_database()
+        
+        conversation = await db["chatbot_conversations"].find_one(
+            {"_id": conversation_id}
+        )
+        
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Conversation not found: {conversation_id}",
+            )
+        
+        messages = [
+            ChatMessage(
+                role=msg.get("role", "user"),
+                content=msg.get("content", ""),
+                timestamp=msg.get("timestamp"),
+            )
+            for msg in conversation.get("messages", [])
+        ]
+        
+        logger.info(
+            "[feedback-chatbot] Conversation history retrieved",
+            extra={"conversationId": conversation_id, "messageCount": len(messages)},
+        )
+        
+        return ConversationHistoryResponse(
+            conversationId=conversation_id,
+            messages=messages,
+            createdAt=conversation.get("created_at").isoformat()
+            if conversation.get("created_at")
+            else datetime.utcnow().isoformat(),
+            updatedAt=conversation.get("updated_at").isoformat()
+            if conversation.get("updated_at")
+            else datetime.utcnow().isoformat(),
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "[feedback-chatbot] Error getting conversation history",
+            exc_info=True,
+            extra={"conversationId": conversation_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve conversation history: {str(exc)}",
+        ) from exc
+
+
+@router.delete("/chatbot/conversation/{conversation_id}")
+async def delete_conversation(conversation_id: str) -> dict:
+    """Delete a chatbot conversation."""
+    logger.debug(
+        "[feedback-chatbot] Deleting conversation",
+        extra={"conversationId": conversation_id},
+    )
+
+    try:
+        db = get_database()
+        
+        result = await db["chatbot_conversations"].delete_one(
+            {"_id": conversation_id}
+        )
+        
+        if result.deleted_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Conversation not found: {conversation_id}",
+            )
+        
+        logger.info(
+            "[feedback-chatbot] Conversation deleted",
+            extra={"conversationId": conversation_id},
+        )
+        
+        return {
+            "message": "Conversation deleted successfully",
+            "conversationId": conversation_id,
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "[feedback-chatbot] Error deleting conversation",
+            exc_info=True,
+            extra={"conversationId": conversation_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete conversation: {str(exc)}",
+        ) from exc
 

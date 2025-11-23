@@ -68,6 +68,14 @@ export class FeedbackChatbotComponent implements OnInit, OnDestroy {
     }
   }
 
+  onKeyDown(event: KeyboardEvent): void {
+    // Submit on Enter, but allow Shift+Enter for new line
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.onSubmitFeedback();
+    }
+  }
+
   async onSubmitFeedback(): Promise<void> {
     const feedback = this.feedbackText().trim();
     if (!feedback) {

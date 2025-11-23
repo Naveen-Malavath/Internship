@@ -141,13 +141,13 @@ export class DiagramDataService {
     let storyClassList = '';
     
     if (features.length > 0) {
-      const featureNames = features.map((_, idx) => `Feature${idx}`).join(',');
-      featureClassList = `class ${featureNames} featureClass`;
+      const featureAssignments = features.map((_, idx) => `class Feature${idx} featureClass`).join('\n    ');
+      featureClassList = featureAssignments;
     }
     
     if (stories.length > 0) {
-      const storyNames = stories.map((_, idx) => `Story${idx}`).join(',');
-      storyClassList = `class ${storyNames} storyClass`;
+      const storyAssignments = stories.map((_, idx) => `class Story${idx} storyClass`).join('\n    ');
+      storyClassList = storyAssignments;
     }
 
     const diagram = `graph TD
@@ -324,12 +324,24 @@ ${storyConnections}
     
     class User userClass
     class PromptNode promptClass
-    class WebApp,ChatUI,WorkspaceUI,WizardUI,FeedbackUI uiLayer
+    class WebApp uiLayer
+    class ChatUI uiLayer
+    class WorkspaceUI uiLayer
+    class WizardUI uiLayer
+    class FeedbackUI uiLayer
     class APIGateway apiLayer
-    class ProjectService,FeatureService,StoryService,DiagramService,FeedbackService,StateService serviceLayer
-    class Agent1,Agent2,Agent3 agentLayer
+    class ProjectService serviceLayer
+    class FeatureService serviceLayer
+    class StoryService serviceLayer
+    class DiagramService serviceLayer
+    class FeedbackService serviceLayer
+    class StateService serviceLayer
+    class Agent1 agentLayer
+    class Agent2 agentLayer
+    class Agent3 agentLayer
     class LLMProvider llmClass
-    class MongoDB,Cache dataLayer${featureClassList ? '\n    ' + featureClassList : ''}${storyClassList ? '\n    ' + storyClassList : ''}
+    class MongoDB dataLayer
+    class Cache dataLayer${featureClassList ? '\n    ' + featureClassList : ''}${storyClassList ? '\n    ' + storyClassList : ''}
     
     style Frontend fill:#dbeafe,stroke:#3b82f6,stroke-width:2px,stroke-dasharray:5 5
     style BackendServices fill:#d1fae5,stroke:#10b981,stroke-width:2px,stroke-dasharray:5 5
@@ -395,16 +407,16 @@ ${storyConnections}
       });
     }
 
-    // Build feature and story class names for styling
-    let featureClassNames = '';
-    let storyClassNames = '';
+    // Build feature and story class names for styling - individual class assignments
+    let featureClassAssignments = '';
+    let storyClassAssignments = '';
     
     if (features.length > 0) {
-      featureClassNames = features.map((_, idx) => `Feature${idx + 1}`).join(',');
+      featureClassAssignments = features.map((_, idx) => `class Feature${idx + 1} featureComponent`).join('\n    ');
     }
     
     if (stories.length > 0) {
-      storyClassNames = stories.map((_, idx) => `Story${idx + 1}`).join(',');
+      storyClassAssignments = stories.map((_, idx) => `class Story${idx + 1} storyComponent`).join('\n    ');
     }
 
                 return `graph TD
@@ -558,10 +570,26 @@ ${featureConnections}${storyConnections}
     classDef api fill:#ef4444,stroke:#dc2626,stroke-width:3px,color:#fff,font-weight:bold
     
     class AppRoot rootComponent
-    class ChatComponent,WorkspaceComponent,WizardComponent,FeedbackComponent uiComponent${featureClassNames ? '\n    class ' + featureClassNames + ' featureComponent' : ''}${storyClassNames ? '\n    class ' + storyClassNames + ' storyComponent' : ''}
-    class ChatState,FeaturesState,StoriesState,DiagramsState,ProjectState stateSignal
-    class AgentService,DesignService,FeedbackService,LocalStorageService,StateService,DiagramDataService service
-    class ProjectRouter,FeatureRouter,StoryRouter,DiagramRouter,FeedbackRouter api
+    class ChatComponent uiComponent
+    class WorkspaceComponent uiComponent
+    class WizardComponent uiComponent
+    class FeedbackComponent uiComponent${featureClassAssignments ? '\n    ' + featureClassAssignments : ''}${storyClassAssignments ? '\n    ' + storyClassAssignments : ''}
+    class ChatState stateSignal
+    class FeaturesState stateSignal
+    class StoriesState stateSignal
+    class DiagramsState stateSignal
+    class ProjectState stateSignal
+    class AgentService service
+    class DesignService service
+    class FeedbackService service
+    class LocalStorageService service
+    class StateService service
+    class DiagramDataService service
+    class ProjectRouter api
+    class FeatureRouter api
+    class StoryRouter api
+    class DiagramRouter api
+    class FeedbackRouter api
     
     style MainUI fill:#dbeafe,stroke:#3b82f6,stroke-width:2px,stroke-dasharray:5 5
     style Features fill:#d1fae5,stroke:#10b981,stroke-width:2px,stroke-dasharray:5 5

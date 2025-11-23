@@ -6,10 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import re
 from pathlib import Path
 
-from .db import connect_to_mongo, close_mongo_connection
-from .routers import auth, projects, features, stories, diagrams, agent_legacy, status, visualizer, suggestions, feedback
-
 # Load .env file from the backend directory (parent of app/)
+# MUST be done BEFORE importing routers that depend on environment variables
 env_path = Path(__file__).parent.parent / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path, override=True)
@@ -22,6 +20,9 @@ else:
         "Using system environment variables only."
     )
     load_dotenv()  # Fallback to default behavior
+
+from .db import connect_to_mongo, close_mongo_connection
+from .routers import auth, projects, features, stories, diagrams, agent_legacy, status, visualizer, suggestions, feedback
 
 app = FastAPI(title="AutoAgents Backend")
 

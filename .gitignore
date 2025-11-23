@@ -4,6 +4,7 @@
 
 # Sensitive documentation
 autoagents-backend/UPDATE_ENV_FOR_MONGODB.txt
+autoagents-backend/mongodb_config.txt
 
 # Python cache
 __pycache__/

@@ -1084,7 +1084,10 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private invokeAgent3(features: AgentFeatureSpec[], stories: AgentStorySpec[], diagramType: string = 'hld'): void {
-    if (!features.length || !stories.length) {
+    // Enhanced validation - check for both empty arrays and valid data
+    if (!features || !stories || features.length === 0 || stories.length === 0) {
+      console.warn(`[app] Skipping Agent 3 call for ${diagramType.toUpperCase()} - insufficient data | features=${features?.length || 0} | stories=${stories?.length || 0}`);
+      this.workspaceMermaidSaveMessage.set(`Cannot generate ${diagramType.toUpperCase()} diagram: Need both features and stories.`);
       return;
     }
 
@@ -1142,28 +1145,48 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
         },
         error: (error: unknown) => {
           console.error(`[app] Agent 3 API error for ${diagramType.toUpperCase()}:`, error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           
-          // More user-friendly error messages
+          // Extract error details from HttpErrorResponse
+          let errorMessage = 'Unknown error';
+          let statusCode = 0;
+          
+          if (error && typeof error === 'object' && 'error' in error) {
+            const httpError = error as any;
+            statusCode = httpError.status || 0;
+            errorMessage = httpError.error?.detail || httpError.message || httpError.statusText || 'Unknown error';
+          } else if (error instanceof Error) {
+            errorMessage = error.message;
+          }
+          
+          // More user-friendly error messages based on status code and message
           let userMessage = `Failed to generate ${diagramType.toUpperCase()} diagram. `;
-          if (errorMessage.includes('API key') || errorMessage.includes('authentication')) {
-            userMessage += 'Please check your Claude API key configuration.';
+          
+          if (statusCode === 503 || errorMessage.includes('Service Unavailable')) {
+            userMessage += 'Agent 3 is temporarily unavailable. The Claude API may be experiencing issues. Please try again in a moment.';
+          } else if (statusCode === 400 || errorMessage.includes('requires approved features')) {
+            userMessage += 'Invalid request. Please ensure you have approved features and stories.';
+          } else if (errorMessage.includes('API key') || errorMessage.includes('authentication') || errorMessage.includes('Missing Claude')) {
+            userMessage += 'Claude API key not configured. Please check your backend configuration.';
           } else if (errorMessage.includes('timeout') || errorMessage.includes('network')) {
             userMessage += 'Network error. Please check your connection and try again.';
+          } else if (statusCode === 429 || errorMessage.includes('rate limit')) {
+            userMessage += 'Rate limit exceeded. Please wait a moment and try again.';
           } else {
-            userMessage += `Error: ${errorMessage}. Please try again.`;
+            userMessage += `Error: ${errorMessage}`;
           }
           
           this.workspaceMermaidSaveMessage.set(userMessage);
           this.workspaceMermaidSaving.set(false);
           
-          // Show error in chat as well
-          this.appendMessage({
-            sender: 'assistant',
-            agent: 'agent2',
-            text: `Agent 3 could not generate the ${diagramType.toUpperCase()} diagram. ${errorMessage}.`,
-            runId: null,
-          });
+          // Only show error in chat for non-temporary issues
+          if (statusCode !== 503) {
+            this.appendMessage({
+              sender: 'assistant',
+              agent: 'agent2',
+              text: `Agent 3 could not generate the ${diagramType.toUpperCase()} diagram. ${userMessage}`,
+              runId: null,
+            });
+          }
         },
       });
   }

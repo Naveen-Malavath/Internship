@@ -46,6 +46,7 @@
           class="feedback-chatbot__input"
           rows="2"
           [disabled]="isSubmitting() || isRegenerating()"
+          (keydown)="onKeyDown($event)"
         ></textarea>
       </div>
 
@@ -58,17 +59,6 @@
         >
           <span *ngIf="!isSubmitting()">Submit</span>
           <span *ngIf="isSubmitting()">...</span>
-        </button>
-
-        <button
-          type="button"
-          class="btn btn--secondary"
-          (click)="regenerateContent()"
-          [disabled]="isRegenerating() || isSubmitting()"
-          *ngIf="feedbackHistory().length > 0"
-        >
-          <span *ngIf="!isRegenerating()">Regenerate</span>
-          <span *ngIf="isRegenerating()">...</span>
         </button>
 
         <button

@@ -242,36 +242,6 @@
                 <p>The diagram reflects edits in real time.</p>
               </div>
               <div class="studio-panel__controls">
-                <div class="diagram-type-buttons" role="group" aria-label="Diagram type buttons">
-                  <button
-                    type="button"
-                    class="workspace__action"
-                    [class.workspace__action--primary]="currentDiagramType === 'hld'"
-                    [class.workspace__action--outline]="currentDiagramType !== 'hld'"
-                    (click)="onDiagramTypeChange('hld')"
-                  >
-                    HLD
-                  </button>
-                  <button
-                    type="button"
-                    class="workspace__action"
-                    [class.workspace__action--primary]="currentDiagramType === 'lld'"
-                    [class.workspace__action--outline]="currentDiagramType !== 'lld'"
-                    (click)="onDiagramTypeChange('lld')"
-                  >
-                    LLD
-                  </button>
-                  <button
-                    type="button"
-                    class="workspace__action"
-                    [class.workspace__action--primary]="currentDiagramType === 'database'"
-                    [class.workspace__action--outline]="currentDiagramType !== 'database'"
-                    (click)="onDiagramTypeChange('database')"
-                  >
-                    DBD
-                  </button>
-                </div>
-                <div class="studio-panel__controls-divider"></div>
                 <div class="preview-zoom" role="group" aria-label="Diagram zoom controls" *ngIf="showZoomControls">
                   <button
                     type="button"
@@ -343,7 +313,8 @@
                 diagramType: currentDiagramType,
                 features: features,
                 stories: stories,
-                prompt: prompt
+                prompt: prompt,
+                projectTitle: project?.details?.name || 'Project'
               }"
               [projectContext]="prompt"
               (contentRegenerated)="onVisualizationRegenerated($event)"
@@ -361,16 +332,6 @@
                 <ul>
                   <li *ngFor="let item of viz.callouts">{{ item }}</li>
                 </ul>
-              </section>
-
-              <section class="preview-dot">
-                <header>
-                  <h3>DOT Diagram</h3>
-                  <button type="button" class="workspace__action workspace__action--outline" (click)="copyVisualizationDot(viz.diagrams.dot)">
-                    {{ isDotCopied ? 'Copied!' : 'Copy DOT' }}
-                  </button>
-                </header>
-                <textarea [value]="viz.diagrams.dot" readonly rows="8" spellcheck="false"></textarea>
               </section>
             </div>
           </article>

@@ -57,7 +57,6 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   protected mermaidInput = '';
   protected mermaidError: string | null = null;
   protected visualizationData: AgentVisualizationResponse | null = null;
-  protected isDotCopied = false;
   protected isMermaidCopied = false;
   protected previewTheme: 'dark' | 'light' = 'dark';
   protected currentDiagramType: 'hld' | 'lld' | 'database' = 'hld';
@@ -78,6 +77,8 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   private mermaidInitialised = false;
   private mermaidRenderIndex = 0;
   private copyNotificationTimer: ReturnType<typeof setTimeout> | null = null;
+  private renderDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly RENDER_DEBOUNCE_MS = 800; // Wait 800ms after user stops typing before rendering
   private previewAutoScale = 1;
   private readonly previewScaleMin = 0.75;
   private readonly previewScaleMax = 3;
@@ -168,6 +169,10 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     if (this.copyNotificationTimer) {
       clearTimeout(this.copyNotificationTimer);
       this.copyNotificationTimer = null;
+    }
+    if (this.renderDebounceTimer) {
+      clearTimeout(this.renderDebounceTimer);
+      this.renderDebounceTimer = null;
     }
   }
 
@@ -299,11 +304,14 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       this.isDiagramDropdownOpen = false;
       this.userSelectedDiagramType = true; // Mark that user explicitly selected this type
       
-      // Don't load static template - let Agent3 generate dynamically
-      // Emit event to parent to trigger Agent3 diagram generation
+      // Load predefined diagram immediately for instant feedback
+      this.loadPredefinedDiagram(type);
+      
+      // Then emit event to parent to trigger Agent3 diagram generation
+      // Agent3 will override the predefined diagram when ready
       this.diagramTypeChange.emit(type);
       
-      // Show loading state while waiting for Agent3
+      // Clear any previous errors
       this.mermaidError = null;
     }
   }
@@ -384,25 +392,6 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     this.storyDismiss.emit({ feature, story });
   }
 
-  protected copyVisualizationDot(code: string): void {
-    if (!navigator?.clipboard) {
-      this.isDotCopied = false;
-      return;
-    }
-
-    navigator.clipboard
-      .writeText(code)
-      .then(() => {
-        this.isDotCopied = true;
-        setTimeout(() => {
-          this.isDotCopied = false;
-        }, 2000);
-      })
-      .catch(() => {
-        this.isDotCopied = false;
-      });
-  }
-
   protected savePreviewDiagram(): void {
     // Get the current diagram type label for filename
     const diagramTypeLabel = this.getCurrentDiagramTypeLabel().replace(/\s+/g, '_');
@@ -432,9 +421,34 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     this.lineNumberOffset = 0;
     if (emitEvent) {
       this.mermaidChange.emit(this.mermaidInput);
+      // When user is typing (emitEvent=true), use debounced rendering to avoid parsing incomplete diagrams
+      this.debouncedRenderMermaid();
+    } else {
+      // When loading from backend (emitEvent=false), render immediately
+      this.mermaidError = null;
+      void this.renderMermaid();
     }
+  }
+
+  /**
+   * Debounced version of renderMermaid that waits for user to stop typing
+   * before attempting to render the diagram. This prevents parse errors
+   * from incomplete/malformed diagrams during editing.
+   */
+  private debouncedRenderMermaid(): void {
+    // Clear any existing timer
+    if (this.renderDebounceTimer) {
+      clearTimeout(this.renderDebounceTimer);
+    }
+    
+    // Clear any previous error while user is typing
     this.mermaidError = null;
-    void this.renderMermaid();
+    
+    // Set new timer to render after user stops typing
+    this.renderDebounceTimer = setTimeout(() => {
+      void this.renderMermaid();
+      this.renderDebounceTimer = null;
+    }, this.RENDER_DEBOUNCE_MS);
   }
 
   async renderMermaid(): Promise<void> {
@@ -443,14 +457,17 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     }
 
     // Configure Mermaid with better defaults for larger diagrams
-    // Enhanced sizing for LLD diagrams
+    // Enhanced sizing for better readability across all diagram types
     const isLLD = this.currentDiagramType === 'lld' || 
                   this.mermaidInput.includes('Feature Components') || 
                   this.mermaidInput.includes('Story Components');
-    const baseFontSize = isLLD ? '18px' : '16px';
-    const padding = isLLD ? 30 : 20;
-    const nodeSpacing = isLLD ? 60 : 50;
-    const rankSpacing = isLLD ? 80 : 60;
+    const isDBD = this.currentDiagramType === 'database' || this.mermaidInput.trim().startsWith('erDiagram');
+    
+    // Increased font sizes for better visibility
+    const baseFontSize = isLLD ? '20px' : isDBD ? '18px' : '18px';
+    const padding = isLLD ? 35 : isDBD ? 25 : 25;
+    const nodeSpacing = isLLD ? 70 : isDBD ? 55 : 60;
+    const rankSpacing = isLLD ? 90 : isDBD ? 70 : 70;
     
     mermaid.initialize({ 
       startOnLoad: false, 
@@ -529,14 +546,65 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       .replace(/`/g, '&#96;');
   }
 
+  /**
+   * Sanitizes Mermaid diagram definitions with 8 layers of protection:
+   * 
+   * Layer 1: Fix triple colon syntax (:::) edge cases in node definitions
+   * Layer 2: Fix comma-separated class assignments (unsupported syntax)
+   * Layer 3: Fix truncated CSS properties (stroke-widt, font-weigh, etc.)
+   * Layer 4: Fix incomplete hex color codes (#197 → #197000 or #999999)
+   * Layer 5: Fix erDiagram formatting (entity definitions, relationships)
+   * Layer 6: Fix problematic quotes and escape sequences in labels
+   * Layer 7: Enhanced node label quoting and validation
+   * Layer 8: Line-by-line validation (malformed classDef, style, nodes)
+   * 
+   * @param value Raw Mermaid diagram definition
+   * @returns Sanitized and validated Mermaid definition
+   */
   private sanitizeMermaidDefinition(value: string): string {
     if (!value) {
       return '';
     }
 
+    console.log('[workspace-view] 🛡️ Starting 8-layer Mermaid sanitization...');
     let normalised = value.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
     
-    // Fix common truncated CSS properties before other processing
+    // Layer 1: Fix triple colon syntax (:::) in node definitions
+    // Transform: Node[Label]:::className to proper syntax
+    // Note: ::: is valid Mermaid syntax, but we'll handle edge cases
+    normalised = normalised.replace(/(\w+)\[([^\]]+)\]:::(\w+)\s+\{/g, (match, node, label, className) => {
+      console.log(`[workspace-view] 🔧 Layer 1: Fixed triple colon with brace: ${node}`);
+      return `${node}[${label}]\n    class ${node} ${className}`;
+    });
+    
+    // Layer 2: Fix comma-separated class assignments (Mermaid doesn't support this syntax)
+    // Transform: class Node1,Node2,Node3 className
+    // Into: class Node1 className\nclass Node2 className\nclass Node3 className
+    const classFixLines = normalised.split('\n');
+    const fixedClassLines: string[] = [];
+    for (const line of classFixLines) {
+      const stripped = line.trim();
+      // Match pattern: class <comma-separated-nodes> <className>
+      const match = /^(\s*)class\s+([A-Za-z0-9_,]+)\s+([A-Za-z0-9_]+)\s*$/.exec(line);
+      if (match && match[2].includes(',')) {
+        const indent = match[1];
+        const nodes = match[2].split(',');
+        const className = match[3];
+        console.log(`[workspace-view] 🔧 Layer 2: Splitting comma-separated class assignment: ${nodes.length} nodes with class '${className}'`);
+        // Create individual class assignments for each node
+        for (const node of nodes) {
+          const trimmedNode = node.trim();
+          if (trimmedNode) {
+            fixedClassLines.push(`${indent}class ${trimmedNode} ${className}`);
+          }
+        }
+      } else {
+        fixedClassLines.push(line);
+      }
+    }
+    normalised = fixedClassLines.join('\n');
+    
+    // Layer 3: Fix common truncated CSS properties before other processing
     normalised = normalised
       .replace(/stroke-widt(?!h)/gi, 'stroke-width')
       .replace(/stroke-wid(?!th)/gi, 'stroke-width')
@@ -546,8 +614,37 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       .replace(/font-famil(?!y)/gi, 'font-family')
       .replace(/border-radi(?!us)/gi, 'border-radius')
       .replace(/stroke-das(?!harray)/gi, 'stroke-dasharray');
+    
+    console.log('[workspace-view] 🔧 Layer 3: Fixed truncated CSS properties');
+    
+    // Layer 4: Fix incomplete hex color codes
+    // Pattern: #197 should be #197197, #7B1 should be #77BB11, stroke:#19 at end of line should be fixed
+    // First fix incomplete hex colors anywhere in the line (1-2 hex digits)
+    normalised = normalised.replace(/#([0-9a-fA-F]{1,2})(?![0-9a-fA-F])/g, (match, digits) => {
+      console.log(`[workspace-view] 🔧 Layer 4a: Padding short hex color: #${digits}`);
+      const padded = (digits + digits + digits).substring(0, 6);
+      return `#${padded}`;
+    });
+    
+    // Fix 3 digit hex colors (e.g., #7B1) - expand to 6 digits
+    // This handles truncated colors in classDef/style statements
+    normalised = normalised.replace(/#([0-9a-fA-F]{3})(?![0-9a-fA-F])/g, (match, digits) => {
+      console.log(`[workspace-view] 🔧 Layer 4b: Expanding 3-digit hex color: #${digits}`);
+      // Expand by doubling each digit: #7B1 -> #77BB11
+      const expanded = digits[0] + digits[0] + digits[1] + digits[1] + digits[2] + digits[2];
+      return `#${expanded}`;
+    });
+    
+    // Fix 4-5 digit hex colors
+    normalised = normalised.replace(/#([0-9a-fA-F]{4,5})(?![0-9a-fA-F])/g, (match, digits) => {
+      console.log(`[workspace-view] 🔧 Layer 4c: Padding incomplete hex color: #${digits}`);
+      const padded = (digits + '000000').substring(0, 6);
+      return `#${padded}`;
+    });
+    
+    console.log('[workspace-view] 🔧 Layer 4: Fixed all incomplete hex color codes');
 
-    // Fix erDiagram formatting issues
+    // Layer 5: Fix erDiagram formatting issues
     // 1. Ensure newline between closing } and next entity
     normalised = normalised.replace(/}\s+([A-Z_][A-Z_0-9]*)\s*\{/g, '}\n\n    $1 {\n');
     
@@ -560,6 +657,34 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       return ': ' + label.replace(/[^a-zA-Z0-9_]/g, '_');
     });
     
+    console.log('[workspace-view] 🔧 Layer 5: Fixed erDiagram formatting issues');
+    
+    // Layer 6: Fix problematic quotes and escape sequences in node labels
+    // First pass: Fix escaped quotes that cause STR parsing errors
+    // Pattern: [("Label\")")] or [("Label\")"] 
+    normalised = normalised.replace(/\[(\(?"[^"]*?)\\"/g, (match, start) => {
+      console.log(`[workspace-view] 🔧 Layer 6a: Fixed escaped quote in node label`);
+      return start.replace(/\\"/g, "'") + '"';
+    });
+    
+    // Fix problematic escape sequences in node labels
+    // Remove backslashes and fix quotes in node labels
+    normalised = normalised.replace(/\["([^"]*?)"\]/g, (match, label) => {
+      let cleaned = label.replace(/\\/g, '');  // Remove backslashes
+      cleaned = cleaned.replace(/"/g, "'");    // Replace internal quotes with single quotes
+      cleaned = cleaned.replace(/\(/g, '').replace(/\)/g, ''); // Remove parentheses that can cause issues
+      return `["${cleaned}"]`;
+    });
+    
+    // Also handle stadium-shaped nodes [("label")]
+    normalised = normalised.replace(/\[\("([^"]*?)"\)\]/g, (match, label) => {
+      let cleaned = label.replace(/\\/g, '');  // Remove backslashes
+      cleaned = cleaned.replace(/"/g, "'");    // Replace internal quotes with single quotes
+      return `[("${cleaned}")]`;
+    });
+    
+    console.log('[workspace-view] 🔧 Layer 6: Fixed quotes and escape sequences in labels');
+    
     // Fix node labels: ensure proper spacing after "]" before next node
     normalised = normalised.replace(/"\]\s+([A-Z_a-z0-9]+)\[/g, '"]\n    $1[');
     
@@ -567,7 +692,7 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
     // Pattern: SomeID[ without closing or content on same line after a closing quote
     normalised = normalised.replace(/"\]\s*\n\s*([A-Z_a-z0-9]+)\[\s*$/gm, '"]');
 
-    // Enhanced node label quoting with better escape handling
+    // Layer 7: Enhanced node label quoting with better escape handling
     const withQuotedNodes = normalised.replace(/\[(?!["!])([^\]\n]+?)\]/g, (match, label: string) => {
       // Skip if already quoted
       if (label.startsWith('"') && label.endsWith('"')) {
@@ -576,13 +701,16 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       // Properly escape quotes and special characters, remove <br/> tags
       const escapedLabel = label
         .replace(/<br\s*\/?>/gi, ' ') // Remove <br/> tags, replace with space
-        .replace(/\\/g, '\\\\')
-        .replace(/"/g, '\\"')
+        .replace(/\\/g, '')            // Remove backslashes (don't double-escape)
+        .replace(/"/g, "'")            // Use single quotes instead of escaped double quotes
+        .replace(/\(/g, '').replace(/\)/g, '') // Remove parentheses
         .replace(/\n/g, ' ')
-        .replace(/\s+/g, ' ') // Normalize multiple spaces
+        .replace(/\s+/g, ' ')          // Normalize multiple spaces
         .trim();
       return `["${escapedLabel}"]`;
     });
+    
+    console.log('[workspace-view] 🔧 Layer 7: Enhanced node label quoting');
 
     const withQuotedParticipants = withQuotedNodes.replace(
       /(participant\s+[^\s]+\s+as\s+)([^"\n][^\n]*)/g,
@@ -600,16 +728,31 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       },
     );
 
-    // Remove incomplete or malformed classDef and style statements
-    const lines = withQuotedParticipants.split('\n');
+    // Layer 8: Remove incomplete or malformed classDef and style statements (Line-by-line validation)
+    const sanitizeLines = withQuotedParticipants.split('\n');
+    
+    console.log('[workspace-view] 🔧 Layer 8: Starting line-by-line validation');
     
     // Detect diagram type from first line OR from current diagram type setting
-    const firstLine = lines[0]?.trim().toLowerCase() || '';
+    const firstLine = sanitizeLines[0]?.trim().toLowerCase() || '';
     const isErDiagram = firstLine.includes('erdiagram') || firstLine.includes('entityrelationshipdiagram') || this.currentDiagramType === 'database';
     const isClassDiagram = firstLine.includes('classdiagram');
     const isFlowchart = firstLine.includes('graph') || firstLine.includes('flowchart');
     
-    const cleanedLines = lines.filter((line, index) => {
+    // Pre-process: Fix classDiagram declarations that have members on the same line
+    if (isClassDiagram) {
+      for (let i = 0; i < sanitizeLines.length; i++) {
+        const line = sanitizeLines[i].trim();
+        // Pattern: "classDiagram    +React    +renderPr" - members on same line
+        if (line.toLowerCase().startsWith('classdiagram') && /classdiagram\s+[+\-#~]/i.test(line)) {
+          console.warn(`[workspace-view] 🔧 Layer 8 Pre-process: Splitting classDiagram with inline members at line ${i + 1}`);
+          sanitizeLines[i] = 'classDiagram';
+          // Don't add the members - they're malformed without a class definition
+        }
+      }
+    }
+    
+    const cleanedLines = sanitizeLines.filter((line, index) => {
       let trimmed = line.trim();
       
       // Skip empty lines and comments
@@ -621,11 +764,15 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       // Pattern: Node[("Label\")"]        Text - escaped quotes followed by closing brackets
       // Pattern: Node[("Database PostgreSQL\")"]        Knowledg - text after closing bracket
       // Pattern: Node[("Label\")]"]        Text - double bracket with escaped quote
-      if (trimmed.includes('\\")"]') || (trimmed.includes('\\")') && trimmed.includes('"]'))) {
-        // Fix escaped quotes - handle double bracket pattern first: \")]\" -> ")]
+      // Also handle: ...Schema\")"]    InventoryDB[ - escaped quote pattern with node following
+      if (trimmed.includes('\\")"]') || (trimmed.includes('\\")') && trimmed.includes('"]')) || 
+          trimmed.includes('\")"]')) {
+        // Fix escaped quotes - handle both \\") and \") patterns
         let fixedLine = trimmed.replace(/\\"\)"\]\\"/g, '")]')
-                                  .replace(/\\"\)"\]/g, '")]')  // Fix single pattern
-                                  .replace(/\\"/g, '"');  // Fix remaining escaped quotes
+                                  .replace(/\\"\)"\]/g, '")]')  // Fix escaped quote patterns
+                                  .replace(/\\"\)/g, '")')      // Fix \") to ")
+                                  .replace(/\"\)"\]/g, '")]')   // Fix ")"] to ")]
+                                  .replace(/\\"/g, '"');        // Fix remaining escaped quotes
         
         // Remove text after closing bracket that's not a connection
         // Pattern: ...")]        Text (with spaces after closing bracket)
@@ -641,8 +788,17 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
           }
         }
         
+        // Also check for adjacent node definitions without proper connection
+        // Pattern: ..."]    NodeName[ should have a connection arrow between them
+        const adjacentNodeMatch = fixedLine.match(/"\]\s+([A-Z_a-z0-9]+)\s*\[/);
+        if (adjacentNodeMatch && !/(-->|---|-\.|==>|===)/.test(fixedLine)) {
+          // Remove the adjacent node - it's malformed
+          fixedLine = fixedLine.substring(0, adjacentNodeMatch.index! + 2); // Keep the '"]'
+          console.warn(`[workspace-view] Removed adjacent node without connection at line ${index + 1}: ${adjacentNodeMatch[1]}`);
+        }
+        
         // Update the line in the array and continue with fixed version
-        lines[index] = fixedLine;
+        sanitizeLines[index] = fixedLine;
         trimmed = fixedLine.trim();
       }
       
@@ -669,19 +825,92 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
         // In classDiagram, backend will handle splitting it properly
       }
       
-      if (isClassDiagram && index > 0) {
+      if (isClassDiagram) {
         // Check for class members appearing right after diagram declaration (without class definition)
-        const prevLine = index > 0 ? lines[index - 1].trim() : '';
-        if (prevLine.toLowerCase().includes('classdiagram') && /^\s*[+\-#~]/.test(trimmed)) {
-          console.warn(`Mermaid sanitization: Removing class member without class context at ${index + 1}:`, trimmed.substring(0, 80));
+        const prevLine = index > 0 ? sanitizeLines[index - 1].trim() : '';
+        
+        // Check if previous line is classDiagram and current line starts with member indicator
+        // BUT only remove if we're NOT inside a class definition block
+        // We're inside a class if ANY previous line (not just the immediate previous line) has an unclosed '{'
+        let isInsideClass = false;
+        if (/^\s*[+\-#~]/.test(trimmed)) {
+          // Count unclosed braces to see if we're inside a class definition
+          let braceCount = 0;
+          for (let j = 0; j < index; j++) {
+            const prevLineContent = sanitizeLines[j];
+            braceCount += (prevLineContent.match(/\{/g) || []).length;
+            braceCount -= (prevLineContent.match(/\}/g) || []).length;
+          }
+          isInsideClass = braceCount > 0;
+        }
+        
+        if (prevLine.toLowerCase().includes('classdiagram') && /^\s*[+\-#~]/.test(trimmed) && !isInsideClass) {
+          console.warn(`[workspace-view] 🔧 Layer 8: Removing class member without class context at line ${index + 1}:`, trimmed.substring(0, 80));
           return false;
+        }
+        
+        // Also check if this is on the SAME line as classDiagram (with extra spaces)
+        // Pattern: "classDiagram    +React    +renderPr"
+        if (index === 0 && trimmed.toLowerCase().startsWith('classdiagram') && /\s+[+\-#~]/.test(trimmed)) {
+          console.warn(`[workspace-view] 🔧 Layer 8: Found class members on same line as classDiagram, splitting...`);
+          // Keep only the classDiagram declaration, remove the rest
+          sanitizeLines[index] = 'classDiagram';
+          trimmed = 'classDiagram';
+        }
+        
+        // Pattern: Lines that start with +/- but no class name context nearby
+        if (/^\s*[+\-#~]/.test(trimmed)) {
+          // Look back up to 10 lines to find a class definition (increased from 5)
+          let foundClassDef = false;
+          for (let lookback = 1; lookback <= Math.min(10, index); lookback++) {
+            const checkLine = sanitizeLines[index - lookback]?.trim() || '';
+            if (/^class\s+\w+/.test(checkLine) || /^\w+\s*\{/.test(checkLine)) {
+              foundClassDef = true;
+              break;
+            }
+            if (checkLine.toLowerCase().includes('classdiagram')) {
+              break; // Stop at classDiagram declaration
+            }
+          }
+          if (!foundClassDef) {
+            console.warn(`[workspace-view] 🔧 Layer 8: Removing orphaned class member at line ${index + 1}:`, trimmed.substring(0, 80));
+            return false;
+          }
+        }
+        
+        // Fix multiple members on the same line (causes parse errors)
+        // Pattern: +method1()        +method2() or +authenticateRequest()        +rateLimit
+        if (/[+\-#~]\w+\([^)]*\)\s{2,}[+\-#~]/.test(trimmed)) {
+          // Multiple members on same line - split them
+          const memberPattern = /([+\-#~]\w+(?:\([^)]*\))?)/g;
+          const members = Array.from(trimmed.matchAll(memberPattern), m => m[1]);
+          if (members.length > 1) {
+            console.log(`[workspace-view] 🔧 Splitting ${members.length} class members from line ${index + 1}`);
+            // Add each member on its own line with proper indentation
+            const indent = '    '; // Standard 4-space indent
+            members.forEach((member, idx) => {
+              // Ensure methods have (), attributes don't
+              let fixedMember = member;
+              if (member.includes('(')) {
+                // It's a method - ensure it ends with )
+                if (!member.endsWith(')')) {
+                  fixedMember = member + '()';
+                }
+              }
+              // Insert new lines right after current position
+              const newLine = indent + fixedMember;
+              sanitizeLines.splice(index + idx + 1, 0, newLine);
+            });
+            // Mark current line for removal (we've replaced it with split versions)
+            return false;
+          }
         }
       }
       
       // Check for style definitions (classDef or style commands)
       if (trimmed.toLowerCase().includes('classdef') || trimmed.toLowerCase().startsWith('style ')) {
         // Valid endings for complete style definitions
-        const validEndings = ['px', 'bold', 'italic', 'normal', 'lighter', 'bolder', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        const validEndings = ['px', 'bold', 'italic', 'normal', 'lighter', 'bolder', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'A', 'B', 'C', 'D', 'E', 'F'];
         
         // Check for complete hex colors at the end (3 or 6 hex digits)
         const hexColorEnding = /[#][0-9a-fA-F]{3}$|[#][0-9a-fA-F]{6}$/;
@@ -785,7 +1014,11 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       return true; // Keep this line
     });
 
-    return cleanedLines.join('\n');
+    const finalResult = cleanedLines.join('\n');
+    console.log('[workspace-view] ✅ All 8 protection layers applied successfully');
+    console.log('[workspace-view] 📊 Input lines:', value.split('\n').length, '→ Output lines:', cleanedLines.length);
+    
+    return finalResult;
   }
 
   private isNoData(content: string): boolean {
@@ -968,15 +1201,30 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
   }
 
   onVisualizationRegenerated(regeneratedContent: any): void {
-    console.debug('[WorkspaceView] Visualization regenerated', { regeneratedContent });
+    console.log('[WorkspaceView] 🎨 Visualization regenerated from feedback', { 
+      hasMermaid: !!regeneratedContent?.mermaid,
+      hasDiagramsMermaid: !!regeneratedContent?.diagrams?.mermaid,
+      diagramType: regeneratedContent?.diagramType || this.currentDiagramType,
+      contentKeys: Object.keys(regeneratedContent || {})
+    });
+    
     if (regeneratedContent?.mermaid || regeneratedContent?.diagrams?.mermaid) {
       const newMermaid = regeneratedContent.mermaid || regeneratedContent.diagrams?.mermaid || '';
+      console.log('[WorkspaceView] 🔄 Updating mermaid input with regenerated content', {
+        newMermaidLength: newMermaid.length,
+        firstLine: newMermaid.split('\n')[0]
+      });
+      
       this.setMermaidInput(newMermaid, true);
       this.contentRegenerated.emit({
         type: 'visualization',
         itemId: `visualization-${this.currentDiagramType}`,
         content: regeneratedContent,
       });
+      
+      console.log('[WorkspaceView] ✅ Visualization update complete');
+    } else {
+      console.warn('[WorkspaceView] ⚠️ No mermaid content found in regenerated data');
     }
   }
 

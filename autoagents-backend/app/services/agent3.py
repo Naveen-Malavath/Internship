@@ -184,8 +184,9 @@ class Agent3Service:
             )
 
         try:
-            # Increased max_tokens to prevent diagram truncation (Claude Sonnet 4.5 supports up to 200K output tokens)
-            max_tokens = 32000  # Doubled from 16000 to reduce truncation risk
+            # Use reasonable max_tokens to avoid streaming requirement (SDK limits non-streaming to ~10 minutes)
+            # For complex diagrams, 16K tokens is sufficient and avoids the 10-minute timeout requirement
+            max_tokens = 16000  # Sweet spot: allows large diagrams without requiring streaming
             logger.info(f"[agent3] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.3")
             logger.debug(f"[agent3] System prompt length: {len(system_prompt)} chars")
             logger.debug(f"[agent3] User prompt length: {len(user_prompt)} chars")
@@ -193,6 +194,7 @@ class Agent3Service:
                 model=self.model,
                 max_tokens=max_tokens,
                 temperature=0.3,  # Lower temperature for faster, more focused responses
+                timeout=600.0,  # 10 minute timeout for complex diagram generation
                 system=system_prompt,
                 messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
             )
@@ -256,6 +258,14 @@ class Agent3Service:
                 node_id = match.group(1)
                 label = match.group(2)
                 cleaned_label = remove_emojis(label).strip()
+                # Also remove any remaining problematic characters from label
+                # Keep alphanumeric, spaces, and safe punctuation
+                cleaned_label = re.sub(r'[^\w\s\-_.,;:()\[\]<>/]', ' ', cleaned_label)
+                cleaned_label = ' '.join(cleaned_label.split())  # Normalize spaces
+                # Remove backslashes to prevent escape sequence issues
+                cleaned_label = cleaned_label.replace('\\', '')
+                # Escape internal quotes properly
+                cleaned_label = cleaned_label.replace('"', "'")  # Replace double quotes with single quotes
                 # Preserve the original bracket style
                 original = match.group(0)
                 if '[("' in original:
@@ -292,6 +302,9 @@ class Agent3Service:
                 if re.match(er_diagram_pattern, line, re.IGNORECASE):
                     er_cleaned.append(re.sub(er_diagram_pattern, clean_er_entity, line, flags=re.IGNORECASE))
                 else:
+                    # Also clean relationship lines: ENTITY1 ||--o{ ENTITY2 : "relationship"
+                    # Remove quotes from relationship labels as they can cause issues
+                    line = re.sub(r'([\|\}o][\{\|o])(\s*:\s*)"([^"]*)"', r'\1\2\3', line)
                     er_cleaned.append(line)
             mermaid = '\n'.join(er_cleaned)
         
@@ -305,7 +318,7 @@ class Agent3Service:
         fixed_lines = []
         removed_lines = []
         
-        for line_num, line in enumerate(lines, 1):
+        for index, (line_num, line) in enumerate(zip(range(1, len(lines) + 1), lines)):
             line_stripped = line.strip()
             
             # Skip empty lines
@@ -455,6 +468,90 @@ class Agent3Service:
             for line_num, line_preview in removed_lines:
                 logger.debug(f"[agent3]   - Line {line_num}: {line_preview}")
             mermaid = '\n'.join(fixed_lines)
+        else:
+            mermaid = '\n'.join(fixed_lines)
+        
+        # Fix classDiagram-specific syntax issues (LLD diagrams)
+        # This handles the parse error: "Expecting 'PS', 'TAGEND', 'STR', got 'PE'"
+        # which occurs when class members are on the same line or have invalid syntax
+        if 'classDiagram' in mermaid or diagram_type.lower() == 'lld':
+            logger.info("[agent3] 🔧 Fixing classDiagram syntax for LLD")
+            class_lines = mermaid.split('\n')
+            fixed_class_lines = []
+            inside_class = False
+            class_indent = ''
+            
+            for i, line in enumerate(class_lines):
+                stripped = line.strip()
+                
+                # Track when we enter/exit a class definition
+                if re.match(r'^class\s+\w+\s*\{', stripped):
+                    inside_class = True
+                    class_indent = '    '  # Standard 4-space indent for class members
+                    fixed_class_lines.append(line)
+                    continue
+                elif stripped == '}':
+                    inside_class = False
+                    fixed_class_lines.append(line)
+                    continue
+                
+                # Fix class members that are on the same line as other content
+                # Pattern: +method1()        +method2() or +method()        +attribute
+                if inside_class and re.search(r'[+\-#~]\w+\([^)]*\)\s{2,}[+\-#~]', stripped):
+                    # Multiple members on same line - split them
+                    # Match all members: +/-/#/~ followed by identifier and optional ()
+                    member_pattern = r'([+\-#~]\w+(?:\([^)]*\))?)'
+                    members = re.findall(member_pattern, stripped)
+                    logger.info(f"[agent3] 🔧 Splitting {len(members)} class members from line {i+1}")
+                    for member in members:
+                        # Ensure methods have (), attributes don't
+                        if '(' not in member and not member.endswith(')'):
+                            # It's an attribute - leave as is
+                            fixed_class_lines.append(f"{class_indent}{member}")
+                        else:
+                            # It's a method - ensure it has ()
+                            if not member.endswith(')'):
+                                member = member + '()'
+                            fixed_class_lines.append(f"{class_indent}{member}")
+                    continue
+                
+                # Fix individual member lines
+                if inside_class and re.match(r'^\s*[+\-#~]', stripped):
+                    # This is a class member
+                    # Extract the member signature
+                    match = re.match(r'^([+\-#~])(\w+)(?:\(([^)]*)\))?\s*(.*)?$', stripped)
+                    if match:
+                        visibility = match.group(1)
+                        name = match.group(2)
+                        params = match.group(3) if match.group(3) is not None else None
+                        trailing = match.group(4) or ''
+                        
+                        # If params is None, it's an attribute; if params exists (even empty), it's a method
+                        if params is not None:
+                            # It's a method - ensure it has ()
+                            member_line = f"{class_indent}{visibility}{name}({params})"
+                        else:
+                            # It's an attribute - no parentheses
+                            # But check if trailing content suggests it should be a method
+                            if trailing and re.match(r'^[+\-#~]', trailing):
+                                # There's another member on the same line
+                                logger.info(f"[agent3] 🔧 Splitting multiple members from line {i+1}")
+                                member_line = f"{class_indent}{visibility}{name}"
+                                fixed_class_lines.append(member_line)
+                                # Process the trailing content on next iteration (add it to the list)
+                                class_lines.insert(i + 1, trailing)
+                                continue
+                            else:
+                                member_line = f"{class_indent}{visibility}{name}"
+                        
+                        fixed_class_lines.append(member_line)
+                        continue
+                
+                # Keep all other lines as-is
+                fixed_class_lines.append(line)
+            
+            mermaid = '\n'.join(fixed_class_lines)
+            logger.info("[agent3] ✅ classDiagram syntax fixed")
         
         # Final cleanup: remove any remaining problematic last line
         if mermaid:
@@ -465,29 +562,58 @@ class Agent3Service:
                     logger.warning(f"[agent3] ⚠️ Final cleanup: removing incomplete last line: {last_line[:100]}")
                     mermaid = '\n'.join(mermaid.split('\n')[:-1])
         
-        # Emergency fallback: if diagram still has style issues, remove ALL styling
-        # This ensures the diagram can at least render even without colors
-        if mermaid:
-            lines = mermaid.split('\n')
-            has_potential_issues = False
-            for line in lines:
-                if 'classDef' in line or line.strip().startswith('style '):
-                    # Check for common issues
-                    if 'stroke-widt' in line or 'font-weigh' in line or 'font-siz' in line:
-                        has_potential_issues = True
-                        break
-                    if line.count('"') % 2 != 0:  # Unbalanced quotes
-                        has_potential_issues = True
-                        break
-            
-            if has_potential_issues:
-                logger.warning("[agent3] 🚨 Detected remaining style issues - removing ALL styling for safe rendering")
-                # Remove all classDef and style lines
-                clean_lines = [line for line in lines if 'classDef' not in line and not line.strip().startswith('style ')]
-                # Also remove style class applications (:::className)
-                clean_lines = [re.sub(r':::[\w]+', '', line) for line in clean_lines]
-                mermaid = '\n'.join(clean_lines)
-                logger.info("[agent3] ✅ Diagram sanitized - will render without colors")
+        # Additional safety: Remove any Unicode characters that might break parsing
+        # Keep only ASCII printable + newlines + tabs
+        def sanitize_for_mermaid(text: str) -> str:
+            """Remove all non-ASCII characters except basic punctuation."""
+            result = []
+            for char in text:
+                # Keep ASCII printable (32-126) + newline (10) + tab (9)
+                code = ord(char)
+                if 32 <= code <= 126 or code in (9, 10):
+                    result.append(char)
+                else:
+                    # Replace with space
+                    result.append(' ')
+            return ''.join(result)
+        
+        mermaid = sanitize_for_mermaid(mermaid)
+        
+        # Fix comma-separated class assignments (Mermaid doesn't support this syntax)
+        # Transform: class Node1,Node2,Node3 className
+        # Into: class Node1 className\nclass Node2 className\nclass Node3 className
+        lines = mermaid.split('\n')
+        fixed_class_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # Match pattern: class <comma-separated-nodes> <className>
+            match = re.match(r'^(\s*)class\s+([A-Za-z0-9_,]+)\s+([A-Za-z0-9_]+)\s*$', line)
+            if match and ',' in match.group(2):
+                indent = match.group(1)
+                nodes = match.group(2).split(',')
+                class_name = match.group(3)
+                logger.info(f"[agent3] 🔧 Splitting comma-separated class assignment: {len(nodes)} nodes with class '{class_name}'")
+                # Create individual class assignments for each node
+                for node in nodes:
+                    node = node.strip()
+                    if node:
+                        fixed_class_lines.append(f"{indent}class {node} {class_name}")
+            else:
+                fixed_class_lines.append(line)
+        mermaid = '\n'.join(fixed_class_lines)
+        
+        # Remove multiple consecutive spaces (but preserve indentation at line starts)
+        lines = mermaid.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Preserve leading spaces, but compress multiple spaces in the middle
+            leading_spaces = len(line) - len(line.lstrip())
+            rest_of_line = ' '.join(line.split())
+            if rest_of_line:
+                cleaned_lines.append(' ' * leading_spaces + rest_of_line)
+            else:
+                cleaned_lines.append('')
+        mermaid = '\n'.join(cleaned_lines)
         
         # Ensure it starts with a valid Mermaid diagram type
         valid_prefixes = ["graph", "classDiagram", "sequenceDiagram", "erDiagram", "entityRelationshipDiagram", "flowchart"]
