@@ -1,0 +1,62 @@
+graph TD
+    %% User Layer
+    User["User/Client"]:::userClass
+    
+    %% Frontend Layer
+    Angular["Angular Web App<br/>- Project Wizard<br/>- Chat Interface<br/>- Workspace View"]:::frontendClass
+    
+    %% Backend API Layer
+    FastAPI["FastAPI Backend<br/>- REST Endpoints<br/>- Auth Middleware<br/>- CORS Support"]:::backendClass
+    
+    %% Agent Services Layer
+    Agent1["Agent-1 Service<br/>Feature Generation"]:::agentClass
+    Agent2["Agent-2 Service<br/>Story Generation"]:::agentClass
+    Agent3["Agent-3 Service<br/>Diagram Generation"]:::agentClass
+    
+    %% AI Provider
+    Claude["Claude AI API<br/>Anthropic Sonnet 4.5"]:::externalClass
+    
+    %% Database Layer
+    MongoDB["MongoDB Database<br/>- Projects<br/>- Features<br/>- Stories<br/>- Diagrams"]:::dbClass
+    
+    %% User Flow
+    User -->|"Accesses"| Angular
+    Angular -->|"API Requests"| FastAPI
+    
+    %% Backend to Agents
+    FastAPI -->|"Generate Features"| Agent1
+    FastAPI -->|"Generate Stories"| Agent2
+    FastAPI -->|"Generate Diagrams"| Agent3
+    
+    %% Agents to AI
+    Agent1 -->|"LLM Prompt"| Claude
+    Agent2 -->|"LLM Prompt"| Claude
+    Agent3 -->|"LLM Prompt"| Claude
+    
+    %% Claude Response
+    Claude -->|"JSON Response"| Agent1
+    Claude -->|"JSON Response"| Agent2
+    Claude -->|"Mermaid Code"| Agent3
+    
+    %% Agents to Database
+    Agent1 -->|"Save Features"| MongoDB
+    Agent2 -->|"Save Stories"| MongoDB
+    Agent3 -->|"Save Diagrams"| MongoDB
+    
+    %% Database to Backend
+    MongoDB -->|"Query Results"| FastAPI
+    
+    %% Backend to Frontend
+    FastAPI -->|"JSON Response"| Angular
+    
+    %% Frontend to User
+    Angular -->|"Display Results"| User
+    
+    %% Style Definitions
+    classDef userClass fill:#E1F5FE,stroke:#01579B,stroke-width:3px,color:#000
+    classDef frontendClass fill:#E8EAF6,stroke:#3F51B5,stroke-width:2px,color:#000
+    classDef backendClass fill:#FFF9C4,stroke:#F57F17,stroke-width:2px,color:#000
+    classDef agentClass fill:#FFE0B2,stroke:#E65100,stroke-width:2px,color:#000
+    classDef externalClass fill:#F8BBD0,stroke:#C2185B,stroke-width:2px,color:#000
+    classDef dbClass fill:#C8E6C9,stroke:#2E7D32,stroke-width:2px,color:#000
+

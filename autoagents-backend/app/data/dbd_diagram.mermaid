@@ -1,0 +1,77 @@
+erDiagram
+    USERS ||--o{ PROJECTS : owns
+    PROJECTS ||--o{ FEATURES : includes
+    FEATURES ||--o{ STORIES : contains
+    PROJECTS ||--o{ DIAGRAMS : has
+    PROJECTS ||--o{ FEEDBACK : receives
+    
+    USERS {
+        uuid id PK
+        varchar email UK
+        varchar password_hash
+        varchar name
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    PROJECTS {
+        uuid id PK
+        uuid owner_id FK
+        varchar title
+        text prompt
+        varchar status
+        varchar methodology
+        varchar industry
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    FEATURES {
+        uuid id PK
+        uuid project_id FK
+        varchar title
+        text description
+        json acceptance_criteria
+        varchar source
+        varchar status
+        int order_index
+        varchar run_id
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    STORIES {
+        uuid id PK
+        uuid feature_id FK
+        uuid project_id FK
+        text user_story
+        json acceptance_criteria
+        json implementation_notes
+        varchar status
+        varchar run_id
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    DIAGRAMS {
+        uuid id PK
+        uuid project_id FK
+        varchar diagram_type
+        text mermaid_source
+        json style_config
+        text svg_cache
+        varchar run_id
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    FEEDBACK {
+        uuid id PK
+        uuid project_id FK
+        varchar agent_type
+        int rating
+        text comment
+        json context
+        timestamp created_at
+    }
+

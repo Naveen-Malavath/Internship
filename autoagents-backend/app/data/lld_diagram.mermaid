@@ -1,0 +1,141 @@
+classDiagram
+    %% Frontend Components
+    class AppComponent {
+        +chatMessages: Signal
+        +workspaceItems: Signal
+        +currentAgent: Signal
+        +handleUserInput()
+        +updateWorkspace()
+    }
+    
+    class ProjectWizard {
+        +currentStep: number
+        +projectData: ProjectCreate
+        +nextStep()
+        +submitProject()
+    }
+    
+    class WorkspaceView {
+        +features: Feature[]
+        +stories: Story[]
+        +diagrams: Diagram[]
+        +editItem()
+        +removeItem()
+    }
+    
+    %% Backend Routers
+    class AuthRouter {
+        +POST /auth/login
+        +POST /auth/register
+        -verifyPassword()
+        -generateJWT()
+    }
+    
+    class ProjectsRouter {
+        +POST /projects
+        +GET /projects/user/userId
+        +GET /projects/projectId
+        -validateOwnership()
+    }
+    
+    class FeaturesRouter {
+        +POST /projects/projectId/features/generate
+        +GET /projects/projectId/features
+        -callAgent1()
+    }
+    
+    class StoriesRouter {
+        +POST /projects/projectId/stories/generate
+        +GET /projects/projectId/stories
+        -callAgent2()
+    }
+    
+    class DiagramsRouter {
+        +POST /projects/projectId/diagram/generate
+        +GET /projects/projectId/diagram
+        -callAgent3()
+    }
+    
+    %% Agent Services
+    class Agent1Service {
+        -model: string
+        +generateFeatures()
+        -buildPrompt()
+        -parseResponse()
+    }
+    
+    class Agent2Service {
+        -model: string
+        +generateStories()
+        -buildPrompt()
+        -parseResponse()
+    }
+    
+    class Agent3Service {
+        -model: string
+        +generateMermaid()
+        -buildPrompt()
+        -cleanMermaidCode()
+        -removeTruncatedStyles()
+    }
+    
+    class ClaudeClient {
+        +getClient()
+        +extractText()
+        -handleAPIError()
+    }
+    
+    %% Database Layer
+    class Database {
+        +users: Collection
+        +projects: Collection
+        +features: Collection
+        +stories: Collection
+        +diagrams: Collection
+        +connectToMongo()
+        +closeConnection()
+    }
+    
+    %% Relationships - Frontend
+    AppComponent --> ProjectWizard
+    AppComponent --> WorkspaceView
+    
+    %% Relationships - Backend Routers
+    ProjectsRouter --> Database
+    FeaturesRouter --> Agent1Service
+    FeaturesRouter --> Database
+    StoriesRouter --> Agent2Service
+    StoriesRouter --> Database
+    DiagramsRouter --> Agent3Service
+    DiagramsRouter --> Database
+    
+    %% Relationships - Services
+    Agent1Service --> ClaudeClient
+    Agent2Service --> ClaudeClient
+    Agent3Service --> ClaudeClient
+    
+    Agent1Service --> Database
+    Agent2Service --> Database
+    Agent3Service --> Database
+    
+    %% Style Definitions
+    class AppComponent:::frontendClass
+    class ProjectWizard:::frontendClass
+    class WorkspaceView:::frontendClass
+    class AuthRouter:::backendClass
+    class ProjectsRouter:::backendClass
+    class FeaturesRouter:::backendClass
+    class StoriesRouter:::backendClass
+    class DiagramsRouter:::backendClass
+    class Agent1Service:::serviceClass
+    class Agent2Service:::serviceClass
+    class Agent3Service:::serviceClass
+    class ClaudeClient:::externalClass
+    class Database:::dbClass
+    
+    classDef frontendClass fill:#E8EAF6,stroke:#3F51B5,color:#000
+    classDef backendClass fill:#FFF9C4,stroke:#F57F17,color:#000
+    classDef serviceClass fill:#FFE0B2,stroke:#E65100,color:#000
+    classDef externalClass fill:#F8BBD0,stroke:#C2185B,color:#000
+    classDef dbClass fill:#C8E6C9,stroke:#2E7D32,color:#000
+

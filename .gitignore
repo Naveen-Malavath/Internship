@@ -1,0 +1,27 @@
+# Environment files with secrets
+.env
+*.env
+
+# Sensitive documentation
+autoagents-backend/UPDATE_ENV_FOR_MONGODB.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
