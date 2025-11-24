@@ -18,10 +18,10 @@ class FeedbackChatbotService:
         """Initialize the chatbot service with Claude API."""
         logger.debug("[FeedbackChatbotService] Initializing feedback chatbot service")
         
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            logger.error("[FeedbackChatbotService] ANTHROPIC_API_KEY not found in environment")
-            raise ValueError("ANTHROPIC_API_KEY environment variable is required")
+            logger.error("[FeedbackChatbotService] CLAUDE_API_KEY or ANTHROPIC_API_KEY not found in environment")
+            raise ValueError("CLAUDE_API_KEY or ANTHROPIC_API_KEY environment variable is required")
         
         self._client = AsyncAnthropic(api_key=api_key)
         self._model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")

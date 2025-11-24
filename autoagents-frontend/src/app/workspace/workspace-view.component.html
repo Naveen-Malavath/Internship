@@ -186,32 +186,17 @@
                   (change)="onMermaidFileSelected($event)"
                   hidden
                 />
-                <button
-                  type="button"
-                  class="workspace__action workspace__action--ghost"
-                  (click)="renderMermaid()"
-                  [disabled]="mermaidSaving"
-                >
-                  Run
-                </button>
                 <button type="button" class="workspace__action workspace__action--outline" (click)="onMermaidUploadClick()">
                   Import Mermaid
                 </button>
                 <button type="button" class="workspace__action workspace__action--outline" (click)="onMermaidCopy()">
-                  {{ isMermaidCopied ? 'Copied!' : 'Copy' }}
-                </button>
-                <button
-                  type="button"
-                  class="workspace__action workspace__action--primary"
-                  (click)="onMermaidSave()"
-                  [disabled]="mermaidSaving"
-                >
-                  {{ mermaidSaving ? 'Saving…' : 'Save' }}
+                  Copy Mermaid
                 </button>
               </div>
             </header>
 
             <div class="studio-panel__body">
+              <div *ngIf="uiError" class="alert">{{ uiError }}</div>
               <div class="studio-panel__editor">
                 <pre class="studio-panel__line-numbers" [style.transform]="'translateY(' + (-lineNumberOffset) + 'px)'">
                   <span *ngFor="let line of mermaidLineNumbers">{{ line }}</span>
@@ -223,15 +208,15 @@
                   (scroll)="onMermaidScroll($event)"
                   spellcheck="false"
                   placeholder="graph TD&#10;  prompt[&quot;Prompt&quot;] --> feature[&quot;Feature&quot;]"
+                  readonly
                 ></textarea>
               </div>
-              <p *ngIf="mermaidError" class="studio-panel__error">{{ mermaidError }}</p>
             </div>
 
             <footer class="studio-panel__footer">
               <span>{{ mermaidInput.split('\n').length }} lines</span>
               <span>{{ mermaidInput.length }} characters</span>
-              <span class="studio-badge studio-badge--ghost" *ngIf="isMermaidCopied">Copied to clipboard</span>
+              <span class="studio-badge studio-badge--ghost" *ngIf="isMermaidCopied">Copied</span>
             </footer>
           </article>
 
@@ -298,7 +283,7 @@
               <div class="preview-scroll w-full h-full overflow-auto">
                 <div class="preview-canvas" [class.preview-canvas--fit]="previewFitToContainer" #mermaidContainer></div>
               </div>
-              <p *ngIf="shouldShowNoDiagramMessage()" class="preview-placeholder">
+              <p *ngIf="shouldShowNoDiagramMessage()" style="text-align: center; color: #94a3b8;">
                 No diagram available.
               </p>
             </div>
@@ -356,3 +341,4 @@
   </div>
 </ng-template>
 
+</section>

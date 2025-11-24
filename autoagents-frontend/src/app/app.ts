@@ -5,6 +5,9 @@ import mermaid from 'mermaid';
 
 import { FeatureFormComponent } from './features/feature-form.component';
 import { ProjectWizardComponent } from './project/project-wizard.component';
+import { buildHLD, buildLLD, buildDBD } from './shared/mermaid/builders';
+import { emitHLD, emitLLD, emitDBD } from './shared/mermaid/emitter';
+import { normalizeMermaid, stripBomAndZwsp, validateWithMermaid } from './shared/mermaid/mermaid-lint';
 import {
   PROJECT_TEMPLATES,
   PROJECT_TIMEZONES,
@@ -242,11 +245,13 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     this.workspaceVisualization.set(null);
     this.workspaceMermaid.set('');
     this.workspaceMermaidUpdatedAt.set(null);
-    this.workspaceMermaidSaveMessage.set(null);
+    this.workspaceMermaidSaveMessage.set('🎨 Preparing to generate architecture diagrams with Agent 3...');
     this.workspaceMermaidSaving.set(false);
     this.workspaceProjectId.set(null); // Clear projectId when opening workspace from chat
     this.clearMermaidDiagram();
     this.isWorkspaceMode.set(true);
+    
+    console.log('[app] ✅ Workspace opened with features and stories | Transitioning to Agent 3 for diagram generation');
     this.isChatting.set(true);
     this.setFullScreen(true);
     this.fetchMermaidAsset();
@@ -947,7 +952,7 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    if (decision === 'keep') {
+    if (decision === 'keep' || decision === 'keep_all') {
       if (!this.agent2RunId()) {
         console.warn('[agent2:keep] Missing run id to approve.');
         return;
@@ -957,12 +962,29 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
         console.warn('[agent2:keep] No stories captured to approve.');
         return;
       }
-      const selectedStories = this.getSelectedLatestStories();
-      if (!selectedStories.length) {
-        console.warn('[agent2:keep] No stories selected to approve.');
-        return;
+      
+      // For 'keep_all', approve all stories; for 'keep', approve only selected stories
+      let approvedStories: AgentStorySpec[];
+      if (decision === 'keep_all') {
+        console.debug('[agent2:keep_all] Approving all stories');
+        approvedStories = stories.map((story: AgentStorySpec) => this.cloneStory(story));
+        // Select all stories for visual feedback
+        stories.forEach((story: AgentStorySpec) => {
+          this.agent2SelectedStories.update((currentSet) => {
+            const newSet = new Set(currentSet);
+            newSet.add(story.userStory);
+            return newSet;
+          });
+        });
+      } else {
+        const selectedStories = this.getSelectedLatestStories();
+        if (!selectedStories.length) {
+          console.warn('[agent2:keep] No stories selected to approve.');
+          return;
+        }
+        approvedStories = selectedStories.map((story: AgentStorySpec) => this.cloneStory(story));
       }
-      const approvedStories = selectedStories.map((story: AgentStorySpec) => this.cloneStory(story));
+      
       this.latestStories.set(approvedStories);
       this.resetAgent2Selections(approvedStories);
       this.invokeAgent2(
@@ -1063,10 +1085,25 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
             this.agent2AwaitingDecision.set(true);
             this.clearMermaidDiagram();
           } else {
+            // Stories approved! Transition to Agent 3
+            console.log('[app] ✅ Agent 2 stories approved! Opening workspace and invoking Agent 3 for HLD/LLD/DBD generation');
             this.agent2RunId.set(null);
             this.agent2AwaitingDecision.set(false);
+            
+            // Show progress message in chat
+            this.appendMessage({
+              sender: 'assistant',
+              agent: 'agent2',
+              text: '✅ Stories approved! Opening workspace and visualizing architecture (Agent-3)...',
+              runId: null,
+            });
+            
+            // Open workspace first
             this.openWorkspace(this.latestFeatures(), this.latestStories());
-            this.invokeAgent3(this.latestFeatures(), this.latestStories());
+            
+            // Then immediately invoke Agent 3 to generate diagrams
+            // User can now test HLD, LLD, and DBD in the workspace
+            this.invokeAgent3(this.latestFeatures(), this.latestStories(), 'hld');
           }
 
           this.isSending.set(false);
@@ -1110,9 +1147,21 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
     const endpoint = `${this.backendUrl}/agent/visualizer`;
     const requestPayload = { ...payload, diagramType };
 
-    // Set loading state
+    // Set loading state with enhanced progress message
     this.workspaceMermaidSaving.set(true);
-    this.workspaceMermaidSaveMessage.set(`Generating ${diagramType.toUpperCase()} diagram...`);
+    this.workspaceMermaidSaveMessage.set(`🎨 Visualizing (Agent-3): Generating ${diagramType.toUpperCase()} diagram...`);
+    
+    // Show progress banner in chat
+    this.appendMessage({
+      sender: 'assistant',
+      agent: 'agent2',
+      text: `🎨 Agent-3 is generating ${diagramType.toUpperCase()} (${
+        diagramType === 'hld' ? 'High Level Design' :
+        diagramType === 'lld' ? 'Low Level Design' :
+        'Database Design'
+      })...`,
+      runId: null,
+    });
     
     console.debug(`[app] Calling Agent 3 API: ${endpoint} | diagramType=${diagramType}`);
     
@@ -1125,20 +1174,63 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
         next: (response: AgentVisualizationResponse) => {
           console.debug(`[app] Agent 3 response received | hasMermaid=${!!response.diagrams?.mermaid} | mermaidLength=${response.diagrams?.mermaid?.length || 0}`);
           
-          // Legacy endpoint always returns AgentVisualizationResponse format
           this.workspaceVisualization.set(response);
           
-          const mermaidContent = response.diagrams?.mermaid ?? '';
+          let mermaidContent = '';
+          
+          // ALWAYS use backend-generated diagram first (from Agent3 AI)
+          const backendDiagram = response.diagrams?.mermaid ?? '';
+          
+          if (backendDiagram && backendDiagram.trim()) {
+            // Use AI-generated diagram from backend
+            console.debug(`[app] Using AI-generated ${diagramType.toUpperCase()} diagram from backend | length=${backendDiagram.length}`);
+            mermaidContent = backendDiagram;
+          } else if (diagramType === 'lld' || diagramType === 'database') {
+            // Fallback to local AST builders only if backend returns empty
+            console.warn(`[app] Backend returned empty ${diagramType.toUpperCase()}, using fallback AST builder`);
+            const context = this.lastPrompt();
+            const storyTexts = stories.map(s => s.userStory || '');
+            const featureTitles = features.map(f => f.title || '');
+            
+            let root;
+            if (diagramType === 'lld') {
+              root = buildLLD(context, storyTexts, featureTitles);
+              mermaidContent = emitLLD(root);
+            } else {
+              root = buildDBD(context, storyTexts, featureTitles);
+              mermaidContent = emitDBD(root);
+            }
+            
+            const clean = normalizeMermaid(stripBomAndZwsp(mermaidContent));
+            const validation = validateWithMermaid(clean);
+            
+            if (!validation.ok) {
+              console.debug(`[app] AST-generated ${diagramType.toUpperCase()} failed validation: ${validation.message}`);
+              mermaidContent = '';
+            } else {
+              mermaidContent = clean;
+              console.debug(`[app] AST-generated ${diagramType.toUpperCase()} validated successfully`);
+            }
+          }
+          
           if (mermaidContent && mermaidContent.trim()) {
             this.workspaceMermaid.set(mermaidContent);
             this.workspaceMermaidUpdatedAt.set(response.diagrams?.mermaidUpdatedAt ?? null);
-            this.workspaceMermaidSaveMessage.set(`Diagram generated by Agent 3 (${diagramType.toUpperCase()}).`);
+            this.workspaceMermaidSaveMessage.set(`✅ ${diagramType.toUpperCase()} diagram generated by Agent-3.`);
             this.mermaidChatInput.set(mermaidContent);
             this.renderChatMermaid();
+            
+            this.appendMessage({
+              sender: 'assistant',
+              agent: 'agent2',
+              text: `✅ Agent-3 successfully generated ${diagramType.toUpperCase()} diagram. You can now switch between HLD, LLD, and Database views in the workspace.`,
+              runId: null,
+            });
+            
             console.debug(`[app] ${diagramType.toUpperCase()} diagram successfully set | length=${mermaidContent.length} chars`);
           } else {
             console.warn(`[app] Agent 3 returned empty mermaid diagram for ${diagramType.toUpperCase()}`);
-            this.workspaceMermaidSaveMessage.set(`Warning: ${diagramType.toUpperCase()} diagram generation returned empty content. Please try again.`);
+            this.workspaceMermaidSaveMessage.set(`⚠️ ${diagramType.toUpperCase()} diagram generation returned empty content. Please try again.`);
           }
           
           this.workspaceMermaidSaving.set(false);
@@ -1175,18 +1267,18 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
             userMessage += `Error: ${errorMessage}`;
           }
           
-          this.workspaceMermaidSaveMessage.set(userMessage);
+          this.workspaceMermaidSaveMessage.set(`❌ ${userMessage}`);
           this.workspaceMermaidSaving.set(false);
           
-          // Only show error in chat for non-temporary issues
-          if (statusCode !== 503) {
-            this.appendMessage({
-              sender: 'assistant',
-              agent: 'agent2',
-              text: `Agent 3 could not generate the ${diagramType.toUpperCase()} diagram. ${userMessage}`,
-              runId: null,
-            });
-          }
+          // Show error in chat with retry guidance
+          this.appendMessage({
+            sender: 'assistant',
+            agent: 'agent2',
+            text: `❌ Agent-3 could not generate the ${diagramType.toUpperCase()} diagram. ${userMessage}${
+              statusCode === 503 ? ' Retrying in a moment...' : ' Please use the diagram type selector to retry or provide feedback.'
+            }`,
+            runId: null,
+          });
         },
       });
   }

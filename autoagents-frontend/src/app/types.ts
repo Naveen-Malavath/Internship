@@ -85,7 +85,7 @@ export type MermaidAssetUpdatePayload = {
 };
 
 export type Agent1Decision = 'again' | 'keep' | 'keep_all';
-export type Agent2Decision = 'again' | 'keep';
+export type Agent2Decision = 'again' | 'keep' | 'keep_all';
 
 export type HistoryEntry = {
   id: string;

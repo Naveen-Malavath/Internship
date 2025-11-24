@@ -1,368 +1,448 @@
 classDiagram
-    %% Frontend Layer
-    class StorefrontApp {
-    +React
-    +authenticate()
-    +displayProducts()
-    +manageCart()
-    +processCheckout()
+    class AnalyticsController {
+    -analyticsService
+    +getDashboardData(tenantId: String)
+    +generateReport(reportRequest: ReportRequest)
+    +getRealtimeMetrics(filters: Map)
+    +scheduleReport(schedule: ReportSchedule)
+    +exportReport(reportId: String, format: String)
     }
 
-    class AdminDashboard {
-    +ModularUI
-    +configureModules()
-    +viewAnalytics()
-    +manageWorkflows()
-    +generateReports()
+    class PersonalizationController {
+    -personalizationService
+    +getRecommendations(customerId: String, context: Map)
+    +updatePreferences(customerId: String, preferences: CustomerPreferences)
+    +getPersonalizedPricing(customerId: String, productId: String)
+    +trackBehavior(behaviorEvent: BehaviorEvent)
+    +getPersonalizedContent(customerId: String, channel: String)
     }
 
-    class MobileApp {
-    +Native
-    +syncOfflineData()
-    +pushNotifications()
-    +biometricAuth()
+    class SecurityController {
+    -securityService
+    +validateCompliance(request: ComplianceRequest)
+    +detectFraud(transaction: Transaction)
+    +encryptData(data: String, keyId: String)
+    +auditAccess(accessEvent: AccessEvent)
+    +validatePCIDSS(merchantData: MerchantData)
     }
 
-    %% API Gateway Layer
-    class APIGateway {
-    +String
-    +Map
-    ~String
-    +AuthenticationFilter
-    +RateLimiter
-    +routeRequest(request)
-    +authenticateUser(token)
-    +applyRateLimit(userId)
-    +logRequest(request)
+    class CatalogController {
+    -catalogService
+    +createProduct(product: Product)
+    +updateProduct(productId: String, updates: ProductUpdate)
+    +getProduct(productId: String)
+    +searchProducts(criteria: SearchCriteria)
+    +manageVariants(productId: String, variants: List~ProductVariant~)
+    +createBundle(bundle: ProductBundle)
     }
 
-    class GraphQLEndpoint {
-    +Schema
-    +Resolver
-    +executeQuery(query)
-    +validateSchema()
-    +handleSubscriptions()
+    class LoyaltyController {
+    -loyaltyService
+    +enrollCustomer(customerId: String, programId: String)
+    +earnPoints(customerId: String, transaction: Transaction)
+    +redeemRewards(customerId: String, redemption: RewardRedemption)
+    +getTierStatus(customerId: String)
+    +getRewardHistory(customerId: String)
     }
 
-    class RESTEndpoint {
-    +Map
-    ~String
-    +handleGET(path, params)
-    +handlePOST(path, body)
-    +handlePUT(path, body)
-    +handleDELETE(path, params)
+    class ApiGatewayController {
+    -gatewayService
+    +routeRequest(request: ApiRequest)
+    +authenticateClient(credentials: ClientCredentials)
+    +rateLimit(clientId: String, endpoint: String)
+    +transformRequest(request: ApiRequest, mapping: TransformationMapping)
+    +aggregateResponses(requests: List~ApiRequest~)
     }
 
-    %% Core Microservices
-    class CatalogService {
-    +ProductRepository
-    +CategoryRepository
-    +SearchEngine
-    +createProduct(product)
-    +updateProduct(id, product)
-    +searchProducts(criteria)
-    +getProductHierarchy()
-    +manageVariants(productId)
+    class OrderController {
+    -orderService
+    +createOrder(order: Order)
+    +updateOrderStatus(orderId: String, status: OrderStatus)
+    +getOrder(orderId: String)
+    +processReturn(returnRequest: ReturnRequest)
+    +splitShipment(orderId: String, splitConfig: ShipmentSplit)
+    +cancelOrder(orderId: String, reason: String)
     }
 
-    class InventoryService {
-    +InventoryRepository
-    +AllocationEngine
-    +ReservationManager
-    +updateStock(sku, quantity)
-    +reserveInventory(items)
-    +releaseReservation(reservationId)
-    +syncAcrossChannels()
-    +getAvailability(sku)
+    class AdminController {
+    -adminService
+    +getTenantDashboard(tenantId: String)
+    +manageTenantConfig(tenantId: String, config: TenantConfig)
+    +getUserPermissions(userId: String, tenantId: String)
+    +auditTenantActivity(tenantId: String, filters: AuditFilters)
+    +generateComplianceReport(tenantId: String)
     }
 
-    class OrderService {
-    +OrderRepository
-    +PaymentProcessor
-    +FulfillmentOrchestrator
-    +createOrder(orderData)
-    +updateOrderStatus(orderId, status)
-    +processPayment(paymentInfo)
-    +trackShipment(orderId)
-    +handleReturns(returnRequest)
+    class InventoryController {
+    -inventoryService
+    +getInventoryLevel(sku: String, locationId: String)
+    +reserveInventory(reservation: InventoryReservation)
+    +updateStock(stockUpdate: StockUpdate)
+    +syncInventory(syncRequest: InventorySyncRequest)
+    +optimizeAllocation(allocationRequest: AllocationRequest)
     }
 
-    class PricingService {
-    +PriceRepository
-    +PromotionEngine
-    +TierCalculator
-    +calculatePrice(productId, customerId)
-    +applyPromotions(cartItems)
-    +getTierPricing(customerId)
-    +validatePriceRules()
+    class PerformanceController {
+    -performanceService
+    +getMetrics(timeRange: TimeRange)
+    +optimizeQuery(query: DatabaseQuery)
+    +manageCacheStrategy(cacheConfig: CacheConfiguration)
+    +monitorCDN(cdnConfig: CDNConfiguration)
+    +alertOnThreshold(threshold: PerformanceThreshold)
     }
 
-    class CustomerService {
-    +CustomerRepository
-    +ProfileManager
-    +PreferenceEngine
-    +createCustomer(customerData)
-    +updateProfile(customerId, profile)
-    +getPreferences(customerId)
-    +manageAddresses(customerId)
-    +handleAuthentication()
-    }
-
-    class LoyaltyService {
-    +LoyaltyRepository
-    +PointsCalculator
-    +RewardsEngine
-    +TierManager
-    +calculatePoints(transaction)
-    +redeemRewards(customerId, rewardId)
-    +updateTierStatus(customerId)
-    +trackEngagement(activity)
-    }
-
-    %% AI & Analytics Layer
-    class PersonalizationEngine {
-    +MLModelManager
-    +BehaviorTracker
-    +RecommendationService
-    +generateRecommendations(customerId)
-    +updateBehaviorModel(interaction)
-    +personalizeContent(customerId)
-    +optimizePricing(customerId)
+    class IntegrationController {
+    -integrationService
+    +registerConnector(connector: IntegrationConnector)
+    +executeIntegration(integrationId: String, payload: Map)
+    +getConnectorStatus(connectorId: String)
+    +transformData(data: Map, mapping: DataMapping)
+    +validateIntegration(integrationConfig: IntegrationConfig)
     }
 
     class AnalyticsService {
-    +MetricsCollector
-    +ReportGenerator
-    +AlertManager
-    +collectMetrics(event)
-    +generateReport(criteria)
-    +sendAlert(condition)
-    +trackPerformance()
+    -analyticsRepository
+    -dataAggregator
+    -reportGenerator
+    +aggregateCommerceData(sources: List~DataSource~)
+    +generateInsights(data: AggregatedData)
+    +createDashboard(config: DashboardConfig)
+    +scheduleReports(schedule: ReportSchedule)
+    +processRealTimeData(stream: DataStream)
     }
 
-    %% Integration Layer
-    class IntegrationHub {
-    +ConnectorRegistry
-    +MessageQueue
-    +TransformationEngine
-    +registerConnector(connector)
-    +processMessage(message)
-    +transformData(data, format)
-    +routeToDestination(message)
+    class PersonalizationService {
+    -mlEngine
+    -behaviorRepository
+    -recommendationEngine
+    +analyzeCustomerBehavior(customerId: String)
+    +generateRecommendations(profile: BehaviorProfile, context: Map)
+    +updateMLModel(trainingData: TrainingData)
+    +personalizeContent(customerId: String, content: Content)
+    +calculatePersonalizedPricing(customerId: String, product: Product)
     }
 
-    class PaymentConnector {
-    +PaymentGateway
-    +processPayment(paymentData)
-    +refundPayment(transactionId)
-    +validateCard(cardInfo)
+    class SecurityService {
+    -encryptionManager
+    -fraudDetector
+    -complianceValidator
+    +validatePCICompliance(data: PaymentData)
+    +enforceGDPRRules(request: DataRequest)
+    +detectFraudulentActivity(transaction: Transaction)
+    +encryptSensitiveData(data: SensitiveData)
+    +auditSecurityEvents(events: List~SecurityEvent~)
     }
 
-    class ShippingConnector {
-    +ShippingProvider
-    +calculateRates(shipment)
-    +createLabel(shipment)
-    +trackPackage(trackingId)
+    class CatalogService {
+    -catalogRepository
+    -searchEngine
+    -hierarchyManager
+    +manageProductHierarchy(hierarchy: ProductHierarchy)
+    +processProductVariants(variants: List~ProductVariant~)
+    +createProductBundles(bundle: ProductBundle)
+    +indexProductsForSearch(products: List~Product~)
+    +validateProductData(product: Product)
     }
 
-    class ERPConnector {
-    +ERPSystem
-    +syncInventory()
-    +updateOrders()
-    +syncCustomers()
+    class LoyaltyService {
+    -loyaltyRepository
+    -rewardEngine
+    -tierManager
+    +calculatePointsEarned(transaction: Transaction, rules: List~RewardRule~)
+    +processRewardRedemption(redemption: RewardRedemption)
+    +updateCustomerTier(customerId: String, activity: CustomerActivity)
+    +validateRewardRules(rules: List~RewardRule~)
+    +trackCustomerEngagement(customerId: String, interaction: Interaction)
     }
 
-    %% Data Layer
-    class ProductDatabase {
-    +products
-    +categories
-    +variants
-    +attributes
-    +executeQuery(sql)
-    +createIndex(field)
-    +optimizePerformance()
+    class ApiGatewayService {
+    -routingEngine
+    -authenticationManager
+    -rateLimiter
+    +routeToMicroservice(request: ApiRequest)
+    +authenticateRequest(request: ApiRequest)
+    +applyRateLimit(clientId: String, endpoint: String)
+    +transformApiRequest(request: ApiRequest, mapping: ApiMapping)
+    +aggregateServiceResponses(responses: List~ServiceResponse~)
     }
 
-    class CustomerDatabase {
-    +customers
-    +profiles
-    +preferences
-    +addresses
-    +loyalty_accounts
-    +executeQuery(sql)
-    +encryptPII(data)
+    class OrderService {
+    -orderRepository
+    -fulfillmentOrchestrator
+    -paymentProcessor
+    +orchestrateOrderFulfillment(order: Order)
+    +processOrderPayment(order: Order, payment: PaymentMethod)
+    +handleOrderModification(orderId: String, modification: OrderModification)
+    +manageOrderLifecycle(orderId: String, event: OrderEvent)
+    +processReturnExchange(returnRequest: ReturnRequest)
     }
 
-    class OrderDatabase {
-    +orders
-    +order_items
-    +payments
-    +shipments
-    +executeQuery(sql)
-    +maintainConsistency()
+    class AdminService {
+    -tenantRepository
+    -permissionManager
+    -auditLogger
+    +manageTenantConfiguration(tenantId: String, config: TenantConfig)
+    +enforcePermissions(userId: String, action: String, resource: String)
+    +generateTenantReports(tenantId: String, reportType: String)
+    +auditTenantOperations(tenantId: String, operations: List~Operation~)
+    +validateComplianceRules(tenantId: String, rules: List~ComplianceRule~)
     }
 
-    class InventoryDatabase {
-    +inventory
-    +reservations
-    +allocations
-    +warehouses
-    +executeQuery(sql)
-    +handleConcurrency()
+    class InventoryService {
+    -inventoryRepository
+    -allocationEngine
+    -syncManager
+    +synchronizeInventoryLevels(sources: List~InventorySource~)
+    +optimizeInventoryAllocation(demand: DemandForecast)
+    +preventOverselling(reservation: InventoryReservation)
+    +routeFulfillment(order: Order, inventory: InventorySnapshot)
+    +updateInventoryLevels(updates: List~InventoryUpdate~)
     }
 
-    class AnalyticsDatabase {
-    +events
-    +metrics
-    +reports
-    +user_behavior
-    +executeQuery(sql)
-    +aggregateData()
+    class PerformanceService {
+    -metricsCollector
+    -cacheManager
+    -queryOptimizer
+    +monitorSystemPerformance(components: List~SystemComponent~)
+    +optimizeDatabaseQueries(queries: List~DatabaseQuery~)
+    +manageCachingStrategy(strategy: CachingStrategy)
+    +integrateCDN(cdnConfig: CDNConfiguration)
+    +alertOnPerformanceIssues(thresholds: List~PerformanceThreshold~)
     }
 
-    %% Cache Layer
-    class RedisCache {
-    +String
-    +int
-    +set(key, value, ttl)
-    +get(key)
-    +delete(key)
-    +flushCache()
+    class IntegrationService {
+    -connectorRegistry
+    -dataTransformer
+    -integrationOrchestrator
+    +manageThirdPartyConnections(connections: List~ThirdPartyConnection~)
+    +orchestrateDataFlow(flow: DataFlow)
+    +transformIntegrationData(data: Map, schema: DataSchema)
+    +validateIntegrationHealth(integrationId: String)
+    +executeIntegrationWorkflow(workflow: IntegrationWorkflow)
     }
 
-    class ElasticsearchIndex {
-    +String
-    +indexDocument(doc)
-    +search(query)
-    +updateMapping()
-    +optimizeIndex()
+    class AnalyticsRepository {
+    +saveMetrics(metrics: List~Metric~)
+    +findMetricsByTimeRange(start: DateTime, end: DateTime)
+    +aggregateData(aggregation: AggregationQuery)
+    +saveReport(report: Report)
+    +findReportById(reportId: String)
     }
 
-    %% Message Queue
-    class MessageBroker {
-    +Queue
-    +publishMessage(topic, message)
-    +subscribeToTopic(topic, handler)
-    +processDeadLetters()
-    +monitorQueues()
+    class BehaviorRepository {
+    +saveBehaviorEvent(event: BehaviorEvent)
+    +findBehaviorByCustomer(customerId: String)
+    +findBehaviorByTimeRange(customerId: String, start: DateTime, end: DateTime)
+    +updateCustomerProfile(customerId: String, profile: BehaviorProfile)
+    +findSimilarCustomers(profile: BehaviorProfile)
     }
 
-    %% Multi-tenant Support
-    class TenantManager {
-    +TenantRepository
-    +ConfigurationManager
-    +DataIsolationLayer
-    +createTenant(tenantData)
-    +configureTenant(tenantId, config)
-    +isolateData(tenantId)
-    +manageBranding(tenantId)
+    class CatalogRepository {
+    +saveProduct(product: Product)
+    +findProductById(productId: String)
+    +findProductsByCategory(categoryId: String)
+    +updateProduct(productId: String, updates: ProductUpdate)
+    +deleteProduct(productId: String)
+    +findProductVariants(productId: String)
     }
 
-    %% Relationships
-    StorefrontApp --> APIGateway
-    AdminDashboard --> APIGateway
-    MobileApp --> APIGateway
+    class LoyaltyRepository {
+    +saveLoyaltyMember(member: LoyaltyMember)
+    +findMemberByCustomerId(customerId: String)
+    +saveRewardTransaction(transaction: RewardTransaction)
+    +findRewardHistory(customerId: String)
+    +updateMemberTier(customerId: String, tier: LoyaltyTier)
+    }
 
-    APIGateway --> GraphQLEndpoint
-    APIGateway --> RESTEndpoint
-    APIGateway --> TenantManager
+    class OrderRepository {
+    +saveOrder(order: Order)
+    +findOrderById(orderId: String)
+    +findOrdersByCustomer(customerId: String)
+    +updateOrderStatus(orderId: String, status: OrderStatus)
+    +findOrdersByStatus(status: OrderStatus)
+    +saveShipment(shipment: Shipment)
+    }
 
-    GraphQLEndpoint --> CatalogService
-    GraphQLEndpoint --> InventoryService
-    GraphQLEndpoint --> OrderService
-    GraphQLEndpoint --> CustomerService
-    GraphQLEndpoint --> LoyaltyService
+    class TenantRepository {
+    +saveTenant(tenant: Tenant)
+    +findTenantById(tenantId: String)
+    +findAllTenants()
+    +updateTenantConfig(tenantId: String, config: TenantConfig)
+    +deleteTenant(tenantId: String)
+    }
 
-    RESTEndpoint --> CatalogService
-    RESTEndpoint --> InventoryService
-    RESTEndpoint --> OrderService
-    RESTEndpoint --> PricingService
-    RESTEndpoint --> CustomerService
-    RESTEndpoint --> LoyaltyService
+    class InventoryRepository {
+    +saveInventoryLevel(level: InventoryLevel)
+    +findInventoryBySKU(sku: String)
+    +findInventoryByLocation(locationId: String)
+    +updateInventoryLevel(sku: String, locationId: String, quantity: Integer)
+    +reserveInventory(reservation: InventoryReservation)
+    }
 
-    CatalogService --> ProductDatabase
-    CatalogService --> ElasticsearchIndex
-    CatalogService --> RedisCache
-    CatalogService --> MessageBroker
+    class Customer {
+    -customerId
+    -email
+    -firstName
+    -lastName
+    -dateOfBirth
+    -preferences
+    -createdAt
+    -updatedAt
+    }
 
-    InventoryService --> InventoryDatabase
-    InventoryService --> RedisCache
-    InventoryService --> MessageBroker
+    class Product {
+    -productId
+    -name
+    -description
+    -category
+    -price
+    -attributes
+    -variants
+    -createdAt
+    -updatedAt
+    }
 
-    OrderService --> OrderDatabase
-    OrderService --> IntegrationHub
-    OrderService --> MessageBroker
+    class Order {
+    -orderId
+    -customerId
+    -items
+    -totalAmount
+    -status
+    -shippingAddress
+    -billingAddress
+    -createdAt
+    -updatedAt
+    }
 
-    CustomerService --> CustomerDatabase
-    CustomerService --> RedisCache
-    CustomerService --> PersonalizationEngine
+    class LoyaltyMember {
+    -memberId
+    -customerId
+    -programId
+    -points
+    -tier
+    -joinDate
+    -lastActivity
+    }
 
-    LoyaltyService --> CustomerDatabase
-    LoyaltyService --> MessageBroker
-    LoyaltyService --> AnalyticsService
+    class Tenant {
+    -tenantId
+    -name
+    -domain
+    -configuration
+    -status
+    -createdAt
+    -updatedAt
+    }
 
-    PricingService --> ProductDatabase
-    PricingService --> PersonalizationEngine
-    PricingService --> RedisCache
+    class InventoryLevel {
+    -sku
+    -locationId
+    -availableQuantity
+    -reservedQuantity
+    -totalQuantity
+    -lastUpdated
+    }
 
-    PersonalizationEngine --> AnalyticsDatabase
-    PersonalizationEngine --> CustomerDatabase
-    PersonalizationEngine --> MessageBroker
+    class BehaviorEvent {
+    -eventId
+    -customerId
+    -eventType
+    -eventData
+    -timestamp
+    -sessionId
+    -channel
+    }
 
-    AnalyticsService --> AnalyticsDatabase
-    AnalyticsService --> MessageBroker
+    class Report {
+    -reportId
+    -name
+    -type
+    -data
+    -generatedAt
+    -parameters
+    }
 
-    IntegrationHub --> PaymentConnector
-    IntegrationHub --> ShippingConnector
-    IntegrationHub --> ERPConnector
-    IntegrationHub --> MessageBroker
+    class Transaction {
+    -transactionId
+    -customerId
+    -amount
+    -currency
+    -paymentMethod
+    -status
+    -timestamp
+    }
 
-    TenantManager --> ProductDatabase
-    TenantManager --> CustomerDatabase
-    TenantManager --> OrderDatabase
-    TenantManager --> InventoryDatabase
+    AnalyticsController --> AnalyticsService
+    PersonalizationController --> PersonalizationService
+    SecurityController --> SecurityService
+    CatalogController --> CatalogService
+    LoyaltyController --> LoyaltyService
+    ApiGatewayController --> ApiGatewayService
+    OrderController --> OrderService
+    AdminController --> AdminService
+    InventoryController --> InventoryService
+    PerformanceController --> PerformanceService
+    IntegrationController --> IntegrationService
 
-    %% Styling
-    classDef frontend fill:#E3F2FD,stroke:#1976D2,color:#000
-    classDef gateway fill:#F3E5F5,stroke:#7B1FA2,color:#000
-    classDef service fill:#FFF3E0,stroke:#F57C00,color:#000
-    classDef ai fill:#E8F5E9,stroke:#388E3C,color:#000
-    classDef integration fill:#FCE4EC,stroke:#C2185B,color:#000
-    classDef database fill:#E0F2F1,stroke:#00695C,color:#000
-    classDef cache fill:#FFF8E1,stroke:#FF8F00,color:#000
-    classDef infrastructure fill:#EFEBE9,stroke:#5D4037,color:#000
+    AnalyticsService --> AnalyticsRepository
+    PersonalizationService --> BehaviorRepository
+    CatalogService --> CatalogRepository
+    LoyaltyService --> LoyaltyRepository
+    OrderService --> OrderRepository
+    AdminService --> TenantRepository
+    InventoryService --> InventoryRepository
 
-    StorefrontApp:::frontend
-    AdminDashboard:::frontend
-    MobileApp:::frontend
+    AnalyticsRepository --> Report
+    BehaviorRepository --> BehaviorEvent
+    CatalogRepository --> Product
+    LoyaltyRepository --> LoyaltyMember
+    OrderRepository --> Order
+    TenantRepository --> Tenant
+    InventoryRepository --> InventoryLevel
 
-    APIGateway:::gateway
-    GraphQLEndpoint:::gateway
-    RESTEndpoint:::gateway
+    PersonalizationService --> Customer
+    OrderService --> Customer
+    LoyaltyService --> Customer
+    SecurityService --> Transaction
 
-    CatalogService:::service
-    InventoryService:::service
-    OrderService:::service
-    PricingService:::service
-    CustomerService:::service
-    LoyaltyService:::service
+    class AnalyticsController:::controllerClass
+    class PersonalizationController:::controllerClass
+    class SecurityController:::controllerClass
+    class CatalogController:::controllerClass
+    class LoyaltyController:::controllerClass
+    class ApiGatewayController:::controllerClass
+    class OrderController:::controllerClass
+    class AdminController:::controllerClass
+    class InventoryController:::controllerClass
+    class PerformanceController:::controllerClass
+    class IntegrationController:::controllerClass
 
-    PersonalizationEngine:::ai
-    AnalyticsService:::ai
+    class AnalyticsService:::serviceClass
+    class PersonalizationService:::serviceClass
+    class SecurityService:::serviceClass
+    class CatalogService:::serviceClass
+    class LoyaltyService:::serviceClass
+    class ApiGatewayService:::serviceClass
+    class OrderService:::serviceClass
+    class AdminService:::serviceClass
+    class InventoryService:::serviceClass
+    class PerformanceService:::serviceClass
+    class IntegrationService:::serviceClass
 
-    IntegrationHub:::integration
-    PaymentConnector:::integration
-    ShippingConnector:::integration
-    ERPConnector:::integration
+    class AnalyticsRepository:::repoClass
+    class BehaviorRepository:::repoClass
+    class CatalogRepository:::repoClass
+    class LoyaltyRepository:::repoClass
+    class OrderRepository:::repoClass
+    class TenantRepository:::repoClass
+    class InventoryRepository:::repoClass
 
-    ProductDatabase:::database
-    CustomerDatabase:::database
-    OrderDatabase:::database
-    InventoryDatabase:::database
-    AnalyticsDatabase:::database
-
-    RedisCache:::cache
-    ElasticsearchIndex:::cache
-
-    MessageBroker:::infrastructure
-    TenantManager:::infrastructure
+    class Customer:::modelClass
+    class Product:::modelClass
+    class Order:::modelClass
+    class LoyaltyMember:::modelClass
+    class Tenant:::modelClass
+    class InventoryLevel:::modelClass
+    class BehaviorEvent:::modelClass
+    class Report:::modelClass
+    class Transaction:::modelClass

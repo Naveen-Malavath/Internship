@@ -93,8 +93,69 @@ async def submit_feedback(request: FeedbackRequest) -> FeedbackResponse:
             db, request.itemId, request.itemType
         )
 
+        # ✅ AUTO-REGENERATE CONTENT BASED ON FEEDBACK
+        logger.info("[feedback] Auto-regenerating content based on feedback")
+        
+        try:
+            regenerated_content = await feedback_service.regenerate_content(
+                item_id=request.itemId,
+                item_type=request.itemType,
+                project_id=request.projectId,
+                feedback=request.feedback,
+                original_content=request.originalContent,
+                project_context=request.projectContext,
+            )
+            
+            if regenerated_content:
+                # Update feedback entry with regenerated content
+                new_regeneration_count = regeneration_count + 1
+                await db["feedback_history"].update_one(
+                    {"_id": feedback_id},
+                    {
+                        "$set": {
+                            "status": "regenerated",
+                            "regenerated_at": datetime.utcnow(),
+                            "version": new_regeneration_count,
+                            "regenerated_content": regenerated_content,
+                        }
+                    },
+                )
+                
+                logger.info(
+                    "[feedback] Feedback submitted and content regenerated successfully",
+                    extra={
+                        "feedbackId": feedback_id,
+                        "itemId": request.itemId,
+                        "itemType": request.itemType,
+                        "regenerationCount": new_regeneration_count,
+                    },
+                )
+                
+                return FeedbackResponse(
+                    feedbackId=feedback_id,
+                    regenerationCount=new_regeneration_count,
+                    regeneratedContent=regenerated_content,  # ✅ Return regenerated content
+                    version=new_regeneration_count,
+                    autoRegenerate=True,  # ✅ Set to true
+                    message="Feedback submitted and content regenerated successfully",
+                )
+        except Exception as regen_error:
+            logger.error(
+                "[feedback] Failed to auto-regenerate content",
+                exc_info=True,
+                extra={"feedbackId": feedback_id, "error": str(regen_error)},
+            )
+            # Still return success for feedback submission, but without regeneration
+            return FeedbackResponse(
+                feedbackId=feedback_id,
+                regenerationCount=regeneration_count,
+                autoRegenerate=False,
+                message="Feedback submitted successfully, but regeneration failed. Please try regenerating manually.",
+            )
+
+        # Fallback return (should not reach here)
         logger.info(
-            "[feedback] Feedback submitted successfully",
+            "[feedback] Feedback submitted successfully (no regeneration attempted)",
             extra={
                 "feedbackId": feedback_id,
                 "itemId": request.itemId,

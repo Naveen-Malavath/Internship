@@ -8,14 +8,11 @@
       (click)="onGenerateDesigns()"
       [disabled]="isLoadingDesigns"
     >
-      {{ isLoadingDesigns ? 'Loading...' : 'Generate Designs' }}
+      Generate Designs
     </button>
   </header>
 
-  <!-- Loading State -->
-  <div *ngIf="isLoadingDesigns" class="project-design-view__message project-design-view__message--loading">
-    <p>Loading designs...</p>
-  </div>
+  <!-- Loading State Removed - diagrams render instantly -->
 
   <!-- Error State -->
   <div *ngIf="error && !isLoadingDesigns" class="project-design-view__message project-design-view__message--error">

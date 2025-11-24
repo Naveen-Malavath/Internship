@@ -1,0 +1,240 @@
+classDiagram
+    class UserController {
+    -userService
+    +register(email: String, password: String)
+    +login(email: String, password: String)
+    +logout(token: String)
+    +getCurrentUser(token: String)
+    }
+
+    class TaskController {
+    -taskService
+    +createTask(title: String, description: String, userId: UUID)
+    +getTasks(userId: UUID)
+    +getTaskById(taskId: UUID)
+    +updateTask(taskId: UUID, title: String, description: String)
+    +markTaskComplete(taskId: UUID)
+    +deleteTask(taskId: UUID)
+    }
+
+    class TeamController {
+    -teamService
+    +createTeam(name: String, ownerId: UUID)
+    +inviteTeamMember(teamId: UUID, email: String)
+    +acceptInvitation(invitationId: UUID)
+    +getTeamMembers(teamId: UUID)
+    +removeTeamMember(teamId: UUID, userId: UUID)
+    }
+
+    class UserService {
+    -userRepository
+    -passwordEncoder
+    -jwtTokenProvider
+    +registerUser(email: String, password: String)
+    +authenticateUser(email: String, password: String)
+    +validateToken(token: String)
+    +getUserById(userId: UUID)
+    +getUserByEmail(email: String)
+    +updateUser(userId: UUID, userData: User)
+    }
+
+    class TaskService {
+    -taskRepository
+    -userRepository
+    +createTask(title: String, description: String, userId: UUID)
+    +getTasksByUserId(userId: UUID)
+    +getTaskById(taskId: UUID)
+    +updateTask(taskId: UUID, title: String, description: String)
+    +markTaskAsComplete(taskId: UUID)
+    +deleteTask(taskId: UUID)
+    +validateTaskOwnership(taskId: UUID, userId: UUID)
+    }
+
+    class TeamService {
+    -teamRepository
+    -userRepository
+    -invitationRepository
+    +createTeam(name: String, ownerId: UUID)
+    +inviteMember(teamId: UUID, email: String, inviterId: UUID)
+    +acceptInvitation(invitationId: UUID, userId: UUID)
+    +getTeamMembers(teamId: UUID)
+    +removeTeamMember(teamId: UUID, userId: UUID)
+    +validateTeamAccess(teamId: UUID, userId: UUID)
+    }
+
+    class UserRepository {
+    +findById(userId: UUID)
+    +findByEmail(email: String)
+    +save(user: User)
+    +update(user: User)
+    +delete(userId: UUID)
+    +existsByEmail(email: String)
+    }
+
+    class TaskRepository {
+    +findById(taskId: UUID)
+    +findByUserId(userId: UUID)
+    +findByTeamId(teamId: UUID)
+    +save(task: Task)
+    +update(task: Task)
+    +delete(taskId: UUID)
+    }
+
+    class TeamRepository {
+    +findById(teamId: UUID)
+    +findByOwnerId(ownerId: UUID)
+    +save(team: Team)
+    +update(team: Team)
+    +delete(teamId: UUID)
+    }
+
+    class InvitationRepository {
+    +findById(invitationId: UUID)
+    +findByEmail(email: String)
+    +findByTeamId(teamId: UUID)
+    +save(invitation: Invitation)
+    +update(invitation: Invitation)
+    +delete(invitationId: UUID)
+    }
+
+    class User {
+    -id
+    -email
+    -passwordHash
+    -firstName
+    -lastName
+    -createdAt
+    -updatedAt
+    -isActive
+    +getId()
+    +getEmail()
+    +getFullName()
+    +setPassword(password: String)
+    +validatePassword(password: String)
+    }
+
+    class Task {
+    -id
+    -title
+    -description
+    -isCompleted
+    -userId
+    -teamId
+    -createdAt
+    -updatedAt
+    -dueDate
+    +getId()
+    +getTitle()
+    +setTitle(title: String)
+    +markAsComplete()
+    +isOverdue()
+    }
+
+    class Team {
+    -id
+    -name
+    -ownerId
+    -createdAt
+    -updatedAt
+    -isActive
+    +getId()
+    +getName()
+    +getOwnerId()
+    +setName(name: String)
+    }
+
+    class TeamMember {
+    -id
+    -teamId
+    -userId
+    -role
+    -joinedAt
+    +getId()
+    +getTeamId()
+    +getUserId()
+    +getRole()
+    +setRole(role: TeamRole)
+    }
+
+    class Invitation {
+    -id
+    -teamId
+    -email
+    -inviterId
+    -status
+    -createdAt
+    -expiresAt
+    +getId()
+    +getTeamId()
+    +getEmail()
+    +accept()
+    +reject()
+    +isExpired()
+    }
+
+    class TeamRole {
+        <<enumeration>>
+        OWNER
+        ADMIN
+        MEMBER
+    }
+
+    class InvitationStatus {
+        <<enumeration>>
+        PENDING
+        ACCEPTED
+        REJECTED
+        EXPIRED
+    }
+
+    UserController --> UserService
+    TaskController --> TaskService
+    TeamController --> TeamService
+
+    UserService --> UserRepository
+    TaskService --> TaskRepository
+    TaskService --> UserRepository
+    TeamService --> TeamRepository
+    TeamService --> UserRepository
+    TeamService --> InvitationRepository
+
+    UserRepository --> User
+    TaskRepository --> Task
+    TeamRepository --> Team
+    InvitationRepository --> Invitation
+
+    UserService --> User
+    TaskService --> Task
+    TeamService --> Team
+    TeamService --> TeamMember
+    TeamService --> Invitation
+
+    Task --> User
+    Team --> User
+    TeamMember --> Team
+    TeamMember --> User
+    TeamMember --> TeamRole
+    Invitation --> Team
+    Invitation --> User
+    Invitation --> InvitationStatus
+
+    UserController:::controllerClass
+    TaskController:::controllerClass
+    TeamController:::controllerClass
+
+    UserService:::serviceClass
+    TaskService:::serviceClass
+    TeamService:::serviceClass
+
+    UserRepository:::repoClass
+    TaskRepository:::repoClass
+    TeamRepository:::repoClass
+    InvitationRepository:::repoClass
+
+    User:::modelClass
+    Task:::modelClass
+    Team:::modelClass
+    TeamMember:::modelClass
+    Invitation:::modelClass
+    TeamRole:::modelClass
+    InvitationStatus:::modelClass

@@ -1,0 +1,33 @@
+erDiagram
+    USER {
+    }
+
+    USER_PROFILE {
+    }
+
+    USER_SESSION {
+    }
+
+    PASSWORD_RESET {
+    }
+
+    EMAIL_VERIFICATION {
+    }
+
+    USER_ROLE {
+    }
+
+    USER_ROLE_ASSIGNMENT {
+    }
+
+    AUDIT_LOG {
+    }
+
+    USER ||--|| USER_PROFILE : has
+    USER ||--o{ USER_SESSION : creates
+    USER ||--o{ PASSWORD_RESET : requests
+    USER ||--o{ EMAIL_VERIFICATION : receives
+    USER ||--o{ USER_ROLE_ASSIGNMENT : assigned
+    USER_ROLE ||--o{ USER_ROLE_ASSIGNMENT : grants
+    USER ||--o{ AUDIT_LOG : generates
+    USER ||--o{ USER_ROLE_ASSIGNMENT : assigns

@@ -96,62 +96,179 @@ class Agent3Service:
         if diagram_type.lower() == "lld":
             system_prompt = (
                 "You are Agent-3, an AI software architect specializing in Low Level Design (LLD). "
-                "Generate detailed Mermaid diagrams showing component interactions, class structures, "
-                "API endpoints, service layers, and data flow at an implementation level. "
-                "Use appropriate Mermaid syntax like classDiagram, sequenceDiagram, or detailed flowcharts. "
-                "ALWAYS add professional colors and styling for visual clarity."
+                "You create DETAILED technical diagrams showing classes, methods, properties, relationships, "
+                "and implementation details. LLD is MORE DETAILED than HLD - show specific classes, methods, "
+                "and technical implementation for each feature. Use Mermaid classDiagram syntax."
             )
             user_prompt = (
                 f"Project: {project_title or 'Untitled Project'}\n"
                 f"{prompt_context}"
-                f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
-                f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
-                "Create a COLORED LOW LEVEL DESIGN (LLD) Mermaid diagram showing:\n"
-                "- Component/class/module interactions\n"
-                "- API endpoints and service layers\n"
-                "- Data flow between components\n"
-                "- Database interactions\n"
-                "- Use classDiagram, sequenceDiagram, or detailed flowchart syntax\n\n"
-                "🎨 STYLING REQUIREMENTS (MANDATORY):\n"
-                "- Define classDef styles with different colors for:\n"
-                "  * Frontend components (e.g., fill:#E3F2FD,stroke:#1976D2,color:#000)\n"
-                "  * Backend services (e.g., fill:#FFF3E0,stroke:#F57C00,color:#000)\n"
-                "  * Database layer (e.g., fill:#E8F5E9,stroke:#388E3C,color:#000)\n"
-                "  * External APIs (e.g., fill:#FCE4EC,stroke:#C2185B,color:#000)\n"
-                "- Apply styles using ':::className' syntax\n"
-                "- Use professional color schemes with good contrast\n\n"
-                "Output ONLY valid Mermaid code, no explanations."
+                f"Features to implement:\n" + "\n".join(feature_details) + "\n\n"
+                f"User Stories context:\n{story_outline or 'None'}\n\n"
+                "Create a DETAILED LOW LEVEL DESIGN (LLD) Mermaid classDiagram showing:\n\n"
+                "📋 WHAT TO INCLUDE (based on features above):\n"
+                "1. **Controllers/API Layer** - For each feature, create specific controller classes:\n"
+                "   - Map features to RESTful API endpoints\n"
+                "   - Example: UserController, ProductController, OrderController\n"
+                "   - Methods: +createResource(), +getResource(), +updateResource(), +deleteResource()\n\n"
+                "2. **Service Layer** - Business logic classes for each feature:\n"
+                "   - Map each feature to a service class\n"
+                "   - Example: UserService, ProductService, OrderService\n"
+                "   - Methods: +processBusinessLogic(), +validateData(), +applyBusinessRules()\n"
+                "   - Fields: -repository: Repository, -validator: Validator\n\n"
+                "3. **Repository Layer** - Data access for each entity:\n"
+                "   - Create repository classes for data operations\n"
+                "   - Example: UserRepository, ProductRepository\n"
+                "   - Methods: +findById(), +save(), +update(), +delete(), +findAll()\n\n"
+                "4. **Model/Entity Classes** - Domain objects:\n"
+                "   - Extract entities from features and stories\n"
+                "   - Example: User, Product, Order, Payment\n"
+                "   - Properties: -id: UUID, -name: String, -email: String, -createdAt: DateTime\n\n"
+                "5. **Relationships** - Show how classes interact:\n"
+                "   - Controller --> Service (dependency)\n"
+                "   - Service --> Repository (dependency)\n"
+                "   - Repository --> Entity (manages)\n"
+                "   - Service --> Entity (uses)\n\n"
+                "⚠️ CRITICAL SYNTAX REQUIREMENTS:\n"
+                "```\n"
+                "classDiagram\n"
+                "  class ClassName {\n"
+                "    -privateField: Type\n"
+                "    +publicMethod() ReturnType\n"
+                "  }\n"
+                "```\n"
+                "- Each class MUST have { and } on separate lines\n"
+                "- ALL methods and properties MUST be INSIDE { }\n"
+                "- NEVER EVER put members outside a class block\n"
+                "- Close each class with } before starting relationships\n"
+                "- Members MUST be inside braces with 4-space indent\n"
+                "- Visibility: + (public), - (private), # (protected)\n\n"
+                "❌ WRONG EXAMPLE:\n"
+                "```\n"
+                "classDiagram\n"
+                "  class MyService {\n"
+                "    +method1()\n"
+                "  }\n"
+                "  +method2()  ← WRONG! This is outside the class!\n"
+                "```\n\n"
+                "✅ CORRECT EXAMPLE:\n"
+                "```\n"
+                "classDiagram\n"
+                "  class MyService {\n"
+                "    +method1()\n"
+                "    +method2()\n"
+                "  }\n"
+                "```\n\n"
+                "🎨 STYLING (Subtle professional colors):\n"
+                "```\n"
+                "classDef controllerClass fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#000000\n"
+                "classDef serviceClass fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#000000\n"
+                "classDef repoClass fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#000000\n"
+                "classDef modelClass fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000000\n"
+                "```\n"
+                "- Use pastel fills with darker stroke colors\n"
+                "- Apply with :::className after class name\n"
+                "- Example: UserController:::controllerClass\n\n"
+                "Output ONLY valid Mermaid classDiagram code, no explanations."
             )
         elif diagram_type.lower() == "database":
             system_prompt = (
-                "You are Agent-3, an AI database architect. Generate COLORED Mermaid ER diagrams (erDiagram) "
-                "showing tables, relationships, keys, and data models based on features and stories. "
-                "Use professional styling and colors to distinguish different entity types."
+                "You are Agent-3, an AI database architect. You create DETAILED database schemas showing "
+                "all tables, fields, data types, constraints, and relationships needed to implement the features. "
+                "Analyze features to identify entities, create comprehensive database design with proper normalization."
             )
             user_prompt = (
                 f"Project: {project_title or 'Untitled Project'}\n"
                 f"{prompt_context}"
-                f"Features from Agent1:\n" + "\n".join(feature_details) + "\n\n"
-                f"User Stories from Agent2:\n{story_outline or 'None'}\n\n"
-                "Create a COLORED DATABASE DESIGN (DBD) Mermaid diagram showing:\n"
-                "- Entity-Relationship Diagram (ERD) with tables\n"
-                "- Primary keys (PK), foreign keys (FK), and relationships\n"
-                "- Data entities and their attributes with data types\n"
-                "- Relationships: one-to-one (||--||), one-to-many (||--o{), many-to-many (}o--o{)\n"
-                "- Use 'erDiagram' syntax in Mermaid\n\n"
-                "🎨 STYLING REQUIREMENTS (MANDATORY):\n"
-                "- After the erDiagram, add classDef statements to color different entity types:\n"
-                "  * Core entities (e.g., classDef coreEntity fill:#E3F2FD,stroke:#1976D2)\n"
-                "  * User-related (e.g., classDef userEntity fill:#F3E5F5,stroke:#7B1FA2)\n"
-                "  * Transaction entities (e.g., classDef txEntity fill:#FFF3E0,stroke:#F57C00)\n"
-                "  * Lookup/reference tables (e.g., classDef refEntity fill:#E8F5E9,stroke:#388E3C)\n"
-                "- Apply styles to entities using ':::className' syntax\n"
-                "- IMPORTANT: Entity attributes must NOT have quoted descriptions\n"
-                "  * CORRECT: varchar name\n"
-                "  * CORRECT: uuid id PK\n"
-                "  * WRONG: uuid id PK \"Primary Key\"\n"
-                "  * WRONG: varchar name \"Display Name\"\n\n"
-                "Output ONLY valid Mermaid code, no explanations."
+                f"Features to implement:\n" + "\n".join(feature_details) + "\n\n"
+                f"User Stories context:\n{story_outline or 'None'}\n\n"
+                "Create a DETAILED DATABASE DESIGN (DBD) Mermaid erDiagram showing:\n\n"
+                "📋 WHAT TO INCLUDE (based on features above):\n"
+                "1. **Identify Core Entities** from features:\n"
+                "   - Extract nouns from feature descriptions (User, Product, Order, Payment, etc.)\n"
+                "   - Create a table for each core business entity\n"
+                "   - Include common fields: id (PK), created_at, updated_at\n\n"
+                "2. **Define Fields** for each entity:\n"
+                "   - Map feature requirements to database columns\n"
+                "   - Use appropriate data types:\n"
+                "     * uuid for IDs\n"
+                "     * varchar for short text (names, emails, status)\n"
+                "     * text for long content\n"
+                "     * int for counts/quantities\n"
+                "     * float for prices/amounts\n"
+                "     * boolean for flags\n"
+                "     * timestamp/datetime for dates\n"
+                "     * json for complex data\n"
+                "   - Add constraints: PK (Primary Key), FK (Foreign Key), UK (Unique Key)\n\n"
+                "3. **Define Relationships** between entities:\n"
+                "   - One-to-Many: PARENT ||--o{ CHILD : has\n"
+                "   - Many-to-Many: TABLE1 }o--o{ TABLE2 : links\n"
+                "   - One-to-One: TABLE1 ||--|| TABLE2 : owns\n"
+                "   - Label relationships clearly (owns, contains, belongs_to, has, manages)\n\n"
+                "4. **Common Patterns** to include:\n"
+                "   - USER table for authentication/profiles\n"
+                "   - Audit fields: created_at, updated_at, created_by, updated_by\n"
+                "   - Status fields for workflow tracking\n"
+                "   - Foreign keys linking related entities\n"
+                "   - Junction tables for many-to-many relationships\n\n"
+                "Example based on e-commerce features:\n"
+                "```\n"
+                "erDiagram\n"
+                "  USER ||--o{ ORDER : places\n"
+                "  ORDER ||--o{ ORDER_ITEM : contains\n"
+                "  PRODUCT ||--o{ ORDER_ITEM : included_in\n"
+                "  \n"
+                "  USER {\n"
+                "    uuid id PK\n"
+                "    varchar email UK\n"
+                "    varchar name\n"
+                "    varchar password_hash\n"
+                "    timestamp created_at\n"
+                "  }\n"
+                "  \n"
+                "  ORDER {\n"
+                "    uuid id PK\n"
+                "    uuid user_id FK\n"
+                "    float total_amount\n"
+                "    varchar status\n"
+                "    timestamp created_at\n"
+                "  }\n"
+                "```\n\n"
+                "⚠️ CRITICAL SYNTAX REQUIREMENTS:\n"
+                "- Entity definitions: ENTITY_NAME { ... }\n"
+                "- Each entity MUST have opening { and closing } on separate lines\n"
+                "- ALL fields MUST be INSIDE { } braces\n"
+                "- NEVER EVER put fields outside an entity block\n"
+                "- Close each entity with } before starting relationships\n"
+                "- Fields format: datatype fieldname constraint\n"
+                "- NO QUOTES in field definitions or relationship labels\n"
+                "- Relationships: ENTITY1 ||--o{ ENTITY2 : label (no quotes)\n\n"
+                "❌ WRONG EXAMPLE:\n"
+                "```\n"
+                "erDiagram\n"
+                "  USER {\n"
+                "    uuid id PK\n"
+                "  }\n"
+                "  varchar name  ← WRONG! This is outside!\n"
+                "```\n\n"
+                "✅ CORRECT EXAMPLE:\n"
+                "```\n"
+                "erDiagram\n"
+                "  USER {\n"
+                "    uuid id PK\n"
+                "    varchar name\n"
+                "  }\n"
+                "```\n\n"
+                "🎨 STYLING (Subtle professional colors):\n"
+                "- Use pastel fills with darker borders\n"
+                "- Example:\n"
+                "```\n"
+                "classDef coreEntity fill:#E3F2FD,stroke:#1976D2,stroke-width:2px\n"
+                "classDef userEntity fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px\n"
+                "classDef txEntity fill:#FFF3E0,stroke:#F57C00,stroke-width:2px\n"
+                "```\n"
+                "- Apply: USER:::userEntity, PRODUCT:::coreEntity\n\n"
+                "Output ONLY valid Mermaid erDiagram code, no explanations."
             )
         else:  # Default to HLD
             system_prompt = (
@@ -318,6 +435,19 @@ class Agent3Service:
         fixed_lines = []
         removed_lines = []
         
+        # Detect diagram type ONCE at the start for better detection
+        diagram_type_detected = None
+        for check_line in lines[:10]:
+            check_stripped = check_line.strip().lower()
+            if 'erdiagram' in check_stripped or 'entityrelationshipdiagram' in check_stripped:
+                diagram_type_detected = 'er'
+                break
+            elif 'classdiagram' in check_stripped:
+                diagram_type_detected = 'class'
+                break
+        
+        logger.info(f"[agent3] 🔍 Detected diagram type: {diagram_type_detected or 'unknown'}")
+        
         for index, (line_num, line) in enumerate(zip(range(1, len(lines) + 1), lines)):
             line_stripped = line.strip()
             
@@ -356,15 +486,33 @@ class Agent3Service:
                 
                 # Check for incomplete color values (hex colors should be 3 or 6 digits)
                 # Match incomplete hex patterns: #X, #XX, #XXXX, #XXXXX (not 3 or 6)
-                if re.search(r'#[0-9A-Fa-f]{1,2}(?:[,\s]|$)', line_stripped):
-                    # Found 1-2 hex digits - check if there's also a valid 3 or 6 digit hex
-                    if not re.search(r'#[0-9A-Fa-f]{3}(?:[,\s:]|$)|#[0-9A-Fa-f]{6}(?:[,\s:]|$)', line_stripped):
-                        logger.warning(f"[agent3] ⚠️ Detected incomplete hex color at line {line_num}")
+                # IMPORTANT: In classDef/style context, we need FULL 6-digit hex colors
+                # 3-digit shorthand (#fff, #000) can be ambiguous if truncated
+                
+                # Check for style/classDef lines with hex colors
+                if 'classdef' in line_stripped.lower() or line_stripped.lower().startswith('style '):
+                    # In style definitions, hex colors MUST be 6 digits (Mermaid requirement)
+                    # Find all hex color patterns
+                    hex_colors = re.findall(r'#([0-9A-Fa-f]+)(?:[,\s}]|$)', line_stripped)
+                    for hex_val in hex_colors:
+                        hex_len = len(hex_val)
+                        # Only accept 6-digit hex colors in style definitions
+                        # 3-digit shorthand is NOT reliable (could be truncated from 6)
+                        if hex_len != 6:
+                            logger.warning(f"[agent3] ⚠️ Detected incomplete hex color #{hex_val} ({hex_len} digits) in style at line {line_num}")
+                            logger.warning(f"[agent3]    Style definitions require 6-digit hex colors, found {hex_len} digits")
+                            is_incomplete = True
+                            break
+                else:
+                    # For non-style lines, check for obviously incomplete hex colors
+                    if re.search(r'#[0-9A-Fa-f]{1,2}(?:[,\s]|$)', line_stripped):
+                        # Found 1-2 hex digits - definitely incomplete
+                        logger.warning(f"[agent3] ⚠️ Detected incomplete hex color (1-2 digits) at line {line_num}")
                         is_incomplete = True
-                elif re.search(r'#[0-9A-Fa-f]{4,5}(?:[,\s]|$)', line_stripped):
-                    # Found 4-5 hex digits - definitely incomplete
-                    logger.warning(f"[agent3] ⚠️ Detected incomplete hex color (4-5 digits) at line {line_num}")
-                    is_incomplete = True
+                    elif re.search(r'#[0-9A-Fa-f]{4,5}(?:[,\s]|$)', line_stripped):
+                        # Found 4-5 hex digits - definitely incomplete
+                        logger.warning(f"[agent3] ⚠️ Detected incomplete hex color (4-5 digits) at line {line_num}")
+                        is_incomplete = True
                 
                 # Check for trailing commas or colons (incomplete lines)
                 if line_stripped.endswith(',') or line_stripped.endswith(':'):
@@ -413,7 +561,7 @@ class Agent3Service:
             # Check for erDiagram entity attributes with quoted descriptions (emoji descriptions)
             # Pattern: datatype field_name KEY_TYPE "Description with emoji"
             # These cause parse errors - remove the quoted descriptions
-            if 'erdiagram' in lines[0].lower() or 'entityrelationshipdiagram' in lines[0].lower():
+            if diagram_type_detected == 'er':
                 # Match: datatype fieldname PK/FK/UK "anything"
                 if re.match(r'^\s*\w+\s+\w+\s+[A-Z]{2,}\s+"', line_stripped):
                     # Remove the quoted description part
@@ -422,37 +570,107 @@ class Agent3Service:
                     fixed_lines.append(cleaned)
                     continue
                 
-                # Check for orphaned entity definitions (entity name on line after closing quote/bracket)
-                if index > 0 and re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', line_stripped):
-                    prev_line = lines[index - 1] if index > 0 else ''
-                    # If previous line ends with "] or just ", might be orphaned
-                    if prev_line.strip().endswith('"]') or prev_line.strip().endswith('"'):
-                        # Check if there's proper newline spacing
-                        logger.warning(f"[agent3] ⚠️ Potential orphaned entity definition at line {line_num}: {line[:100]}")
-                        # Add extra newline before this line in fixed output
-                        if fixed_lines and not fixed_lines[-1].strip() == '':
-                            fixed_lines.append('')  # Add blank line for separation
+                # Check for malformed relationship lines with extra closing braces
+                # Pattern: "ENTITY : relationship    }        ANOTHER_ENTITY"
+                # This happens when braces are misplaced in relationship definitions
+                if ('||--' in line_stripped or '}o--' in line_stripped or 'o{--' in line_stripped or '}|--' in line_stripped):
+                    # Check if there are stray braces or fields in the relationship line
+                    # Valid format: ENTITY1 ||--o{ ENTITY2 : relationship_name
+                    # Remove any trailing field definitions that don't belong
+                    if re.search(r':\s*\w+\s*\}\s+(uuid|varchar|text|int|float)', line_stripped):
+                        logger.warning(f"[agent3] ⚠️ Malformed relationship with trailing field at line {line_num}: {line_stripped[:80]}")
+                        # Remove everything after the closing brace in relationship
+                        cleaned = re.sub(r'(\}[^\}]*)\s+(uuid|varchar|text|int|float).*$', r'\1', line)
+                        fixed_lines.append(cleaned)
+                        continue
+                
+                # CRITICAL FIX: Detect orphaned entity fields (fields outside entity blocks)
+                # BUT ONLY if we haven't already detected a completely malformed diagram
+                # Check if there are any entity definitions at all
+                has_any_entity_def = any(re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', lines[j].strip()) for j in range(len(lines)))
+                
+                if has_any_entity_def:  # Only try to fix orphaned fields if there ARE some entity definitions
+                    # Use SIMPLE state machine: track if we're currently inside an entity block
+                    is_field_line = re.match(r'^\s*(uuid|varchar|text|int|float|boolean|datetime|timestamp|json|bigint|smallint|decimal|double|real|date|time)\s+\w+', line_stripped)
+                    
+                    if is_field_line:
+                        # Simple forward-looking check: are we inside an entity block?
+                        # Count all braces from the start of the diagram to current line
+                        in_entity = False
+                        brace_count = 0
+                        
+                        for i in range(index):
+                            prev_line = lines[i].strip()
+                            
+                            # Check if this is an entity definition line
+                            if re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', prev_line):
+                                brace_count += 1
+                            
+                            # Check for standalone opening brace
+                            if prev_line == '{' and i > 0:
+                                # Previous line should be entity name
+                                entity_line = lines[i-1].strip()
+                                if re.match(r'^[A-Z_][A-Z_0-9]*$', entity_line):
+                                    brace_count += 1
+                            
+                            # Check for closing brace
+                            if prev_line == '}' or prev_line.endswith('}'):
+                                brace_count -= 1
+                        
+                        # If brace_count > 0, we're inside an entity block
+                        in_entity = brace_count > 0
+                        
+                        # If we're not in an entity, this field is orphaned - REMOVE IT
+                        if not in_entity:
+                            logger.warning(f"[agent3] ⚠️ ORPHANED entity field outside entity block at line {line_num}: {line_stripped[:80]}")
+                            removed_lines.append((line_num, line_stripped[:100]))
+                            continue  # Skip this line completely
             
             # Check for classDiagram members appearing without class context
-            if 'classdiagram' in lines[0].lower():
-                # If line starts with +, -, #, ~ but previous line doesn't indicate we're in a class
-                if re.match(r'^\s*[+\-#~]', line_stripped) and index > 0:
-                    # Check if we're inside a class definition
-                    in_class = False
-                    for i in range(index - 1, -1, -1):
-                        prev = lines[i].strip()
-                        if prev.startswith('class ') or re.match(r'^[A-Z]\w+\s*\{', prev):
-                            in_class = True
-                            break
-                        if prev == '' or prev.startswith('%%'):
-                            continue
-                        if 'classDiagram' in prev:
-                            break
+            # CRITICAL FIX: Detect orphaned class members (methods/properties outside class blocks)
+            # BUT ONLY if we haven't already detected a completely malformed diagram
+            # (the malformed diagram will be replaced with a fallback later)
+            if diagram_type_detected == 'class':
+                # Check if this is a fundamentally broken diagram (will be caught and fixed later)
+                # If the ENTIRE diagram has no class definitions, don't try to fix individual lines
+                # Just let it through so the later logic can generate a fallback
+                has_any_class_def = any('class ' in lines[j] for j in range(len(lines)))
+                
+                if has_any_class_def:  # Only try to fix orphaned members if there ARE some class definitions
+                    # Check if this line looks like a class member: +method(), -field, etc.
+                    is_member_line = re.match(r'^\s*[+\-#~]\w', line_stripped)
                     
-                    if not in_class:
-                        logger.warning(f"[agent3] ⚠️ Class member without class context at line {line_num}: {line[:100]}")
-                        removed_lines.append((line_num, line[:100]))
-                        continue
+                    if is_member_line:
+                        # Simple forward-looking check: are we inside a class block?
+                        # Count all braces from the start of the diagram to current line
+                        in_class = False
+                        brace_count = 0
+                        
+                        for i in range(index):
+                            prev_line = lines[i].strip()
+                            
+                            # Check if this is a class definition line with opening brace
+                            if re.match(r'^class\s+\w+.*\{', prev_line):
+                                brace_count += 1
+                            
+                            # Check for standalone opening brace after class definition
+                            if prev_line == '{' and i > 0:
+                                check_prev = lines[i-1].strip()
+                                if check_prev.startswith('class '):
+                                    brace_count += 1
+                            
+                            # Check for closing brace
+                            if prev_line == '}':
+                                brace_count -= 1
+                        
+                        # If brace_count > 0, we're inside a class block
+                        in_class = brace_count > 0
+                        
+                        # If we're not in a class, this member is orphaned - REMOVE IT
+                        if not in_class:
+                            logger.warning(f"[agent3] ⚠️ ORPHANED class member outside class block at line {line_num}: {line_stripped[:80]}")
+                            removed_lines.append((line_num, line_stripped[:100]))
+                            continue  # Skip this line completely
             
             # Check for lines ending with opening bracket without content (orphaned nodes)
             # Pattern: ..."]  NodeID[ with nothing following or just whitespace
@@ -464,12 +682,111 @@ class Agent3Service:
             fixed_lines.append(line)
         
         if removed_lines:
-            logger.warning(f"[agent3] Removed {len(removed_lines)} incomplete/malformed line(s)")
+            logger.warning(f"[agent3] 🧹 Removed {len(removed_lines)} orphaned/malformed line(s)")
             for line_num, line_preview in removed_lines:
                 logger.debug(f"[agent3]   - Line {line_num}: {line_preview}")
-            mermaid = '\n'.join(fixed_lines)
-        else:
-            mermaid = '\n'.join(fixed_lines)
+        
+        mermaid = '\n'.join(fixed_lines)
+        
+        # FINAL VALIDATION: Check for common structural issues
+        logger.info("[agent3] 🔍 Performing final structural validation")
+        
+        # For classDiagram: Validate all classes have proper { } structure
+        if 'classDiagram' in mermaid:
+            lines = mermaid.split('\n')
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                # Check if line starts with + - # ~ but we're not in a class
+                if re.match(r'^[+\-#~]\w', stripped):
+                    logger.error(f"[agent3] ❌ CRITICAL: Found orphaned member at line {i+1}: {stripped[:50]}")
+                    logger.error(f"[agent3]    This should have been caught earlier - check detection logic")
+        
+        # For erDiagram: Validate all entities have proper { } structure  
+        if 'erDiagram' in mermaid:
+            lines = mermaid.split('\n')
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                # Check if line looks like a field but we're not in an entity
+                if re.match(r'^(uuid|varchar|text|int|float|boolean|datetime|timestamp|json)\s+\w+', stripped):
+                    logger.error(f"[agent3] ❌ CRITICAL: Found orphaned field at line {i+1}: {stripped[:50]}")
+                    logger.error(f"[agent3]    This should have been caught earlier - check detection logic")
+            
+            # Check if all entities are empty (fields were removed as orphaned)
+            entity_pattern = r'^[A-Z_][A-Z_0-9]*\s*\{'
+            field_pattern = r'^\s*(uuid|varchar|text|int|float|boolean|datetime|timestamp|json|bigint|smallint|decimal|double|real|date|time)\s+\w+'
+            
+            has_entities = any(re.match(entity_pattern, line.strip()) for line in lines)
+            has_fields_in_entities = False
+            
+            logger.info(f"[agent3] 🔍 Checking erDiagram: has_entities={has_entities}")
+            
+            if has_entities:
+                # Check if any entity actually has fields
+                in_entity = False
+                for line in lines:
+                    stripped = line.strip()
+                    if re.match(entity_pattern, stripped):
+                        in_entity = True
+                    elif stripped == '}':
+                        in_entity = False
+                    elif in_entity and re.match(field_pattern, stripped):
+                        has_fields_in_entities = True
+                        break
+            
+            logger.info(f"[agent3] 🔍 has_fields_in_entities={has_fields_in_entities}")
+            
+            # If all entities are empty, generate a fallback
+            if has_entities and not has_fields_in_entities:
+                logger.error("[agent3] ❌ CRITICAL: All entities are empty (all fields were orphaned)!")
+                logger.error("[agent3] Generating fallback erDiagram with sample data")
+                mermaid = """erDiagram
+    USER ||--o{ ORDER : places
+    ORDER ||--o{ ORDER_ITEM : contains
+    PRODUCT ||--o{ ORDER_ITEM : included_in
+    CATEGORY ||--o{ PRODUCT : categorizes
+    
+    USER {
+        uuid id PK
+        varchar email UK
+        varchar name
+        varchar password_hash
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    PRODUCT {
+        uuid id PK
+        varchar name
+        text description
+        float price
+        int stock_quantity
+        uuid category_id FK
+        timestamp created_at
+    }
+    
+    CATEGORY {
+        uuid id PK
+        varchar name UK
+        text description
+    }
+    
+    ORDER {
+        uuid id PK
+        uuid user_id FK
+        float total_amount
+        varchar status
+        timestamp created_at
+    }
+    
+    ORDER_ITEM {
+        uuid id PK
+        uuid order_id FK
+        uuid product_id FK
+        int quantity
+        float unit_price
+        float subtotal
+    }"""
+                logger.info("[agent3] ✅ Generated fallback erDiagram with sample entities")
         
         # Fix classDiagram-specific syntax issues (LLD diagrams)
         # This handles the parse error: "Expecting 'PS', 'TAGEND', 'STR', got 'PE'"
@@ -477,12 +794,86 @@ class Agent3Service:
         if 'classDiagram' in mermaid or diagram_type.lower() == 'lld':
             logger.info("[agent3] 🔧 Fixing classDiagram syntax for LLD")
             class_lines = mermaid.split('\n')
+            
+            # CRITICAL CHECK: Is this diagram completely malformed (no class definitions at all)?
+            has_class_defs = any(re.match(r'^\s*class\s+\w+', line) for line in class_lines)
+            has_members = any(re.match(r'^\s*[+\-#~]\w', line.strip()) for line in class_lines)
+            
+            if has_members and not has_class_defs:
+                logger.error("[agent3] ❌ CRITICAL: classDiagram has NO class definitions, only orphaned members!")
+                logger.error("[agent3] This diagram is fundamentally malformed - generating fallback")
+                # Generate a simple fallback classDiagram
+                mermaid = """classDiagram
+    class SystemController {
+        +initialize()
+        +processRequest()
+        +handleResponse()
+    }
+    class ServiceLayer {
+        +executeBusinessLogic()
+        +validateData()
+        +transformData()
+    }
+    class Repository {
+        +findData()
+        +saveData()
+        +updateData()
+        +deleteData()
+    }
+    class DomainModel {
+        -id: UUID
+        -createdAt: DateTime
+        +getId()
+        +isValid()
+    }
+    
+    SystemController --> ServiceLayer : uses
+    ServiceLayer --> Repository : delegates
+    Repository --> DomainModel : manages
+    
+    classDef controllerClass fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#000000
+    classDef serviceClass fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#000000
+    classDef repoClass fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#000000
+    classDef modelClass fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000000
+    
+    class SystemController controllerClass
+    class ServiceLayer serviceClass
+    class Repository repoClass
+    class DomainModel modelClass"""
+                logger.info("[agent3] ✅ Generated fallback classDiagram with proper structure")
+                # Skip the rest of the fixing logic since we have a new diagram
+                class_lines = mermaid.split('\n')
+            
             fixed_class_lines = []
             inside_class = False
             class_indent = ''
             
             for i, line in enumerate(class_lines):
                 stripped = line.strip()
+                
+                # CRITICAL FIX: Check if classDiagram declaration has members on the same line or nearby
+                # Pattern: "classDiagram    +renderCatalogManage" or "classDiagram    +method"
+                if stripped.lower().startswith('classdiagram'):
+                    # Check if there are class members on the same line (with any amount of whitespace)
+                    member_match = re.search(r'classdiagram\s+([+\-#~].+)', stripped, re.IGNORECASE)
+                    if member_match:
+                        logger.warning(f"[agent3] ⚠️ classDiagram has inline members at line {i+1} - removing them")
+                        # Keep only the classDiagram declaration
+                        fixed_class_lines.append('classDiagram')
+                        # Remove the inline members (they're orphaned and invalid)
+                        logger.info(f"[agent3] 🔧 Removed invalid inline member from classDiagram: {member_match.group(1)[:50]}")
+                        continue
+                    else:
+                        # Normal classDiagram line
+                        fixed_class_lines.append(line)
+                        continue
+                
+                # ADDITIONAL FIX: If this is right after classDiagram and looks like a member, skip it
+                if i > 0 and class_lines[i-1].strip().lower() == 'classdiagram':
+                    if re.match(r'^[+\-#~]\w', stripped):
+                        logger.warning(f"[agent3] ⚠️ Orphaned member right after classDiagram at line {i+1}: {stripped[:50]}")
+                        logger.info(f"[agent3] 🔧 Removed orphaned member: {stripped[:50]}")
+                        continue
                 
                 # Track when we enter/exit a class definition
                 if re.match(r'^class\s+\w+\s*\{', stripped):
@@ -552,6 +943,30 @@ class Agent3Service:
             
             mermaid = '\n'.join(fixed_class_lines)
             logger.info("[agent3] ✅ classDiagram syntax fixed")
+            
+            # CRITICAL SAFETY CHECK: Ensure we don't have malformed output like "classDiagram    }    }    }"
+            # This happens when all class content is removed but closing braces remain
+            if re.match(r'^classDiagram\s+(\}\s*)+$', mermaid.strip(), re.MULTILINE | re.DOTALL):
+                logger.error("[agent3] ❌ Detected malformed classDiagram with only closing braces - regenerating fallback")
+                # Generate a simple fallback classDiagram
+                mermaid = """classDiagram
+    class SystemComponent {
+        +initialize()
+        +process()
+        +shutdown()
+    }
+    class DataService {
+        +fetchData()
+        +saveData()
+    }
+    class APIClient {
+        +sendRequest()
+        +handleResponse()
+    }
+    
+    SystemComponent --> DataService
+    DataService --> APIClient"""
+                logger.info("[agent3] 🔧 Generated fallback classDiagram")
         
         # Final cleanup: remove any remaining problematic last line
         if mermaid:
@@ -615,11 +1030,84 @@ class Agent3Service:
                 cleaned_lines.append('')
         mermaid = '\n'.join(cleaned_lines)
         
-        # Ensure it starts with a valid Mermaid diagram type
+        # ============================================================================
+        # FINAL BULLETPROOF VALIDATION - Ensure diagram starts with valid type
+        # ============================================================================
         valid_prefixes = ["graph", "classDiagram", "sequenceDiagram", "erDiagram", "entityRelationshipDiagram", "flowchart"]
         if not any(mermaid.startswith(prefix) for prefix in valid_prefixes):
             logger.warning("[agent3] Mermaid diagram doesn't start with valid type, prepending 'graph TD'")
             mermaid = f"graph TD\n{mermaid}"
+        
+        # ============================================================================
+        # CRITICAL FIX: Remove any trailing incomplete syntax
+        # ============================================================================
+        lines = mermaid.split('\n')
+        safe_lines = []
+        for line in lines:
+            stripped = line.strip()
+            
+            # Check if line is incomplete/malformed
+            is_incomplete = False
+            
+            # Skip lines that are clearly incomplete or malformed
+            if stripped.endswith('-->') or stripped.endswith('---') or stripped.endswith('-.-'):
+                is_incomplete = True  # Incomplete arrow/connection
+            elif stripped.endswith('[') or stripped.endswith('('):
+                is_incomplete = True  # Unclosed bracket/paren
+            elif stripped.endswith('{'):
+                # Opening brace is OK for entity/class definitions
+                # Valid patterns: "class ClassName {" or "ENTITY_NAME {"
+                if not (re.match(r'^class\s+\w+\s*\{', stripped) or re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', stripped)):
+                    is_incomplete = True  # Invalid opening brace
+            elif stripped.endswith('::'):
+                is_incomplete = True  # Incomplete style application
+            elif (stripped.startswith('style ') or stripped.startswith('classDef ')) and stripped.count(',') > 0 and not stripped.endswith(';'):
+                is_incomplete = True  # Incomplete style definition
+            
+            if not is_incomplete:
+                safe_lines.append(line)
+            else:
+                if stripped:  # Only log non-empty incomplete lines
+                    logger.warning(f"[agent3] 🔧 Removed potentially incomplete line: {stripped[:80]}")
+        
+        mermaid = '\n'.join(safe_lines)
+        
+        # ============================================================================
+        # ADDITIONAL SAFETY: Ensure all brackets and quotes are balanced
+        # ============================================================================
+        # Count brackets
+        open_square = mermaid.count('[')
+        close_square = mermaid.count(']')
+        open_paren = mermaid.count('(')
+        close_paren = mermaid.count(')')
+        open_brace = mermaid.count('{')
+        close_brace = mermaid.count('}')
+        
+        if open_square != close_square:
+            logger.warning(f"[agent3] ⚠️ Unbalanced square brackets: [ {open_square} vs ] {close_square}")
+        if open_paren != close_paren:
+            logger.warning(f"[agent3] ⚠️ Unbalanced parentheses: ( {open_paren} vs ) {close_paren}")
+        if open_brace != close_brace:
+            logger.warning(f"[agent3] ⚠️ Unbalanced braces: {{ {open_brace} vs }} {close_brace}")
+        
+        # If erDiagram, ensure braces are balanced (entity definitions)
+        if 'erDiagram' in mermaid or 'entityRelationshipDiagram' in mermaid:
+            if open_brace != close_brace:
+                logger.error(f"[agent3] ❌ erDiagram has unbalanced braces - this will cause parse errors")
+                # Try to fix by removing incomplete entities
+                lines = mermaid.split('\n')
+                fixed_er = []
+                in_entity = False
+                for line in lines:
+                    if '{' in line and '}' not in line:
+                        in_entity = True
+                        fixed_er.append(line)
+                    elif '}' in line and '{' not in line:
+                        in_entity = False
+                        fixed_er.append(line)
+                    elif not in_entity:
+                        fixed_er.append(line)
+                mermaid = '\n'.join(fixed_er)
         
         # Check if diagram contains styling (classDef)
         has_styling = "classDef" in mermaid or "style " in mermaid

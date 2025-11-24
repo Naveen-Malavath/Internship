@@ -122,6 +122,7 @@ export class FeedbackChatbotComponent implements OnInit, OnDestroy {
         console.debug('[FeedbackChatbot] Feedback submitted successfully', {
           feedbackId: response.feedbackId,
           regenerationCount: response.regenerationCount,
+          hasRegeneratedContent: !!response.regeneratedContent,
         });
 
         this.successMessage.set('Feedback submitted successfully!');
@@ -135,13 +136,15 @@ export class FeedbackChatbotComponent implements OnInit, OnDestroy {
           itemType: this.itemType,
           feedback: feedback,
           timestamp: new Date().toISOString(),
-          status: 'submitted',
+          status: response.regeneratedContent ? 'regenerated' : 'submitted',
         };
         this.feedbackHistory.update((history) => [historyEntry, ...history]);
 
-        // Auto-regenerate if requested
-        if (response.autoRegenerate) {
-          await this.regenerateContent();
+        // ✅ Emit regenerated content if available (backend auto-regenerated it)
+        if (response.regeneratedContent) {
+          console.log('[FeedbackChatbot] Emitting auto-regenerated content');
+          this.contentRegenerated.emit(response.regeneratedContent);
+          this.successMessage.set('Content regenerated based on your feedback!');
         }
       }
     } catch (error: any) {

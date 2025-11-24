@@ -16,9 +16,6 @@
         {{ rightNowStatus() }}
       </span>
       <button type="button" class="ghost" (click)="openProjectWizard()">New Project</button>
-      <button type="button" class="ghost" (click)="openFeatureForm()" [disabled]="!workspaceProject()">
-        Add Feature
-      </button>
       <button type="button" class="ghost" (click)="toggleChatDrawer()">
         {{ isChatDrawerOpen() ? 'Hide Chat' : 'Open Chat' }}
       </button>
@@ -280,6 +277,9 @@
               <div class="decision-actions">
                 <button type="button" class="secondary" (click)="onAgent2Decision('again')" [disabled]="isSending()">
                   Again
+                </button>
+                <button type="button" class="secondary" (click)="onAgent2Decision('keep_all')" [disabled]="isSending()">
+                  Keep All
                 </button>
                 <button
                   type="button"
