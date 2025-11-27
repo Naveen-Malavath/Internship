@@ -1,0 +1,175 @@
+%% ============================================
+%% AutoAgents - High-Level Design (HLD)
+%% AI-Powered Software Development Assistant
+%% ============================================
+%% Diagram Type: System Architecture Flowchart
+%% Purpose: Shows the overall system architecture,
+%% component layers, and data flow between services
+%% ============================================
+
+graph TD
+    %% ============================================
+    %% User/Client Layer
+    %% ============================================
+    User((👤 User))
+    Browser[🌐 Web Browser]
+
+    %% ============================================
+    %% Presentation Layer - Angular Frontend
+    %% ============================================
+    subgraph Frontend["🎨 Angular Frontend (Port 4200)"]
+        direction TB
+        
+        subgraph UIComponents["UI Components"]
+            ProjectWizard[Project Wizard]
+            FeatureForm[Feature Form]
+            StoryForm[Story Form]
+            DiagramViewer[Diagram Viewer]
+            FeedbackChat[Feedback Chatbot]
+        end
+        
+        subgraph FEServices["Frontend Services"]
+            Agent3Svc[[Agent3 Service]]
+            DesignSvc[[Design Service]]
+            FeedbackSvc[[Feedback Service]]
+        end
+    end
+
+    %% ============================================
+    %% API Gateway Layer - FastAPI Backend
+    %% ============================================
+    subgraph Backend["⚡ FastAPI Backend (Port 8000)"]
+        direction TB
+        
+        subgraph APILayer["API Routers"]
+            AuthRouter{{/auth}}
+            ProjectRouter{{/projects}}
+            FeatureRouter{{/features}}
+            StoryRouter{{/stories}}
+            DiagramRouter{{/diagrams}}
+            VisualizerRouter{{/visualizer}}
+            FeedbackRouter{{/feedback}}
+        end
+        
+        subgraph AgentOrchestration["🤖 AI Agent Pipeline"]
+            Agent1[["Agent-1
+            Product Strategist"]]
+            Agent2[["Agent-2
+            Product Owner"]]
+            Agent3[["Agent-3
+            Software Architect"]]
+        end
+        
+        subgraph CoreServices["Core Services"]
+            ClaudeClient[[Claude Client]]
+            MermaidFixer[[Mermaid Fixer]]
+            StyleGenerator[[Style Generator]]
+        end
+    end
+
+    %% ============================================
+    %% Data Layer - MongoDB
+    %% ============================================
+    subgraph DataLayer["🗄️ MongoDB Atlas"]
+        direction LR
+        UsersDB[(users)]
+        ProjectsDB[(projects)]
+        FeaturesDB[(features)]
+        StoriesDB[(stories)]
+        DesignsDB[(designs)]
+    end
+
+    %% ============================================
+    %% External Services
+    %% ============================================
+    subgraph ExternalServices["☁️ External Services"]
+        ClaudeAI(("🧠 Claude AI
+        (Anthropic)"))
+    end
+
+    %% ============================================
+    %% Connections - User Flow
+    %% ============================================
+    User -->|Interacts| Browser
+    Browser -->|HTTP/HTTPS| Frontend
+
+    %% ============================================
+    %% Connections - Frontend to Backend
+    %% ============================================
+    UIComponents -->|Uses| FEServices
+    Agent3Svc -->|POST /agent/visualizer| VisualizerRouter
+    DesignSvc -->|POST /projects/:id/designs| DiagramRouter
+    FeedbackSvc -->|POST /feedback| FeedbackRouter
+    
+    ProjectWizard -->|POST /projects| ProjectRouter
+    FeatureForm -->|GET /features| FeatureRouter
+    StoryForm -->|GET /stories| StoryRouter
+
+    %% ============================================
+    %% Connections - API to Services
+    %% ============================================
+    AuthRouter -->|CRUD| UsersDB
+    ProjectRouter -->|CRUD| ProjectsDB
+    FeatureRouter -->|Triggers| Agent1
+    StoryRouter -->|Triggers| Agent2
+    DiagramRouter -->|Triggers| Agent3
+    VisualizerRouter -->|Triggers| Agent3
+
+    %% ============================================
+    %% Connections - Agent Pipeline
+    %% ============================================
+    Agent1 ==>|8-12 Features| Agent2
+    Agent2 ==>|2-3 Stories/Feature| Agent3
+    Agent3 ==>|HLD, LLD, DBD| DiagramRouter
+
+    %% ============================================
+    %% Connections - Claude AI Integration
+    %% ============================================
+    Agent1 -.->|API Call| ClaudeClient
+    Agent2 -.->|API Call| ClaudeClient
+    Agent3 -.->|API Call| ClaudeClient
+    ClaudeClient -.->|claude-3-5-sonnet| ClaudeAI
+
+    %% ============================================
+    %% Connections - Data Persistence
+    %% ============================================
+    Agent1 -->|Store| FeaturesDB
+    Agent2 -->|Store| StoriesDB
+    Agent3 -->|Store| DesignsDB
+
+    %% ============================================
+    %% Styling Definitions
+    %% ============================================
+    
+    %% User Layer - Blue theme
+    classDef userLayer fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+    
+    %% Frontend Layer - Teal theme
+    classDef frontendLayer fill:#e0f2f1,stroke:#00695c,stroke-width:2px,color:#004d40
+    classDef feComponent fill:#b2dfdb,stroke:#00897b,stroke-width:1px,color:#004d40
+    classDef feService fill:#80cbc4,stroke:#00695c,stroke-width:1px,color:#004d40
+    
+    %% Backend Layer - Purple theme
+    classDef backendLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef apiRouter fill:#e1bee7,stroke:#8e24aa,stroke-width:1px,color:#4a148c
+    classDef agentService fill:#ce93d8,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef coreService fill:#ba68c8,stroke:#6a1b9a,stroke-width:1px,color:#fff
+    
+    %% Data Layer - Amber theme
+    classDef dataLayer fill:#fff8e1,stroke:#ff8f00,stroke-width:2px,color:#e65100
+    classDef database fill:#ffecb3,stroke:#ffa000,stroke-width:2px,color:#e65100
+    
+    %% External Layer - Red theme
+    classDef externalLayer fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#b71c1c
+    classDef externalService fill:#ffcdd2,stroke:#e53935,stroke-width:2px,color:#b71c1c
+
+    %% Apply Styles
+    class User,Browser userLayer
+    class ProjectWizard,FeatureForm,StoryForm,DiagramViewer,FeedbackChat feComponent
+    class Agent3Svc,DesignSvc,FeedbackSvc feService
+    class AuthRouter,ProjectRouter,FeatureRouter,StoryRouter,DiagramRouter,VisualizerRouter,FeedbackRouter apiRouter
+    class Agent1,Agent2,Agent3 agentService
+    class ClaudeClient,MermaidFixer,StyleGenerator coreService
+    class UsersDB,ProjectsDB,FeaturesDB,StoriesDB,DesignsDB database
+    class ClaudeAI externalService
+

@@ -1,0 +1,158 @@
+<div class="dbd-table-view">
+  <div class="dbd-table-view__empty" *ngIf="entities.length === 0">
+    <p>No entities found in the database design.</p>
+    <p class="dbd-table-view__empty-hint">Generate a Database Design (DBD) diagram to see entities here.</p>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="dbd-table-view__summary" *ngIf="entities.length > 0">
+    <div class="dbd-summary-stat">
+      <span class="dbd-summary-stat__value">{{ entities.length }}</span>
+      <span class="dbd-summary-stat__label">Entities</span>
+    </div>
+    <div class="dbd-summary-stat">
+      <span class="dbd-summary-stat__value">{{ getTotalFieldCount() }}</span>
+      <span class="dbd-summary-stat__label">Total Fields</span>
+    </div>
+  </div>
+
+  <div class="dbd-table-view__grid" *ngIf="entities.length > 0">
+    <div
+      class="dbd-entity-card"
+      *ngFor="let entity of entities; trackBy: trackByEntityName"
+      [class.dbd-entity-card--approved]="entity.approved"
+      [class.dbd-entity-card--primary]="entity.entityType === 'primary'"
+      [class.dbd-entity-card--secondary]="entity.entityType === 'secondary'"
+      [class.dbd-entity-card--junction]="entity.entityType === 'junction'"
+    >
+      <header class="dbd-entity-card__header">
+        <div class="dbd-entity-card__title-row">
+          <h3 class="dbd-entity-card__title">{{ entity.name }}</h3>
+          <div class="dbd-entity-card__badges">
+            <span 
+              class="dbd-entity-card__type-badge"
+              [ngClass]="getEntityTypeBadgeClass(entity.entityType)"
+              *ngIf="entity.entityType"
+            >
+              {{ formatEntityType(entity.entityType) }}
+            </span>
+            <span class="dbd-entity-card__badge" *ngIf="entity.approved">✓ Approved</span>
+          </div>
+        </div>
+        <p class="dbd-entity-card__description" *ngIf="entity.description">
+          {{ entity.description }}
+        </p>
+      </header>
+
+      <div class="dbd-entity-card__content">
+        <!-- Fields Table -->
+        <div class="dbd-entity-card__section">
+          <h4 class="dbd-entity-card__section-title">
+            <span class="dbd-entity-card__section-icon">📋</span>
+            Attributes
+            <span class="dbd-entity-card__count">({{ entity.fields.length }})</span>
+          </h4>
+          <div class="dbd-entity-card__table-wrapper">
+            <table class="dbd-entity-card__table" *ngIf="entity.fields.length > 0">
+              <thead>
+                <tr>
+                  <th>Field Name</th>
+                  <th>Data Type</th>
+                  <th>Constraints</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr 
+                  *ngFor="let field of entity.fields; trackBy: trackByFieldName"
+                  [class.dbd-entity-card__field-pk]="isConstraintType(field.constraint, 'PK')"
+                  [class.dbd-entity-card__field-fk]="isConstraintType(field.constraint, 'FK')"
+                >
+                  <td class="dbd-entity-card__field-name">
+                    <span class="dbd-entity-card__field-icon" *ngIf="isConstraintType(field.constraint, 'PK')">🔑</span>
+                    <span class="dbd-entity-card__field-icon" *ngIf="isConstraintType(field.constraint, 'FK')">🔗</span>
+                    {{ field.name }}
+                  </td>
+                  <td class="dbd-entity-card__field-type">
+                    <code>{{ field.type }}</code>
+                  </td>
+                  <td class="dbd-entity-card__field-constraint">
+                    <span 
+                      class="dbd-entity-card__constraint-badge"
+                      [class.dbd-entity-card__constraint-badge--pk]="isConstraintType(field.constraint, 'PK')"
+                      [class.dbd-entity-card__constraint-badge--fk]="isConstraintType(field.constraint, 'FK')"
+                      [class.dbd-entity-card__constraint-badge--uk]="isConstraintType(field.constraint, 'UK')"
+                      *ngIf="field.constraint"
+                    >
+                      {{ formatConstraint(field.constraint) }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="dbd-entity-card__empty-message" *ngIf="entity.fields.length === 0">
+              No attributes defined
+            </p>
+          </div>
+        </div>
+
+        <!-- Relationships Section -->
+        <div class="dbd-entity-card__section" *ngIf="entity.relationships.length > 0">
+          <h4 class="dbd-entity-card__section-title">
+            <span class="dbd-entity-card__section-icon">🔗</span>
+            Relationships
+            <span class="dbd-entity-card__count">({{ entity.relationships.length }})</span>
+          </h4>
+          <ul class="dbd-entity-card__relationships">
+            <li
+              *ngFor="let rel of entity.relationships; trackBy: trackByRelation"
+              class="dbd-entity-card__relationship"
+            >
+              <span class="dbd-entity-card__rel-icon">↔️</span>
+              {{ formatRelationshipDisplay(rel, entity.name) }}
+            </li>
+          </ul>
+        </div>
+
+        <!-- Agent Connections Section -->
+        <div class="dbd-entity-card__section dbd-entity-card__section--connections" 
+             *ngIf="showAgentConnections && hasAgentConnections(entity)">
+          <h4 class="dbd-entity-card__section-title">
+            <span class="dbd-entity-card__section-icon">🤖</span>
+            Agent Connections
+          </h4>
+          
+          <!-- Linked Features from Agent-1 -->
+          <div class="dbd-entity-card__agent-group" *ngIf="entity.linkedFeatures?.length">
+            <h5 class="dbd-entity-card__agent-label">
+              <span class="dbd-entity-card__agent-badge dbd-entity-card__agent-badge--agent1">Agent-1</span>
+              Features ({{ entity.linkedFeatures?.length || 0 }})
+            </h5>
+            <ul class="dbd-entity-card__agent-list">
+              <li *ngFor="let feature of entity.linkedFeatures; trackBy: trackByLinkedId"
+                  class="dbd-entity-card__agent-item dbd-entity-card__agent-item--feature">
+                <span class="dbd-entity-card__agent-id">{{ feature.id }}</span>
+                <span class="dbd-entity-card__agent-text">{{ feature.text }}</span>
+              </li>
+            </ul>
+          </div>
+          
+          <!-- Linked Stories from Agent-2 -->
+          <div class="dbd-entity-card__agent-group" *ngIf="entity.linkedStories?.length">
+            <h5 class="dbd-entity-card__agent-label">
+              <span class="dbd-entity-card__agent-badge dbd-entity-card__agent-badge--agent2">Agent-2</span>
+              Stories ({{ entity.linkedStories?.length || 0 }})
+            </h5>
+            <ul class="dbd-entity-card__agent-list">
+              <li *ngFor="let story of entity.linkedStories; trackBy: trackByLinkedId"
+                  class="dbd-entity-card__agent-item dbd-entity-card__agent-item--story">
+                <span class="dbd-entity-card__agent-id">{{ story.id }}</span>
+                <span class="dbd-entity-card__agent-text">{{ story.text }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

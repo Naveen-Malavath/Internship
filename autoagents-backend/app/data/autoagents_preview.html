@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoAgents System Design - Mermaid Diagrams</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-teal: #14b8a6;
+            --accent-amber: #f59e0b;
+            --border-color: #475569;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, #1a1a2e 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        /* System Info Cards */
+        .system-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            padding: 1.5rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .info-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .info-card .label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .info-card .value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--accent-teal);
+        }
+
+        /* Tab Navigation */
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        .tab-btn:hover {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border-color: var(--accent-blue);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+        }
+
+        .tab-btn .badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-left: 0.5rem;
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+            padding: 2rem;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.4s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Diagram Container */
+        .diagram-container {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            overflow-x: auto;
+        }
+
+        .diagram-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .diagram-title {
+            color: var(--bg-primary);
+        }
+
+        .diagram-title h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .diagram-title p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .diagram-meta {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .meta-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .meta-tag.type-hld { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+        .meta-tag.type-lld { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
+        .meta-tag.type-dbd { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+
+        /* Mermaid Diagram */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            min-height: 400px;
+        }
+
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Legend */
+        .legend {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+        }
+
+        .legend h3 {
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .legend-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border-color);
+            margin-top: 2rem;
+        }
+
+        footer a {
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header h1 { font-size: 1.75rem; }
+            .tabs { padding: 0.75rem 1rem; }
+            .tab-btn { padding: 0.5rem 1rem; font-size: 0.9rem; }
+            .tab-content { padding: 1rem; }
+            .diagram-container { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>AutoAgents System Design</h1>
+        <p>AI-Powered Software Development Assistant - Architecture Diagrams</p>
+    </header>
+
+    <div class="system-info">
+        <div class="info-card">
+            <div class="label">Frontend</div>
+            <div class="value">Angular 18+</div>
+        </div>
+        <div class="info-card">
+            <div class="label">Backend</div>
+            <div class="value">FastAPI</div>
+        </div>
+        <div class="info-card">
+            <div class="label">Database</div>
+            <div class="value">MongoDB</div>
+        </div>
+        <div class="info-card">
+            <div class="label">AI Engine</div>
+            <div class="value">Claude AI</div>
+        </div>
+        <div class="info-card">
+            <div class="label">Agents</div>
+            <div class="value">3 AI Agents</div>
+        </div>
+    </div>
+
+    <nav class="tabs">
+        <button class="tab-btn active" onclick="showTab('hld')">
+            HLD <span class="badge">Flowchart</span>
+        </button>
+        <button class="tab-btn" onclick="showTab('lld')">
+            LLD <span class="badge">Class Diagram</span>
+        </button>
+        <button class="tab-btn" onclick="showTab('dbd')">
+            DBD <span class="badge">ER Diagram</span>
+        </button>
+    </nav>
+
+    <!-- HLD Tab -->
+    <div id="hld" class="tab-content active">
+        <div class="diagram-container">
+            <div class="diagram-header">
+                <div class="diagram-title">
+                    <h2>High-Level Design (HLD)</h2>
+                    <p>System Architecture Overview - Component Layers & Data Flow</p>
+                </div>
+                <div class="diagram-meta">
+                    <span class="meta-tag type-hld">Flowchart</span>
+                    <span class="meta-tag">graph TD</span>
+                </div>
+            </div>
+            <div class="mermaid" id="hld-diagram">
+graph TD
+    User((User))
+    Browser[Web Browser]
+
+    subgraph Frontend["Angular Frontend :4200"]
+        direction TB
+        subgraph UIComponents["UI Components"]
+            ProjectWizard[Project Wizard]
+            FeatureForm[Feature Form]
+            StoryForm[Story Form]
+            DiagramViewer[Diagram Viewer]
+            FeedbackChat[Feedback Chatbot]
+        end
+        subgraph FEServices["Frontend Services"]
+            Agent3Svc[[Agent3 Service]]
+            DesignSvc[[Design Service]]
+            FeedbackSvc[[Feedback Service]]
+        end
+    end
+
+    subgraph Backend["FastAPI Backend :8000"]
+        direction TB
+        subgraph APILayer["API Routers"]
+            AuthRouter{{/auth}}
+            ProjectRouter{{/projects}}
+            FeatureRouter{{/features}}
+            StoryRouter{{/stories}}
+            DiagramRouter{{/diagrams}}
+            VisualizerRouter{{/visualizer}}
+            FeedbackRouter{{/feedback}}
+        end
+        subgraph AgentOrchestration["AI Agent Pipeline"]
+            Agent1[["Agent-1 Product Strategist"]]
+            Agent2[["Agent-2 Product Owner"]]
+            Agent3[["Agent-3 Software Architect"]]
+        end
+        subgraph CoreServices["Core Services"]
+            ClaudeClient[[Claude Client]]
+            MermaidFixer[[Mermaid Fixer]]
+            StyleGenerator[[Style Generator]]
+        end
+    end
+
+    subgraph DataLayer["MongoDB Atlas"]
+        direction LR
+        UsersDB[(users)]
+        ProjectsDB[(projects)]
+        FeaturesDB[(features)]
+        StoriesDB[(stories)]
+        DesignsDB[(designs)]
+    end
+
+    subgraph ExternalServices["External Services"]
+        ClaudeAI(("Claude AI"))
+    end
+
+    User -->|Interacts| Browser
+    Browser -->|HTTP| Frontend
+    UIComponents -->|Uses| FEServices
+    Agent3Svc -->|POST| VisualizerRouter
+    DesignSvc -->|POST/GET| DiagramRouter
+    FeedbackSvc -->|POST| FeedbackRouter
+    ProjectWizard -->|POST| ProjectRouter
+    FeatureForm -->|GET| FeatureRouter
+    StoryForm -->|GET| StoryRouter
+    AuthRouter -->|CRUD| UsersDB
+    ProjectRouter -->|CRUD| ProjectsDB
+    FeatureRouter -->|Triggers| Agent1
+    StoryRouter -->|Triggers| Agent2
+    DiagramRouter -->|Triggers| Agent3
+    VisualizerRouter -->|Triggers| Agent3
+    Agent1 ==>|Features| Agent2
+    Agent2 ==>|Stories| Agent3
+    Agent3 ==>|Diagrams| DiagramRouter
+    Agent1 -.->|API| ClaudeClient
+    Agent2 -.->|API| ClaudeClient
+    Agent3 -.->|API| ClaudeClient
+    ClaudeClient -.->|Request| ClaudeAI
+    Agent1 -->|Store| FeaturesDB
+    Agent2 -->|Store| StoriesDB
+    Agent3 -->|Store| DesignsDB
+
+    classDef userLayer fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+    classDef feComponent fill:#b2dfdb,stroke:#00897b,stroke-width:1px,color:#004d40
+    classDef feService fill:#80cbc4,stroke:#00695c,stroke-width:1px,color:#004d40
+    classDef apiRouter fill:#e1bee7,stroke:#8e24aa,stroke-width:1px,color:#4a148c
+    classDef agentService fill:#ce93d8,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef coreService fill:#ba68c8,stroke:#6a1b9a,stroke-width:1px,color:#fff
+    classDef database fill:#ffecb3,stroke:#ffa000,stroke-width:2px,color:#e65100
+    classDef externalService fill:#ffcdd2,stroke:#e53935,stroke-width:2px,color:#b71c1c
+
+    class User,Browser userLayer
+    class ProjectWizard,FeatureForm,StoryForm,DiagramViewer,FeedbackChat feComponent
+    class Agent3Svc,DesignSvc,FeedbackSvc feService
+    class AuthRouter,ProjectRouter,FeatureRouter,StoryRouter,DiagramRouter,VisualizerRouter,FeedbackRouter apiRouter
+    class Agent1,Agent2,Agent3 agentService
+    class ClaudeClient,MermaidFixer,StyleGenerator coreService
+    class UsersDB,ProjectsDB,FeaturesDB,StoriesDB,DesignsDB database
+    class ClaudeAI externalService
+            </div>
+        </div>
+        <div class="legend">
+            <h3>Color Legend - HLD</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e3f2fd; border: 2px solid #1565c0;"></div>
+                    <span>User/Client Layer</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #b2dfdb; border: 2px solid #00897b;"></div>
+                    <span>UI Components</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #80cbc4; border: 2px solid #00695c;"></div>
+                    <span>Frontend Services</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e1bee7; border: 2px solid #8e24aa;"></div>
+                    <span>API Routers</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ce93d8; border: 2px solid #7b1fa2;"></div>
+                    <span>AI Agents</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffecb3; border: 2px solid #ffa000;"></div>
+                    <span>Database Collections</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffcdd2; border: 2px solid #e53935;"></div>
+                    <span>External Services</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLD Tab -->
+    <div id="lld" class="tab-content">
+        <div class="diagram-container">
+            <div class="diagram-header">
+                <div class="diagram-title">
+                    <h2>Low-Level Design (LLD)</h2>
+                    <p>Class Diagram - Service Interactions, Methods & Relationships</p>
+                </div>
+                <div class="diagram-meta">
+                    <span class="meta-tag type-lld">Class Diagram</span>
+                    <span class="meta-tag">classDiagram</span>
+                </div>
+            </div>
+            <div class="mermaid" id="lld-diagram">
+classDiagram
+    direction TB
+
+    class Agent1Service {
+        -model: str
+        +generate_features(project_title, project_prompt) List
+        -_generate_mock_features(title, prompt) List
+    }
+    
+    class Agent2Service {
+        -model: str
+        +generate_stories(features, prompt) List
+        -_normalize_features(features) List
+        -_extract_story_payload(payload) List
+        -_match_feature(story, by_id, by_title) Dict
+        -_ensure_story_coverage(stories, features) List
+    }
+    
+    class Agent3Service {
+        -model: str
+        +generate_hld(features, stories, title, prompt) str
+        +generate_lld(features, stories, title) str
+        +generate_dbd(features, stories, title, prompt) str
+        -_extract_entities(features, stories, prompt, title) List
+        -_sanitize_mermaid(code) str
+    }
+
+    class ClaudeClient {
+        -_client: AsyncAnthropic
+        +get_claude_client() AsyncAnthropic
+        +extract_text(response) str
+        +coerce_json(text) Dict
+    }
+    
+    class MermaidStyleGenerator {
+        +generate_style_config(type) Config
+        +apply_styling(code, config) str
+    }
+    
+    class FeedbackChatbotService {
+        -model: str
+        +process_feedback(message, context) str
+        +get_suggestions(code) List
+    }
+
+    class AuthRouter {
+        +register(user_data) UserResponse
+        +login(credentials) TokenResponse
+        +get_current_user(token) UserResponse
+    }
+    
+    class ProjectsRouter {
+        +create_project(data) ProjectResponse
+        +get_projects(user_id) List
+        +get_project(id) ProjectResponse
+        +delete_project(id) void
+    }
+    
+    class FeaturesRouter {
+        +generate_features(project_id) List
+        +get_features(project_id) List
+        +update_feature(id, data) FeatureResponse
+    }
+    
+    class StoriesRouter {
+        +generate_stories(project_id) List
+        +get_stories(project_id) List
+        +get_stories_by_feature(feature_id) List
+    }
+    
+    class DiagramsRouter {
+        +generate_designs(project_id) DesignResponse
+        +get_designs(project_id) DesignResponse
+        +regenerate_diagram(id, type) DesignResponse
+    }
+
+    class FeatureModel {
+        +id: str
+        +project_id: str
+        +feature_text: str
+        +order_index: int
+        +created_at: datetime
+    }
+    
+    class StoryModel {
+        +id: str
+        +feature_id: str
+        +story_text: str
+        +acceptance_criteria: List
+        +created_at: datetime
+    }
+    
+    class DesignResponse {
+        +_id: str
+        +project_id: str
+        +hld_mermaid: str
+        +lld_mermaid: str
+        +dbd_mermaid: str
+        +created_at: datetime
+    }
+
+    Agent1Service ..> ClaudeClient : uses
+    Agent2Service ..> ClaudeClient : uses
+    Agent3Service ..> ClaudeClient : uses
+    Agent3Service ..> MermaidStyleGenerator : uses
+    FeedbackChatbotService ..> ClaudeClient : uses
+
+    FeaturesRouter --> Agent1Service : triggers
+    StoriesRouter --> Agent2Service : triggers
+    DiagramsRouter --> Agent3Service : triggers
+
+    FeaturesRouter ..> FeatureModel : returns
+    StoriesRouter ..> StoryModel : returns
+    DiagramsRouter ..> DesignResponse : returns
+
+    Agent1Service --|> Agent2Service : feeds features
+    Agent2Service --|> Agent3Service : feeds stories
+            </div>
+        </div>
+        <div class="legend">
+            <h3>Relationship Legend - LLD</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f3e5f5; border: 2px solid #7b1fa2;"></div>
+                    <span>Agent Services</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e8eaf6; border: 2px solid #3f51b5;"></div>
+                    <span>API Routers</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fff3e0; border: 2px solid #ff9800;"></div>
+                    <span>Data Models</span>
+                </div>
+                <div class="legend-item">
+                    <span style="font-family: monospace;">..></span>
+                    <span>Dependency (uses)</span>
+                </div>
+                <div class="legend-item">
+                    <span style="font-family: monospace;">--></span>
+                    <span>Association (triggers)</span>
+                </div>
+                <div class="legend-item">
+                    <span style="font-family: monospace;">--|></span>
+                    <span>Inheritance (feeds)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DBD Tab -->
+    <div id="dbd" class="tab-content">
+        <div class="diagram-container">
+            <div class="diagram-header">
+                <div class="diagram-title">
+                    <h2>Database Design (DBD)</h2>
+                    <p>Entity-Relationship Diagram - MongoDB Collections & Relationships</p>
+                </div>
+                <div class="diagram-meta">
+                    <span class="meta-tag type-dbd">ER Diagram</span>
+                    <span class="meta-tag">erDiagram</span>
+                </div>
+            </div>
+            <div class="mermaid" id="dbd-diagram">
+erDiagram
+    USERS {
+        ObjectId _id PK
+        string name
+        string email UK
+        string password_hash
+        datetime created_at
+        datetime updated_at
+        boolean is_active
+    }
+
+    PROJECTS {
+        ObjectId _id PK
+        ObjectId user_id FK
+        string title
+        text prompt
+        string status
+        datetime created_at
+        datetime updated_at
+    }
+
+    FEATURES {
+        ObjectId _id PK
+        string project_id FK
+        string feature_text
+        int order_index
+        array acceptance_criteria
+        datetime created_at
+        string generated_by
+    }
+
+    STORIES {
+        ObjectId _id PK
+        string project_id FK
+        string feature_id FK
+        string story_text
+        array acceptance_criteria
+        array implementation_notes
+        datetime created_at
+        string generated_by
+    }
+
+    DESIGNS {
+        ObjectId _id PK
+        string project_id FK
+        text hld_mermaid
+        text lld_mermaid
+        text dbd_mermaid
+        json style_config
+        datetime created_at
+        datetime updated_at
+        string version
+    }
+
+    FEEDBACK {
+        ObjectId _id PK
+        string project_id FK
+        string design_id FK
+        string user_message
+        string ai_response
+        string diagram_type
+        array suggestions
+        datetime created_at
+        boolean applied
+    }
+
+    SESSIONS {
+        ObjectId _id PK
+        ObjectId user_id FK
+        string token_hash
+        datetime created_at
+        datetime expires_at
+        string ip_address
+        string user_agent
+        boolean is_valid
+    }
+
+    AUDIT_LOG {
+        ObjectId _id PK
+        ObjectId user_id FK
+        string action
+        string entity_type
+        string entity_id
+        json changes
+        datetime timestamp
+        string ip_address
+    }
+
+    USERS ||--o{ PROJECTS : owns
+    USERS ||--o{ SESSIONS : authenticates
+    USERS ||--o{ AUDIT_LOG : generates
+    PROJECTS ||--o{ FEATURES : contains
+    PROJECTS ||--o{ STORIES : contains
+    FEATURES ||--o{ STORIES : has
+    PROJECTS ||--|| DESIGNS : has
+    DESIGNS ||--o{ FEEDBACK : receives
+    PROJECTS ||--o{ FEEDBACK : has
+            </div>
+        </div>
+        <div class="legend">
+            <h3>Relationship Legend - DBD</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <span style="font-family: monospace;">||--o{</span>
+                    <span>One-to-Many (1:N)</span>
+                </div>
+                <div class="legend-item">
+                    <span style="font-family: monospace;">||--||</span>
+                    <span>One-to-One (1:1)</span>
+                </div>
+                <div class="legend-item">
+                    <span style="font-family: monospace;">PK</span>
+                    <span>Primary Key</span>
+                </div>
+                <div class="legend-item">
+                    <span style="font-family: monospace;">FK</span>
+                    <span>Foreign Key</span>
+                </div>
+                <div class="legend-item">
+                    <span style="font-family: monospace;">UK</span>
+                    <span>Unique Key</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>
+            AutoAgents System Design Diagrams | 
+            Generated with <a href="https://mermaid.js.org/" target="_blank">Mermaid.js</a> |
+            <a href="https://mermaid.live/" target="_blank">Edit in Mermaid Live</a>
+        </p>
+        <p style="margin-top: 0.5rem; font-size: 0.8rem;">
+            Tech Stack: Angular + FastAPI + MongoDB + Claude AI
+        </p>
+    </footer>
+
+    <script>
+        // Initialize Mermaid with custom config
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis',
+                rankSpacing: 60,
+                nodeSpacing: 40
+            },
+            classDiagram: {
+                useMaxWidth: true
+            },
+            er: {
+                useMaxWidth: true,
+                layoutDirection: 'TB'
+            }
+        });
+
+        // Tab switching function
+        function showTab(tabId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Deactivate all tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabId).classList.add('active');
+            
+            // Activate clicked button
+            event.target.closest('.tab-btn').classList.add('active');
+        }
+
+        // Re-render diagrams when tab becomes visible
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setTimeout(() => {
+                    mermaid.contentLoaded();
+                }, 100);
+            });
+        });
+    </script>
+</body>
+</html>
+

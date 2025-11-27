@@ -517,28 +517,32 @@ export class WorkspaceViewComponent implements OnChanges, AfterViewInit, OnDestr
       const scaleWidth = availableWidth / naturalWidth;
       const scaleHeight = availableHeight / naturalHeight;
       
+      // Compute base fit scale
       const maxScaleForLLD = this.currentDiagramType === 'lld' ? 2.0 : 1.5;
-      const fitScale = Math.min(scaleWidth, scaleHeight, maxScaleForLLD);
+      const baseFitScale = Math.min(scaleWidth, scaleHeight, maxScaleForLLD);
       
-      const minWidthForLLD = this.currentDiagramType === 'lld' ? 900 : 700;
-      const minScaleWidth = minWidthForLLD / naturalWidth;
-      const minScaleHeight = (availableHeight * 0.8) / naturalHeight;
-      const minScale = Math.max(0.8, Math.min(minScaleWidth, minScaleHeight, 1.0));
+      // Apply boost factor for LLD to make class cards readable (~150% zoom effect)
+      const boostFactor = this.currentDiagramType === 'lld' ? 1.4 : 1.0;
+      const boostedScale = baseFitScale * boostFactor;
       
-      const finalScale = Math.max(fitScale, minScale);
+      // Clamp the final scale between 0.8 and 2.0
+      const finalScale = Math.max(0.8, Math.min(2.0, boostedScale));
       
       const displayWidth = naturalWidth * finalScale;
       const displayHeight = naturalHeight * finalScale;
       
+      // For LLD, allow overflow so user can scroll/pan; for others, constrain to container
+      const allowOverflow = this.currentDiagramType === 'lld';
+      
       svgWrapper.style.width = `${displayWidth}px`;
-      svgWrapper.style.maxWidth = '100%';
+      svgWrapper.style.maxWidth = allowOverflow ? 'none' : '100%';
       svgWrapper.style.height = `${displayHeight}px`;
-      svgWrapper.style.maxHeight = '100%';
+      svgWrapper.style.maxHeight = allowOverflow ? 'none' : '100%';
       
       svg.style.width = `${displayWidth}px`;
       svg.style.height = `${displayHeight}px`;
-      svg.style.maxWidth = '100%';
-      svg.style.maxHeight = '100%';
+      svg.style.maxWidth = allowOverflow ? 'none' : '100%';
+      svg.style.maxHeight = allowOverflow ? 'none' : '100%';
     } else {
       svgWrapper.style.width = `${naturalWidth}px`;
       svgWrapper.style.height = `${naturalHeight}px`;

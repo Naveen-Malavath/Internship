@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DBD (Database Design) Diagram Preview</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                fontSize: '16px',
+                fontFamily: 'Arial, sans-serif',
+                primaryColor: '#E3F2FD',
+                primaryTextColor: '#000',
+                primaryBorderColor: '#1976D2',
+                lineColor: '#64748b',
+                secondaryColor: '#F3E5F5',
+                tertiaryColor: '#FFF3E0',
+            },
+            er: {
+                useMaxWidth: true,
+                fontSize: 16,
+                layoutDirection: 'TB',
+                padding: 20,
+            }
+        });
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab-button {
+            flex: 1;
+            padding: 15px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .tab-button:hover {
+            background: #eeeeee;
+            color: #333;
+        }
+        
+        .tab-button.active {
+            background: white;
+            color: #1976D2;
+        }
+        
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #1976D2;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 40px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .diagram-section {
+            margin-bottom: 40px;
+        }
+        
+        .diagram-title {
+            color: #1976D2;
+            font-size: 1.8em;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #E3F2FD;
+        }
+        
+        .diagram-description {
+            background: #FFF9C4;
+            padding: 15px;
+            border-left: 4px solid #F57F17;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        
+        .diagram-description h3 {
+            color: #E65100;
+            margin-bottom: 8px;
+        }
+        
+        .diagram-description ul {
+            margin-left: 20px;
+            color: #666;
+        }
+        
+        .diagram-description li {
+            margin: 5px 0;
+        }
+        
+        .mermaid {
+            background: #fafafa;
+            padding: 30px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            overflow-x: auto;
+        }
+        
+        .code-section {
+            margin-top: 30px;
+        }
+        
+        .code-title {
+            background: #424242;
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+            border-radius: 4px 4px 0 0;
+        }
+        
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 0 0 4px 4px;
+            overflow-x: auto;
+            margin: 0;
+        }
+        
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .legend {
+            background: #E8EAF6;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .legend h3 {
+            color: #3F51B5;
+            margin-bottom: 15px;
+        }
+        
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .legend-item {
+            background: white;
+            padding: 12px;
+            border-radius: 4px;
+            border-left: 4px solid #3F51B5;
+        }
+        
+        .legend-item strong {
+            color: #1976D2;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .legend-item span {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .footer {
+            background: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        /* Make entity boxes more visible */
+        .mermaid .er.entityBox {
+            fill: #E3F2FD !important;
+            stroke: #1976D2 !important;
+            stroke-width: 2px !important;
+        }
+        
+        .mermaid .er.entityLabel {
+            fill: #000 !important;
+            font-weight: bold !important;
+        }
+        
+        .mermaid .er.relationshipLabel {
+            fill: #666 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗄️ DBD (Database Design) Diagram Preview</h1>
+            <p>Visual representation of database schemas with entities, fields, and relationships</p>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab(event, 'ecommerce')">
+                🛒 E-commerce Example
+            </button>
+            <button class="tab-button" onclick="switchTab(event, 'hospital')">
+                🏥 Hospital Management
+            </button>
+            <button class="tab-button" onclick="switchTab(event, 'autoagents')">
+                🤖 AutoAgents System
+            </button>
+            <button class="tab-button" onclick="switchTab(event, 'custom')">
+                ✏️ Your Custom DBD
+            </button>
+        </div>
+        
+        <!-- E-commerce Tab -->
+        <div id="ecommerce" class="tab-content active">
+            <div class="diagram-section">
+                <h2 class="diagram-title">E-commerce Platform Database Schema</h2>
+                
+                <div class="diagram-description">
+                    <h3>📋 What This Shows:</h3>
+                    <ul>
+                        <li><strong>Entities:</strong> USER, PRODUCT, CATEGORY, ORDER, ORDER_ITEM, PAYMENT</li>
+                        <li><strong>Relationships:</strong> How customers, products, and orders are connected</li>
+                        <li><strong>Fields:</strong> Each entity shows data types and constraints (PK, FK, UK)</li>
+                        <li><strong>Visual Format:</strong> Table-like boxes showing the database structure</li>
+                    </ul>
+                </div>
+                
+                <div class="mermaid">
+erDiagram
+    USER ||--o{ ORDER : places
+    ORDER ||--o{ ORDER_ITEM : contains
+    PRODUCT ||--o{ ORDER_ITEM : included_in
+    CATEGORY ||--o{ PRODUCT : categorizes
+    ORDER ||--|| PAYMENT : has
+    
+    USER {
+        uuid id PK
+        varchar email UK
+        varchar name
+        varchar password_hash
+        varchar phone
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    PRODUCT {
+        uuid id PK
+        uuid category_id FK
+        varchar name
+        text description
+        float price
+        int stock_quantity
+        varchar sku UK
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    CATEGORY {
+        uuid id PK
+        varchar name UK
+        text description
+        varchar slug UK
+        int display_order
+        timestamp created_at
+    }
+    
+    ORDER {
+        uuid id PK
+        uuid user_id FK
+        float subtotal
+        float tax_amount
+        float shipping_cost
+        float total_amount
+        varchar status
+        varchar shipping_address
+        varchar billing_address
+        timestamp order_date
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    ORDER_ITEM {
+        uuid id PK
+        uuid order_id FK
+        uuid product_id FK
+        int quantity
+        float unit_price
+        float subtotal
+        float discount_amount
+        timestamp created_at
+    }
+    
+    PAYMENT {
+        uuid id PK
+        uuid order_id FK
+        float amount
+        varchar payment_method
+        varchar transaction_id UK
+        varchar status
+        json payment_details
+        timestamp payment_date
+        timestamp created_at
+    }
+                </div>
+                
+                <div class="legend">
+                    <h3>🔑 Database Design Legend</h3>
+                    <div class="legend-grid">
+                        <div class="legend-item">
+                            <strong>PK (Primary Key)</strong>
+                            <span>Unique identifier for each record</span>
+                        </div>
+                        <div class="legend-item">
+                            <strong>FK (Foreign Key)</strong>
+                            <span>References another table's primary key</span>
+                        </div>
+                        <div class="legend-item">
+                            <strong>UK (Unique Key)</strong>
+                            <span>Value must be unique across all records</span>
+                        </div>
+                        <div class="legend-item">
+                            <strong>||--o{</strong>
+                            <span>One-to-Many relationship</span>
+                        </div>
+                        <div class="legend-item">
+                            <strong>||--||</strong>
+                            <span>One-to-One relationship</span>
+                        </div>
+                        <div class="legend-item">
+                            <strong>}o--o{</strong>
+                            <span>Many-to-Many relationship</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Hospital Management Tab -->
+        <div id="hospital" class="tab-content">
+            <div class="diagram-section">
+                <h2 class="diagram-title">Hospital Management System Database Schema</h2>
+                
+                <div class="diagram-description">
+                    <h3>📋 Healthcare Domain Example:</h3>
+                    <ul>
+                        <li><strong>Entities:</strong> PATIENT, DOCTOR, APPOINTMENT, MEDICAL_RECORD, PRESCRIPTION, DEPARTMENT</li>
+                        <li><strong>Complex Relationships:</strong> Many-to-many between doctors and patients</li>
+                        <li><strong>Normalized Design:</strong> Proper separation of concerns</li>
+                    </ul>
+                </div>
+                
+                <div class="mermaid">
+erDiagram
+    PATIENT ||--o{ APPOINTMENT : books
+    DOCTOR ||--o{ APPOINTMENT : schedules
+    PATIENT ||--o{ MEDICAL_RECORD : has
+    DOCTOR ||--o{ MEDICAL_RECORD : creates
+    MEDICAL_RECORD ||--o{ PRESCRIPTION : contains
+    DEPARTMENT ||--o{ DOCTOR : employs
+    
+    PATIENT {
+        uuid id PK
+        varchar name
+        date date_of_birth
+        varchar gender
+        varchar contact_number
+        varchar email UK
+        text address
+        varchar blood_type
+        text medical_history
+        text allergies
+        varchar emergency_contact
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    DOCTOR {
+        uuid id PK
+        uuid department_id FK
+        varchar name
+        varchar specialization
+        varchar license_number UK
+        varchar contact_number
+        varchar email UK
+        int years_of_experience
+        varchar qualification
+        boolean is_available
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    DEPARTMENT {
+        uuid id PK
+        varchar name UK
+        text description
+        varchar head_doctor_id
+        varchar location
+        varchar contact_number
+        timestamp created_at
+    }
+    
+    APPOINTMENT {
+        uuid id PK
+        uuid patient_id FK
+        uuid doctor_id FK
+        timestamp appointment_datetime
+        int duration_minutes
+        varchar status
+        varchar appointment_type
+        text chief_complaint
+        text notes
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    MEDICAL_RECORD {
+        uuid id PK
+        uuid patient_id FK
+        uuid doctor_id FK
+        uuid appointment_id FK
+        text diagnosis
+        text symptoms
+        text examination_notes
+        text treatment_plan
+        text lab_results
+        timestamp record_date
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    PRESCRIPTION {
+        uuid id PK
+        uuid medical_record_id FK
+        varchar medication_name
+        varchar dosage
+        varchar frequency
+        int duration_days
+        text instructions
+        int refills_allowed
+        timestamp prescribed_at
+        timestamp expires_at
+    }
+                </div>
+            </div>
+        </div>
+        
+        <!-- AutoAgents System Tab -->
+        <div id="autoagents" class="tab-content">
+            <div class="diagram-section">
+                <h2 class="diagram-title">AutoAgents System Database Schema</h2>
+                
+                <div class="diagram-description">
+                    <h3>📋 This is YOUR actual system:</h3>
+                    <ul>
+                        <li><strong>Core Entities:</strong> USERS, PROJECTS, FEATURES, STORIES, DIAGRAMS</li>
+                        <li><strong>Agent Workflow:</strong> Projects → Features → Stories → Diagrams</li>
+                        <li><strong>Feedback System:</strong> User ratings and comments</li>
+                    </ul>
+                </div>
+                
+                <div class="mermaid">
+erDiagram
+    USERS ||--o{ PROJECTS : owns
+    PROJECTS ||--o{ FEATURES : includes
+    FEATURES ||--o{ STORIES : contains
+    PROJECTS ||--o{ DIAGRAMS : has
+    PROJECTS ||--o{ FEEDBACK : receives
+    
+    USERS {
+        uuid id PK
+        varchar email UK
+        varchar password_hash
+        varchar name
+        varchar role
+        boolean is_active
+        timestamp last_login
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    PROJECTS {
+        uuid id PK
+        uuid owner_id FK
+        varchar title
+        text prompt
+        varchar status
+        varchar methodology
+        varchar industry
+        json focus_areas
+        json metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    FEATURES {
+        uuid id PK
+        uuid project_id FK
+        varchar title
+        text description
+        json acceptance_criteria
+        varchar source
+        varchar status
+        int order_index
+        varchar run_id
+        json metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    STORIES {
+        uuid id PK
+        uuid feature_id FK
+        uuid project_id FK
+        text user_story
+        json acceptance_criteria
+        json implementation_notes
+        varchar status
+        varchar priority
+        int story_points
+        varchar run_id
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    DIAGRAMS {
+        uuid id PK
+        uuid project_id FK
+        varchar diagram_type
+        text mermaid_source
+        json style_config
+        text svg_cache
+        varchar run_id
+        int version
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    FEEDBACK {
+        uuid id PK
+        uuid project_id FK
+        varchar agent_type
+        int rating
+        text comment
+        json context
+        varchar user_agent
+        timestamp created_at
+    }
+                </div>
+            </div>
+        </div>
+        
+        <!-- Custom DBD Tab -->
+        <div id="custom" class="tab-content">
+            <div class="diagram-section">
+                <h2 class="diagram-title">Your Custom DBD Output</h2>
+                
+                <div class="diagram-description">
+                    <h3>✏️ Paste your DBD diagram code here:</h3>
+                    <p>Copy the erDiagram code from <code>test_dbd_fixed_output.mmd</code> or from the API response and paste it below.</p>
+                </div>
+                
+                <div class="code-section">
+                    <div class="code-title">📝 Mermaid Code Input</div>
+                    <textarea id="customInput" 
+                              style="width: 100%; height: 300px; font-family: monospace; padding: 15px; font-size: 14px; border: 2px solid #e0e0e0; border-radius: 4px;"
+                              placeholder="Paste your erDiagram code here...
+
+Example:
+erDiagram
+    USER {
+        uuid id PK
+        varchar email UK
+        varchar name
+    }
+    
+    ORDER {
+        uuid id PK
+        uuid user_id FK
+        float total_amount
+    }
+    
+    USER ||--o{ ORDER : places
+">erDiagram
+    USER {
+        uuid id PK
+        varchar email UK
+        varchar name
+        varchar password_hash
+        timestamp created_at
+    }
+    
+    ORDER {
+        uuid id PK
+        uuid user_id FK
+        float total_amount
+        varchar status
+        timestamp created_at
+    }
+    
+    USER ||--o{ ORDER : places
+</textarea>
+                    <button onclick="renderCustomDiagram()" 
+                            style="margin-top: 10px; padding: 12px 30px; background: #1976D2; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer;">
+                        🔄 Render Diagram
+                    </button>
+                </div>
+                
+                <div id="customDiagramContainer" style="margin-top: 30px;">
+                    <h3 style="color: #1976D2; margin-bottom: 15px;">📊 Rendered Diagram:</h3>
+                    <div id="customDiagram" class="mermaid">
+erDiagram
+    USER {
+        uuid id PK
+        varchar email UK
+        varchar name
+        varchar password_hash
+        timestamp created_at
+    }
+    
+    ORDER {
+        uuid id PK
+        uuid user_id FK
+        float total_amount
+        varchar status
+        timestamp created_at
+    }
+    
+    USER ||--o{ ORDER : places
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>AutoAgents DBD Preview</strong> | Powered by Mermaid.js | Generated by Agent-3</p>
+            <p style="margin-top: 10px; font-size: 14px;">
+                This tool visualizes database schemas with <strong>table-like entity boxes</strong> showing fields, data types, and relationships.
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        function switchTab(event, tabId) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabId).classList.add('active');
+            
+            // Add active class to clicked button
+            event.currentTarget.classList.add('active');
+        }
+        
+        async function renderCustomDiagram() {
+            const input = document.getElementById('customInput').value;
+            const container = document.getElementById('customDiagram');
+            
+            if (!input.trim()) {
+                container.innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">Please enter erDiagram code above</p>';
+                return;
+            }
+            
+            try {
+                // Import mermaid dynamically if needed
+                const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs')).default;
+                
+                // Generate unique ID
+                const id = 'custom-diagram-' + Date.now();
+                
+                // Render the diagram
+                const { svg } = await mermaid.render(id, input);
+                container.innerHTML = svg;
+            } catch (error) {
+                container.innerHTML = `
+                    <div style="background: #ffebee; padding: 20px; border-radius: 4px; border-left: 4px solid #f44336;">
+                        <h4 style="color: #c62828; margin-bottom: 10px;">❌ Rendering Error</h4>
+                        <p style="color: #666;">${error.message}</p>
+                        <p style="color: #999; font-size: 14px; margin-top: 10px;">
+                            Check your Mermaid syntax. Make sure you're using proper erDiagram format.
+                        </p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Render custom diagram on page load
+        window.addEventListener('load', () => {
+            renderCustomDiagram();
+        });
+    </script>
+</body>
+</html>
+

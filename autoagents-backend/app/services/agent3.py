@@ -37,6 +37,857 @@ class Agent3Service:
             self.model = model or os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
             logger.info(f"[agent3] Initialized with Claude Sonnet 4.5 model: {self.model}")
 
+    async def _extract_entities(
+        self,
+        features: List[Dict],
+        stories: List[Dict],
+        original_prompt: str,
+        project_title: str,
+    ) -> List[Dict[str, Any]]:
+        """Extract business entities from features for database design.
+        
+        Analyzes features and stories to identify:
+        - Primary entities (core business objects like User, Product, Order)
+        - Secondary entities (supporting objects like Address, Payment, Review)
+        - Junction entities for M:M relationships (OrderItem, UserRole)
+        
+        Returns:
+            List of entity dictionaries with name, type, description, and feature/story sources
+        """
+        logger.info(f"[agent3] 🔍 Extracting entities from {len(features)} features and {len(stories)} stories")
+        
+        try:
+            client = get_claude_client()
+        except RuntimeError as exc:
+            logger.error(f"[agent3] Failed to get Claude client for entity extraction: {exc}")
+            raise
+        
+        # Format features with IDs for entity extraction and linking
+        feature_list = "\n".join(
+            f"[F{idx}] {f.get('feature_text') or f.get('title') or 'Feature'}"
+            for idx, f in enumerate(features, 1)
+        )
+        
+        # Format stories with IDs for context and linking
+        story_list = "\n".join(
+            f"[S{idx}] {s.get('story_text') or s.get('user_story') or 'Story'}"
+            for idx, s in enumerate(stories[:15], 1)  # Limit to avoid token overflow
+        )
+        
+        system_prompt = (
+            "You are a database architect expert. Analyze the given features and user stories to identify "
+            "all business entities that need database tables. Be thorough - extract ALL nouns that represent "
+            "persistent data objects. ALSO track which features/stories mention each entity."
+        )
+        
+        user_prompt = f"""Project: {project_title}
+
+Original Requirements:
+{original_prompt[:1500] if original_prompt else 'Not provided'}
+
+Features to analyze (with IDs):
+{feature_list}
+
+User Stories context (with IDs):
+{story_list or 'None provided'}
+
+Extract ALL business entities (nouns) that need database tables. Categorize them and LINK to source features/stories:
+- **primary**: Core business entities (User, Product, Order, etc.)
+- **secondary**: Supporting entities (Address, Category, Review, etc.)
+- **junction**: Many-to-many relationship tables (OrderItem, UserRole, ProductCategory)
+
+Return ONLY valid JSON in this exact format:
+{{
+    "entities": [
+        {{"name": "USER", "type": "primary", "description": "Stores user account information", "sources": ["F1", "F2", "S1"]}},
+        {{"name": "PRODUCT", "type": "primary", "description": "Product catalog items", "sources": ["F3", "S2"]}},
+        {{"name": "ORDER", "type": "primary", "description": "Customer orders", "sources": ["F4", "F5", "S3"]}},
+        {{"name": "ORDER_ITEM", "type": "junction", "description": "Links orders to products with quantity", "sources": ["F4"]}},
+        {{"name": "CATEGORY", "type": "secondary", "description": "Product categories", "sources": ["F3"]}}
+    ]
+}}
+
+Rules:
+- Entity names MUST be UPPERCASE with underscores (e.g., USER, ORDER_ITEM)
+- Include "sources" array with feature IDs (F1, F2...) and story IDs (S1, S2...) that mention this entity
+- Include at least USER entity for authentication
+- Include audit-related entities if features mention tracking/history
+- Include junction tables for many-to-many relationships
+- Be comprehensive - extract ALL relevant entities from features"""
+
+        try:
+            response = await client.messages.create(
+                model=self.model,
+                max_tokens=2000,
+                temperature=0.2,
+                system=system_prompt,
+                messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
+            )
+            
+            response_text = extract_text(response).strip()
+            logger.debug(f"[agent3] Entity extraction response: {response_text[:500]}...")
+            
+            # Parse JSON response
+            # Remove markdown code fences if present
+            if response_text.startswith("```"):
+                lines = response_text.split("\n")
+                response_text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+            
+            # Extract JSON from response
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+            if json_start != -1 and json_end > json_start:
+                json_str = response_text[json_start:json_end]
+                data = json.loads(json_str)
+                entities = data.get("entities", [])
+                
+                logger.info(f"[agent3] ✅ Extracted {len(entities)} entities: {[e.get('name') for e in entities]}")
+                return entities
+            else:
+                logger.warning("[agent3] Could not find JSON in entity extraction response")
+                return []
+                
+        except (json.JSONDecodeError, APIError) as exc:
+            logger.error(f"[agent3] Entity extraction failed: {exc}")
+            return []
+
+    async def _generate_entity_fields(
+        self,
+        entity: Dict[str, Any],
+        all_entities: List[Dict[str, Any]],
+        domain_context: str,
+    ) -> str:
+        """Generate database fields for a specific entity.
+        
+        Args:
+            entity: Entity dictionary with name, type, description
+            all_entities: All entities for FK reference
+            domain_context: Project domain for context-aware field generation
+            
+        Returns:
+            Mermaid erDiagram entity block string
+        """
+        entity_name = entity.get("name", "ENTITY")
+        entity_type = entity.get("type", "primary")
+        entity_desc = entity.get("description", "")
+        
+        logger.debug(f"[agent3] Generating fields for entity: {entity_name} ({entity_type})")
+        
+        try:
+            client = get_claude_client()
+        except RuntimeError as exc:
+            logger.error(f"[agent3] Failed to get Claude client for field generation: {exc}")
+            raise
+        
+        # List other entities for FK references
+        other_entities = [e.get("name") for e in all_entities if e.get("name") != entity_name]
+        
+        system_prompt = (
+            "You are a database architect. Generate appropriate database fields for the given entity. "
+            "Output ONLY the Mermaid erDiagram entity block syntax, nothing else."
+        )
+        
+        user_prompt = f"""Generate database fields for the entity "{entity_name}" in a {domain_context} application.
+
+Entity Description: {entity_desc}
+Entity Type: {entity_type}
+
+Related entities that may need FK references: {', '.join(other_entities)}
+
+Generate the Mermaid erDiagram entity block with:
+1. Primary key: uuid id PK
+2. Business-specific fields based on entity type and description
+3. Foreign keys (FK) to related entities where appropriate
+4. Audit fields: timestamp created_at, timestamp updated_at
+
+Use these data types:
+- uuid for IDs and foreign keys
+- varchar for short text (names, emails, status - max 255 chars)
+- text for long content (descriptions, notes)
+- int for counts/quantities
+- float for prices/amounts  
+- boolean for flags (is_active, is_verified)
+- timestamp for dates/times
+- json for complex nested data
+
+Constraints: PK (Primary Key), FK (Foreign Key), UK (Unique Key)
+
+Output ONLY valid Mermaid syntax like:
+{entity_name} {{
+    uuid id PK
+    varchar field_name
+    uuid related_entity_id FK
+    timestamp created_at
+    timestamp updated_at
+}}
+
+No explanations, just the entity block."""
+
+        try:
+            response = await client.messages.create(
+                model=self.model,
+                max_tokens=1000,
+                temperature=0.2,
+                system=system_prompt,
+                messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
+            )
+            
+            field_block = extract_text(response).strip()
+            
+            # Clean up the response
+            if field_block.startswith("```"):
+                lines = field_block.split("\n")
+                field_block = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+            
+            # Ensure the block has proper structure
+            field_block = field_block.strip()
+            if not field_block.startswith(entity_name):
+                # Try to find the entity block in the response
+                pattern = rf'{entity_name}\s*\{{'
+                match = re.search(pattern, field_block)
+                if match:
+                    start = match.start()
+                    # Find matching closing brace
+                    brace_count = 0
+                    end = start
+                    for i, char in enumerate(field_block[start:]):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end = start + i + 1
+                                break
+                    field_block = field_block[start:end]
+            
+            logger.debug(f"[agent3] Generated fields for {entity_name}: {field_block[:200]}...")
+            return field_block
+            
+        except APIError as exc:
+            logger.error(f"[agent3] Field generation failed for {entity_name}: {exc}")
+            # Return minimal valid entity block
+            return f"""{entity_name} {{
+    uuid id PK
+    timestamp created_at
+    timestamp updated_at
+}}"""
+
+    def _infer_relationships(
+        self,
+        entities: List[Dict[str, Any]],
+    ) -> List[str]:
+        """Infer relationships between entities based on entity types and names.
+        
+        Args:
+            entities: List of entity dictionaries
+            
+        Returns:
+            List of Mermaid relationship strings
+        """
+        logger.info(f"[agent3] 🔗 Inferring relationships for {len(entities)} entities")
+        
+        relationships = []
+        entity_names = [e.get("name", "") for e in entities]
+        
+        # Common relationship patterns
+        # USER typically has one-to-many with most entities
+        if "USER" in entity_names:
+            for entity in entities:
+                name = entity.get("name", "")
+                entity_type = entity.get("type", "")
+                
+                if name == "USER":
+                    continue
+                    
+                # User typically creates/owns orders, posts, reviews, etc.
+                if name in ["ORDER", "REVIEW", "COMMENT", "POST", "BOOKING", "APPOINTMENT", "CART"]:
+                    relationships.append(f"USER ||--o{{ {name} : places")
+                elif name == "ADDRESS":
+                    relationships.append(f"USER ||--o{{ ADDRESS : has")
+                elif name == "PAYMENT":
+                    relationships.append(f"USER ||--o{{ PAYMENT : makes")
+                elif name == "PROFILE":
+                    relationships.append(f"USER ||--|| PROFILE : has")
+                elif name == "NOTIFICATION":
+                    relationships.append(f"USER ||--o{{ NOTIFICATION : receives")
+        
+        # Order-related relationships
+        if "ORDER" in entity_names:
+            if "ORDER_ITEM" in entity_names:
+                relationships.append("ORDER ||--o{ ORDER_ITEM : contains")
+            if "PAYMENT" in entity_names:
+                relationships.append("ORDER ||--o{ PAYMENT : requires")
+            if "SHIPPING" in entity_names or "SHIPMENT" in entity_names:
+                ship_name = "SHIPPING" if "SHIPPING" in entity_names else "SHIPMENT"
+                relationships.append(f"ORDER ||--|| {ship_name} : has")
+        
+        # Product-related relationships  
+        if "PRODUCT" in entity_names:
+            if "ORDER_ITEM" in entity_names:
+                relationships.append("PRODUCT ||--o{ ORDER_ITEM : included_in")
+            if "CATEGORY" in entity_names:
+                relationships.append("CATEGORY ||--o{ PRODUCT : categorizes")
+            if "REVIEW" in entity_names:
+                relationships.append("PRODUCT ||--o{ REVIEW : has")
+            if "INVENTORY" in entity_names:
+                relationships.append("PRODUCT ||--|| INVENTORY : tracked_by")
+            if "PRODUCT_IMAGE" in entity_names:
+                relationships.append("PRODUCT ||--o{ PRODUCT_IMAGE : has")
+        
+        # Category hierarchies
+        if "CATEGORY" in entity_names:
+            # Self-referencing for parent/child categories is implied
+            pass
+        
+        # Junction table relationships
+        for entity in entities:
+            if entity.get("type") == "junction":
+                name = entity.get("name", "")
+                desc = entity.get("description", "").lower()
+                
+                # Try to infer what entities it connects
+                if "user" in desc and "role" in desc:
+                    if "ROLE" in entity_names:
+                        relationships.append(f"USER ||--o{{ {name} : has")
+                        relationships.append(f"ROLE ||--o{{ {name} : assigned_to")
+                elif "product" in desc and "category" in desc:
+                    if "CATEGORY" in entity_names:
+                        relationships.append(f"PRODUCT }}o--o{{ CATEGORY : belongs_to")
+        
+        # Appointment/Booking systems
+        if "APPOINTMENT" in entity_names or "BOOKING" in entity_names:
+            appt_name = "APPOINTMENT" if "APPOINTMENT" in entity_names else "BOOKING"
+            if "DOCTOR" in entity_names:
+                relationships.append(f"DOCTOR ||--o{{ {appt_name} : schedules")
+            if "PATIENT" in entity_names:
+                relationships.append(f"PATIENT ||--o{{ {appt_name} : books")
+            if "SERVICE" in entity_names:
+                relationships.append(f"SERVICE ||--o{{ {appt_name} : booked_for")
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_relationships = []
+        for rel in relationships:
+            if rel not in seen:
+                seen.add(rel)
+                unique_relationships.append(rel)
+        
+        logger.info(f"[agent3] ✅ Inferred {len(unique_relationships)} relationships")
+        return unique_relationships
+
+    async def _generate_database_diagram_multistep(
+        self,
+        project_title: str,
+        features: List[Dict],
+        stories: List[Dict],
+        original_prompt: str,
+    ) -> str:
+        """Generate database erDiagram using multi-step approach.
+        
+        1. Extract entities from features/stories
+        2. Generate fields for each entity
+        3. Infer relationships between entities
+        4. Assemble complete erDiagram
+        
+        Returns:
+            Complete Mermaid erDiagram source code
+        """
+        logger.info("[agent3] 🏗️ Starting multi-step database diagram generation")
+        
+        # Step 1: Extract entities
+        entities = await self._extract_entities(
+            features=features,
+            stories=stories,
+            original_prompt=original_prompt,
+            project_title=project_title,
+        )
+        
+        if not entities:
+            logger.warning("[agent3] No entities extracted, using AI-generated approach")
+            # If extraction fails, let the single-prompt approach handle it
+            raise RuntimeError("Entity extraction returned no entities")
+        
+        # Determine domain from original prompt
+        domain_context = self._detect_domain(original_prompt, features)
+        logger.info(f"[agent3] 🎯 Detected domain: {domain_context}")
+        
+        # Step 2: Generate fields for each entity
+        entity_blocks = []
+        for entity in entities:
+            try:
+                field_block = await self._generate_entity_fields(
+                    entity=entity,
+                    all_entities=entities,
+                    domain_context=domain_context,
+                )
+                if field_block:
+                    entity_blocks.append(field_block)
+            except Exception as exc:
+                logger.warning(f"[agent3] Failed to generate fields for {entity.get('name')}: {exc}")
+                # Create minimal block for this entity
+                entity_name = entity.get("name", "ENTITY")
+                entity_blocks.append(f"""{entity_name} {{
+    uuid id PK
+    timestamp created_at
+    timestamp updated_at
+}}""")
+        
+        # Step 3: Infer relationships
+        relationships = self._infer_relationships(entities)
+        
+        # Step 4: Assemble the complete erDiagram
+        diagram_parts = ["erDiagram"]
+        
+        # Add relationships first (Mermaid convention)
+        if relationships:
+            diagram_parts.append("")
+            diagram_parts.extend([f"    {rel}" for rel in relationships])
+        
+        # Add entity blocks
+        diagram_parts.append("")
+        for block in entity_blocks:
+            # Ensure proper indentation
+            lines = block.strip().split("\n")
+            indented_block = "\n".join(f"    {line}" if i > 0 else f"    {line}" for i, line in enumerate(lines))
+            diagram_parts.append(indented_block)
+            diagram_parts.append("")
+        
+        mermaid = "\n".join(diagram_parts)
+        
+        logger.info(f"[agent3] ✅ Multi-step database diagram complete | entities={len(entities)} | relationships={len(relationships)}")
+        return mermaid
+
+    def _detect_domain(self, original_prompt: str, features: List[Dict]) -> str:
+        """Detect the application domain from prompt and features."""
+        prompt_lower = (original_prompt or "").lower()
+        feature_text = " ".join(
+            (f.get("feature_text") or f.get("title") or "").lower()
+            for f in features
+        )
+        combined = prompt_lower + " " + feature_text
+        
+        # Domain detection patterns
+        if any(word in combined for word in ["e-commerce", "shopping", "cart", "product", "checkout", "store"]):
+            return "e-commerce"
+        elif any(word in combined for word in ["healthcare", "medical", "patient", "doctor", "hospital", "clinic"]):
+            return "healthcare"
+        elif any(word in combined for word in ["banking", "finance", "payment", "transaction", "account", "transfer"]):
+            return "finance/banking"
+        elif any(word in combined for word in ["education", "learning", "course", "student", "teacher", "school"]):
+            return "education"
+        elif any(word in combined for word in ["social", "post", "friend", "follow", "message", "chat"]):
+            return "social media"
+        elif any(word in combined for word in ["booking", "reservation", "hotel", "travel", "flight"]):
+            return "booking/reservation"
+        elif any(word in combined for word in ["inventory", "warehouse", "stock", "supply"]):
+            return "inventory management"
+        elif any(word in combined for word in ["crm", "customer", "lead", "sales", "pipeline"]):
+            return "CRM"
+        elif any(word in combined for word in ["project", "task", "team", "sprint", "agile"]):
+            return "project management"
+        else:
+            return "general business application"
+
+    def _generate_hld_fallback(self, features: List[Dict], project_title: str, original_prompt: str = "") -> str:
+        """Generate HLD flowchart with proper architecture layers."""
+        logger.info("[agent3] 🏗️ Generating HLD fallback diagram")
+        
+        # Extract key components from features
+        components = []
+        for f in features[:6]:
+            text = (f.get('feature_text') or f.get('title') or '').lower()
+            for word in ['user', 'product', 'order', 'cart', 'payment', 'inventory', 
+                        'notification', 'search', 'report', 'admin', 'booking', 'customer']:
+                if word in text and word.capitalize() not in components:
+                    components.append(word.capitalize())
+                    break
+        
+        if not components:
+            components = ['User', 'Product', 'Order']
+        components = components[:5]
+        
+        lines = ['graph TB']
+        
+        # Client Layer - use unique IDs to avoid conflicts
+        lines.append('    subgraph CL[Client Layer]')
+        lines.append('        C1[Web Browser]')
+        lines.append('        C2[Mobile App]')
+        lines.append('        C3[Admin Portal]')
+        lines.append('    end')
+        
+        # API Layer
+        lines.append('    subgraph AL[API Layer]')
+        lines.append('        A1[API Gateway]')
+        lines.append('        A2[Load Balancer]')
+        lines.append('    end')
+        
+        # Service Layer
+        lines.append('    subgraph SL[Service Layer]')
+        lines.append('        S0[Auth Service]')
+        for i, comp in enumerate(components):
+            lines.append(f'        S{i+1}[{comp} Service]')
+        lines.append('    end')
+        
+        # Data Layer
+        lines.append('    subgraph DL[Data Layer]')
+        lines.append('        D1[(MongoDB)]')
+        lines.append('        D2[(Redis)]')
+        lines.append('        D3[(Storage)]')
+        lines.append('    end')
+        
+        # External Layer
+        lines.append('    subgraph EL[External Services]')
+        lines.append('        E1[Email]')
+        lines.append('        E2[Payment]')
+        lines.append('        E3[AI/ML]')
+        lines.append('    end')
+        
+        # Connections from clients to API
+        lines.append('    C1 --> A1')
+        lines.append('    C2 --> A1')
+        lines.append('    C3 --> A1')
+        lines.append('    A1 --> A2')
+        
+        # API to Services
+        lines.append('    A2 --> S0')
+        for i in range(len(components)):
+            lines.append(f'    A2 --> S{i+1}')
+        
+        # Services to Data
+        lines.append('    S0 --> D1')
+        lines.append('    S0 --> D2')
+        for i in range(len(components)):
+            lines.append(f'    S{i+1} --> D1')
+            lines.append(f'    S{i+1} --> D2')
+        
+        # Services to External
+        lines.append('    S0 --> E1')
+        if len(components) >= 3:
+            lines.append('    S3 --> E2')
+        lines.append('    A1 --> E3')
+        
+        mermaid = '\n'.join(lines)
+        logger.info(f"[agent3] ✅ Generated HLD with {len(components)} services")
+        return mermaid
+
+    def _generate_lld_fallback(self, features: List[Dict], project_title: str) -> str:
+        """Generate detailed LLD classDiagram with multiple layers."""
+        logger.info("[agent3] 🏗️ Generating LLD fallback diagram")
+        
+        # Extract entity names from features
+        entities = []
+        for f in features[:6]:
+            text = (f.get('feature_text') or f.get('title') or '').lower()
+            for word in ['user', 'product', 'order', 'cart', 'payment', 'customer', 
+                        'category', 'review', 'inventory', 'notification', 'booking']:
+                if word in text and word.capitalize() not in entities:
+                    entities.append(word.capitalize())
+                    break
+        
+        if not entities:
+            entities = ['User', 'Product', 'Order']
+        entities = entities[:4]
+        
+        lines = ['classDiagram']
+        lines.append('    %% Controller Layer')
+        
+        for entity in entities:
+            lines.append(f'    class {entity}Controller')
+            lines.append(f'    {entity}Controller : -{entity.lower()}Service {entity}Service')
+            lines.append(f'    {entity}Controller : +getAll() List')
+            lines.append(f'    {entity}Controller : +getById(id) {entity}')
+            lines.append(f'    {entity}Controller : +create(dto) {entity}')
+            lines.append(f'    {entity}Controller : +update(id dto) {entity}')
+            lines.append(f'    {entity}Controller : +delete(id) void')
+            lines.append('')
+        
+        lines.append('    %% Service Layer')
+        for entity in entities:
+            lines.append(f'    class {entity}Service')
+            lines.append(f'    {entity}Service : -{entity.lower()}Repo {entity}Repository')
+            lines.append(f'    {entity}Service : -validator Validator')
+            lines.append(f'    {entity}Service : -logger Logger')
+            lines.append(f'    {entity}Service : +findAll() List')
+            lines.append(f'    {entity}Service : +findById(id) {entity}')
+            lines.append(f'    {entity}Service : +create(data) {entity}')
+            lines.append(f'    {entity}Service : +update(id data) {entity}')
+            lines.append(f'    {entity}Service : +delete(id) boolean')
+            lines.append(f'    {entity}Service : +validate(data) boolean')
+            lines.append('')
+        
+        lines.append('    %% Repository Layer')
+        for entity in entities:
+            lines.append(f'    class {entity}Repository')
+            lines.append(f'    {entity}Repository : -database Database')
+            lines.append(f'    {entity}Repository : -collection string')
+            lines.append(f'    {entity}Repository : +save(entity) {entity}')
+            lines.append(f'    {entity}Repository : +findById(id) {entity}')
+            lines.append(f'    {entity}Repository : +findAll() List')
+            lines.append(f'    {entity}Repository : +update(id entity) {entity}')
+            lines.append(f'    {entity}Repository : +deleteById(id) boolean')
+            lines.append(f'    {entity}Repository : +exists(id) boolean')
+            lines.append('')
+        
+        lines.append('    %% Model/Entity Layer')
+        for entity in entities:
+            lines.append(f'    class {entity}')
+            lines.append(f'    {entity} : -id string')
+            lines.append(f'    {entity} : -name string')
+            lines.append(f'    {entity} : -description string')
+            lines.append(f'    {entity} : -status string')
+            lines.append(f'    {entity} : -isActive boolean')
+            lines.append(f'    {entity} : -createdAt DateTime')
+            lines.append(f'    {entity} : -updatedAt DateTime')
+            lines.append(f'    {entity} : +toJSON() object')
+            lines.append(f'    {entity} : +validate() boolean')
+            lines.append('')
+        
+        lines.append('    %% DTO Layer')
+        for entity in entities:
+            lines.append(f'    class {entity}DTO')
+            lines.append(f'    {entity}DTO : +name string')
+            lines.append(f'    {entity}DTO : +description string')
+            lines.append(f'    {entity}DTO : +status string')
+            lines.append('')
+        
+        lines.append('    %% Shared Components')
+        lines.append('    class Database')
+        lines.append('    Database : -connectionString string')
+        lines.append('    Database : +connect() void')
+        lines.append('    Database : +disconnect() void')
+        lines.append('    Database : +getCollection(name) Collection')
+        lines.append('')
+        lines.append('    class Validator')
+        lines.append('    Validator : +validate(data schema) boolean')
+        lines.append('    Validator : +sanitize(data) object')
+        lines.append('')
+        lines.append('    class Logger')
+        lines.append('    Logger : +info(msg) void')
+        lines.append('    Logger : +error(msg) void')
+        lines.append('    Logger : +debug(msg) void')
+        lines.append('')
+        
+        lines.append('    %% Relationships')
+        for entity in entities:
+            lines.append(f'    {entity}Controller --> {entity}Service : uses')
+            lines.append(f'    {entity}Service --> {entity}Repository : uses')
+            lines.append(f'    {entity}Service --> Validator : uses')
+            lines.append(f'    {entity}Service --> Logger : uses')
+            lines.append(f'    {entity}Repository --> Database : uses')
+            lines.append(f'    {entity}Repository --> {entity} : manages')
+            lines.append(f'    {entity}Controller ..> {entity}DTO : receives')
+        
+        mermaid = '\n'.join(lines)
+        logger.info(f"[agent3] ✅ Generated LLD with {len(entities)} entities")
+        return mermaid
+
+    def _generate_dbd_fallback(self, features: List[Dict], project_title: str) -> str:
+        """Generate DBD erDiagram with detailed entities and relationships."""
+        logger.info("[agent3] 🏗️ Generating DBD fallback diagram")
+        
+        # Detect entities from features
+        detected = set()
+        for f in features[:10]:
+            text = (f.get('feature_text') or f.get('title') or '').lower()
+            if 'user' in text or 'login' in text or 'auth' in text:
+                detected.add('USERS')
+            if 'product' in text or 'catalog' in text:
+                detected.add('PRODUCTS')
+            if 'order' in text or 'purchase' in text:
+                detected.add('ORDERS')
+            if 'cart' in text or 'basket' in text:
+                detected.add('CARTS')
+            if 'payment' in text or 'pay' in text:
+                detected.add('PAYMENTS')
+            if 'category' in text:
+                detected.add('CATEGORIES')
+            if 'review' in text or 'rating' in text:
+                detected.add('REVIEWS')
+            if 'address' in text or 'shipping' in text:
+                detected.add('ADDRESSES')
+            if 'inventory' in text or 'stock' in text:
+                detected.add('INVENTORY')
+        
+        # Always include core entities
+        detected.add('USERS')
+        if 'ORDERS' in detected:
+            detected.add('ORDER_ITEMS')
+        if 'CARTS' in detected:
+            detected.add('CART_ITEMS')
+        
+        # Build diagram - use ||--|| format (no curly braces in relationships)
+        lines = ['erDiagram']
+        lines.append('    %% Relationships')
+        
+        # User relationships
+        if 'ORDERS' in detected:
+            lines.append('    USERS ||--o| ORDERS : places')
+        if 'CARTS' in detected:
+            lines.append('    USERS ||--|| CARTS : owns')
+        if 'ADDRESSES' in detected:
+            lines.append('    USERS ||--o| ADDRESSES : has')
+        if 'REVIEWS' in detected:
+            lines.append('    USERS ||--o| REVIEWS : writes')
+        
+        # Product relationships
+        if 'CATEGORIES' in detected and 'PRODUCTS' in detected:
+            lines.append('    CATEGORIES ||--o| PRODUCTS : contains')
+        if 'INVENTORY' in detected and 'PRODUCTS' in detected:
+            lines.append('    PRODUCTS ||--|| INVENTORY : has')
+        if 'REVIEWS' in detected and 'PRODUCTS' in detected:
+            lines.append('    PRODUCTS ||--o| REVIEWS : receives')
+        
+        # Order relationships
+        if 'ORDER_ITEMS' in detected:
+            lines.append('    ORDERS ||--o| ORDER_ITEMS : contains')
+        if 'PRODUCTS' in detected and 'ORDER_ITEMS' in detected:
+            lines.append('    PRODUCTS ||--o| ORDER_ITEMS : in')
+        if 'PAYMENTS' in detected:
+            lines.append('    ORDERS ||--o| PAYMENTS : has')
+        if 'ADDRESSES' in detected and 'ORDERS' in detected:
+            lines.append('    ADDRESSES ||--o| ORDERS : ships_to')
+        
+        # Cart relationships
+        if 'CART_ITEMS' in detected:
+            lines.append('    CARTS ||--o| CART_ITEMS : contains')
+        if 'PRODUCTS' in detected and 'CART_ITEMS' in detected:
+            lines.append('    PRODUCTS ||--o| CART_ITEMS : added_to')
+        
+        lines.append('')
+        lines.append('    %% Entity Definitions')
+        
+        # Entity field definitions
+        entity_defs = {
+            'USERS': [
+                'int id PK',
+                'varchar email',
+                'varchar username',
+                'varchar password_hash',
+                'varchar first_name',
+                'varchar last_name',
+                'varchar phone',
+                'varchar role',
+                'boolean is_active',
+                'datetime created_at',
+                'datetime updated_at',
+            ],
+            'PRODUCTS': [
+                'int id PK',
+                'int category_id FK',
+                'varchar sku',
+                'varchar name',
+                'text description',
+                'decimal price',
+                'decimal cost',
+                'varchar image_url',
+                'boolean is_active',
+                'datetime created_at',
+                'datetime updated_at',
+            ],
+            'CATEGORIES': [
+                'int id PK',
+                'int parent_id FK',
+                'varchar name',
+                'varchar slug',
+                'text description',
+                'int sort_order',
+                'boolean is_active',
+            ],
+            'ORDERS': [
+                'int id PK',
+                'int user_id FK',
+                'int address_id FK',
+                'varchar order_number',
+                'varchar status',
+                'decimal subtotal',
+                'decimal tax',
+                'decimal shipping',
+                'decimal total',
+                'datetime ordered_at',
+                'datetime shipped_at',
+            ],
+            'ORDER_ITEMS': [
+                'int id PK',
+                'int order_id FK',
+                'int product_id FK',
+                'varchar product_name',
+                'int quantity',
+                'decimal unit_price',
+                'decimal subtotal',
+            ],
+            'CARTS': [
+                'int id PK',
+                'int user_id FK',
+                'decimal subtotal',
+                'decimal total',
+                'datetime created_at',
+                'datetime updated_at',
+            ],
+            'CART_ITEMS': [
+                'int id PK',
+                'int cart_id FK',
+                'int product_id FK',
+                'int quantity',
+                'decimal unit_price',
+            ],
+            'PAYMENTS': [
+                'int id PK',
+                'int order_id FK',
+                'varchar method',
+                'varchar transaction_id',
+                'decimal amount',
+                'varchar status',
+                'datetime paid_at',
+            ],
+            'ADDRESSES': [
+                'int id PK',
+                'int user_id FK',
+                'varchar type',
+                'varchar first_name',
+                'varchar last_name',
+                'varchar street',
+                'varchar city',
+                'varchar state',
+                'varchar postal_code',
+                'varchar country',
+                'boolean is_default',
+            ],
+            'REVIEWS': [
+                'int id PK',
+                'int user_id FK',
+                'int product_id FK',
+                'int rating',
+                'varchar title',
+                'text comment',
+                'boolean is_approved',
+                'datetime created_at',
+            ],
+            'INVENTORY': [
+                'int id PK',
+                'int product_id FK',
+                'int quantity',
+                'int reserved',
+                'int reorder_level',
+                'datetime last_updated',
+            ],
+        }
+        
+        # Output entities in order
+        entity_order = ['USERS', 'ADDRESSES', 'CATEGORIES', 'PRODUCTS', 'INVENTORY', 
+                       'CARTS', 'CART_ITEMS', 'ORDERS', 'ORDER_ITEMS', 'PAYMENTS', 'REVIEWS']
+        
+        for entity in entity_order:
+            if entity in detected:
+                fields = entity_defs.get(entity, ['int id PK', 'varchar name', 'datetime created_at'])
+                lines.append(f'    {entity} {{')
+                for field in fields:
+                    lines.append(f'        {field}')
+                lines.append('    }')
+        
+        mermaid = '\n'.join(lines)
+        logger.info(f"[agent3] ✅ Generated DBD with {len(detected)} entities")
+        return mermaid
+
     async def generate_mermaid(
         self,
         project_title: str,
@@ -92,185 +943,35 @@ class Agent3Service:
         if original_prompt and original_prompt.strip():
             prompt_context = f"\n\nOriginal User Requirements:\n{original_prompt.strip()}\n\n"
         
-        # Create type-specific prompts with COLORED diagrams
+        # ==========================================================================
+        # DIAGRAM GENERATION BY TYPE
+        # ==========================================================================
+        # All diagram types use reliable fallback generators for consistent output
+        # Claude API often produces invalid/malformed diagrams
+        # ==========================================================================
+        
         if diagram_type.lower() == "lld":
-            system_prompt = (
-                "You are Agent-3, an AI software architect specializing in Low Level Design (LLD). "
-                "You create DETAILED technical diagrams showing classes, methods, properties, relationships, "
-                "and implementation details. LLD is MORE DETAILED than HLD - show specific classes, methods, "
-                "and technical implementation for each feature. Use Mermaid classDiagram syntax."
-            )
-            user_prompt = (
-                f"Project: {project_title or 'Untitled Project'}\n"
-                f"{prompt_context}"
-                f"Features to implement:\n" + "\n".join(feature_details) + "\n\n"
-                f"User Stories context:\n{story_outline or 'None'}\n\n"
-                "Create a DETAILED LOW LEVEL DESIGN (LLD) Mermaid classDiagram showing:\n\n"
-                "📋 WHAT TO INCLUDE (based on features above):\n"
-                "1. **Controllers/API Layer** - For each feature, create specific controller classes:\n"
-                "   - Map features to RESTful API endpoints\n"
-                "   - Example: UserController, ProductController, OrderController\n"
-                "   - Methods: +createResource(), +getResource(), +updateResource(), +deleteResource()\n\n"
-                "2. **Service Layer** - Business logic classes for each feature:\n"
-                "   - Map each feature to a service class\n"
-                "   - Example: UserService, ProductService, OrderService\n"
-                "   - Methods: +processBusinessLogic(), +validateData(), +applyBusinessRules()\n"
-                "   - Fields: -repository: Repository, -validator: Validator\n\n"
-                "3. **Repository Layer** - Data access for each entity:\n"
-                "   - Create repository classes for data operations\n"
-                "   - Example: UserRepository, ProductRepository\n"
-                "   - Methods: +findById(), +save(), +update(), +delete(), +findAll()\n\n"
-                "4. **Model/Entity Classes** - Domain objects:\n"
-                "   - Extract entities from features and stories\n"
-                "   - Example: User, Product, Order, Payment\n"
-                "   - Properties: -id: UUID, -name: String, -email: String, -createdAt: DateTime\n\n"
-                "5. **Relationships** - Show how classes interact:\n"
-                "   - Controller --> Service (dependency)\n"
-                "   - Service --> Repository (dependency)\n"
-                "   - Repository --> Entity (manages)\n"
-                "   - Service --> Entity (uses)\n\n"
-                "⚠️ CRITICAL SYNTAX REQUIREMENTS:\n"
-                "```\n"
-                "classDiagram\n"
-                "  class ClassName {\n"
-                "    -privateField: Type\n"
-                "    +publicMethod() ReturnType\n"
-                "  }\n"
-                "```\n"
-                "- Each class MUST have { and } on separate lines\n"
-                "- ALL methods and properties MUST be INSIDE { }\n"
-                "- NEVER EVER put members outside a class block\n"
-                "- Close each class with } before starting relationships\n"
-                "- Members MUST be inside braces with 4-space indent\n"
-                "- Visibility: + (public), - (private), # (protected)\n\n"
-                "❌ WRONG EXAMPLE:\n"
-                "```\n"
-                "classDiagram\n"
-                "  class MyService {\n"
-                "    +method1()\n"
-                "  }\n"
-                "  +method2()  ← WRONG! This is outside the class!\n"
-                "```\n\n"
-                "✅ CORRECT EXAMPLE:\n"
-                "```\n"
-                "classDiagram\n"
-                "  class MyService {\n"
-                "    +method1()\n"
-                "    +method2()\n"
-                "  }\n"
-                "```\n\n"
-                "🎨 STYLING (Subtle professional colors):\n"
-                "```\n"
-                "classDef controllerClass fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#000000\n"
-                "classDef serviceClass fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#000000\n"
-                "classDef repoClass fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#000000\n"
-                "classDef modelClass fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000000\n"
-                "```\n"
-                "- Use pastel fills with darker stroke colors\n"
-                "- Apply with :::className after class name\n"
-                "- Example: UserController:::controllerClass\n\n"
-                "Output ONLY valid Mermaid classDiagram code, no explanations."
-            )
+            # LLD: Generate using reliable fallback (Claude often produces empty classes)
+            logger.info("[agent3] 🏗️ Generating LLD class diagram with reliable fallback")
+            mermaid = self._generate_lld_fallback(features, project_title)
+            logger.info("[agent3] ✅ LLD classDiagram generated successfully")
+            return mermaid  # Return early - no need for sanitization
+            
         elif diagram_type.lower() == "database":
-            system_prompt = (
-                "You are Agent-3, an AI database architect. You create DETAILED database schemas showing "
-                "all tables, fields, data types, constraints, and relationships needed to implement the features. "
-                "Analyze features to identify entities, create comprehensive database design with proper normalization."
-            )
-            user_prompt = (
-                f"Project: {project_title or 'Untitled Project'}\n"
-                f"{prompt_context}"
-                f"Features to implement:\n" + "\n".join(feature_details) + "\n\n"
-                f"User Stories context:\n{story_outline or 'None'}\n\n"
-                "Create a DETAILED DATABASE DESIGN (DBD) Mermaid erDiagram showing:\n\n"
-                "📋 WHAT TO INCLUDE (based on features above):\n"
-                "1. **Identify Core Entities** from features:\n"
-                "   - Extract nouns from feature descriptions (User, Product, Order, Payment, etc.)\n"
-                "   - Create a table for each core business entity\n"
-                "   - Include common fields: id (PK), created_at, updated_at\n\n"
-                "2. **Define Fields** for each entity:\n"
-                "   - Map feature requirements to database columns\n"
-                "   - Use appropriate data types:\n"
-                "     * uuid for IDs\n"
-                "     * varchar for short text (names, emails, status)\n"
-                "     * text for long content\n"
-                "     * int for counts/quantities\n"
-                "     * float for prices/amounts\n"
-                "     * boolean for flags\n"
-                "     * timestamp/datetime for dates\n"
-                "     * json for complex data\n"
-                "   - Add constraints: PK (Primary Key), FK (Foreign Key), UK (Unique Key)\n\n"
-                "3. **Define Relationships** between entities:\n"
-                "   - One-to-Many: PARENT ||--o{ CHILD : has\n"
-                "   - Many-to-Many: TABLE1 }o--o{ TABLE2 : links\n"
-                "   - One-to-One: TABLE1 ||--|| TABLE2 : owns\n"
-                "   - Label relationships clearly (owns, contains, belongs_to, has, manages)\n\n"
-                "4. **Common Patterns** to include:\n"
-                "   - USER table for authentication/profiles\n"
-                "   - Audit fields: created_at, updated_at, created_by, updated_by\n"
-                "   - Status fields for workflow tracking\n"
-                "   - Foreign keys linking related entities\n"
-                "   - Junction tables for many-to-many relationships\n\n"
-                "Example based on e-commerce features:\n"
-                "```\n"
-                "erDiagram\n"
-                "  USER ||--o{ ORDER : places\n"
-                "  ORDER ||--o{ ORDER_ITEM : contains\n"
-                "  PRODUCT ||--o{ ORDER_ITEM : included_in\n"
-                "  \n"
-                "  USER {\n"
-                "    uuid id PK\n"
-                "    varchar email UK\n"
-                "    varchar name\n"
-                "    varchar password_hash\n"
-                "    timestamp created_at\n"
-                "  }\n"
-                "  \n"
-                "  ORDER {\n"
-                "    uuid id PK\n"
-                "    uuid user_id FK\n"
-                "    float total_amount\n"
-                "    varchar status\n"
-                "    timestamp created_at\n"
-                "  }\n"
-                "```\n\n"
-                "⚠️ CRITICAL SYNTAX REQUIREMENTS:\n"
-                "- Entity definitions: ENTITY_NAME { ... }\n"
-                "- Each entity MUST have opening { and closing } on separate lines\n"
-                "- ALL fields MUST be INSIDE { } braces\n"
-                "- NEVER EVER put fields outside an entity block\n"
-                "- Close each entity with } before starting relationships\n"
-                "- Fields format: datatype fieldname constraint\n"
-                "- NO QUOTES in field definitions or relationship labels\n"
-                "- Relationships: ENTITY1 ||--o{ ENTITY2 : label (no quotes)\n\n"
-                "❌ WRONG EXAMPLE:\n"
-                "```\n"
-                "erDiagram\n"
-                "  USER {\n"
-                "    uuid id PK\n"
-                "  }\n"
-                "  varchar name  ← WRONG! This is outside!\n"
-                "```\n\n"
-                "✅ CORRECT EXAMPLE:\n"
-                "```\n"
-                "erDiagram\n"
-                "  USER {\n"
-                "    uuid id PK\n"
-                "    varchar name\n"
-                "  }\n"
-                "```\n\n"
-                "🎨 STYLING (Subtle professional colors):\n"
-                "- Use pastel fills with darker borders\n"
-                "- Example:\n"
-                "```\n"
-                "classDef coreEntity fill:#E3F2FD,stroke:#1976D2,stroke-width:2px\n"
-                "classDef userEntity fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px\n"
-                "classDef txEntity fill:#FFF3E0,stroke:#F57C00,stroke-width:2px\n"
-                "```\n"
-                "- Apply: USER:::userEntity, PRODUCT:::coreEntity\n\n"
-                "Output ONLY valid Mermaid erDiagram code, no explanations."
-            )
-        else:  # Default to HLD
+            # DBD: Generate using reliable fallback (Claude often produces unbalanced braces)
+            logger.info("[agent3] 🗄️ Generating DBD erDiagram with reliable fallback")
+            mermaid = self._generate_dbd_fallback(features, project_title)
+            logger.info("[agent3] ✅ DBD erDiagram generated successfully")
+            return mermaid  # Return early - no need for sanitization
+            
+        elif diagram_type.lower() == "hld":
+            # HLD: Generate using reliable fallback for consistent system architecture
+            logger.info("[agent3] 🏗️ Generating HLD flowchart with reliable fallback")
+            mermaid = self._generate_hld_fallback(features, project_title, original_prompt)
+            logger.info("[agent3] ✅ HLD flowchart generated successfully")
+            return mermaid  # Return early - no need for sanitization
+            
+        else:  # Unknown type - use HLD as default
             system_prompt = (
                 "You are Agent-3, an AI solution architect specializing in High Level Design (HLD). "
                 "Generate COLORED Mermaid diagrams showing system architecture, high-level components, "
@@ -300,50 +1001,118 @@ class Agent3Service:
                 "Output ONLY valid Mermaid code, no explanations."
             )
 
-        try:
-            # Use reasonable max_tokens to avoid streaming requirement (SDK limits non-streaming to ~10 minutes)
-            # For complex diagrams, 16K tokens is sufficient and avoids the 10-minute timeout requirement
-            max_tokens = 16000  # Sweet spot: allows large diagrams without requiring streaming
-            logger.info(f"[agent3] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.3")
-            logger.debug(f"[agent3] System prompt length: {len(system_prompt)} chars")
-            logger.debug(f"[agent3] User prompt length: {len(user_prompt)} chars")
-            response = await client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                temperature=0.3,  # Lower temperature for faster, more focused responses
-                timeout=600.0,  # 10 minute timeout for complex diagram generation
-                system=system_prompt,
-                messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
-            )
-            usage = getattr(response, "usage", None)
-            if usage:
-                logger.info(f"[agent3] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
-                # Check if response was likely truncated (within 5% of limit)
-                if usage.output_tokens >= max_tokens * 0.95:
-                    logger.warning(f"[agent3] ⚠️ Response may be truncated (used {usage.output_tokens}/{max_tokens} tokens)")
-                # Also warn if using more than 80% - approaching limit
-                elif usage.output_tokens >= max_tokens * 0.80:
-                    logger.info(f"[agent3] ℹ️ Response used {usage.output_tokens}/{max_tokens} tokens (80%+ of limit)")
-            else:
-                logger.info("[agent3] API call successful")
-        except APIError as exc:
-            error_type = getattr(exc, 'type', 'unknown')
-            error_status = getattr(exc, 'status_code', None)
-            logger.error(f"[agent3] APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
-            raise RuntimeError(f"Agent-3 failed to generate diagram: {exc}") from exc
+        # Only make API call for HLD (LLD and DBD use reliable fallback generators)
+        if diagram_type.lower() == "hld":
+            try:
+                # Use reasonable max_tokens to avoid streaming requirement (SDK limits non-streaming to ~10 minutes)
+                # For complex diagrams, 16K tokens is sufficient and avoids the 10-minute timeout requirement
+                max_tokens = 16000  # Sweet spot: allows large diagrams without requiring streaming
+                logger.info(f"[agent3] Attempting API call | model={self.model} | max_tokens={max_tokens} | temperature=0.3")
+                logger.debug(f"[agent3] System prompt length: {len(system_prompt)} chars")
+                logger.debug(f"[agent3] User prompt length: {len(user_prompt)} chars")
+                response = await client.messages.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=0.3,  # Lower temperature for faster, more focused responses
+                    timeout=600.0,  # 10 minute timeout for complex diagram generation
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
+                )
+                usage = getattr(response, "usage", None)
+                if usage:
+                    logger.info(f"[agent3] API call successful | input_tokens={usage.input_tokens} | output_tokens={usage.output_tokens}")
+                    # Check if response was likely truncated (within 5% of limit)
+                    if usage.output_tokens >= max_tokens * 0.95:
+                        logger.warning(f"[agent3] ⚠️ Response may be truncated (used {usage.output_tokens}/{max_tokens} tokens)")
+                    # Also warn if using more than 80% - approaching limit
+                    elif usage.output_tokens >= max_tokens * 0.80:
+                        logger.info(f"[agent3] ℹ️ Response used {usage.output_tokens}/{max_tokens} tokens (80%+ of limit)")
+                else:
+                    logger.info("[agent3] API call successful")
+            except APIError as exc:
+                error_type = getattr(exc, 'type', 'unknown')
+                error_status = getattr(exc, 'status_code', None)
+                logger.error(f"[agent3] APIError - Type: {error_type}, Status: {error_status}, Message: {str(exc)}", exc_info=True)
+                raise RuntimeError(f"Agent-3 failed to generate diagram: {exc}") from exc
 
-        logger.debug("[agent3] Extracting Mermaid diagram from response")
-        mermaid = extract_text(response).strip()
+            logger.debug("[agent3] Extracting Mermaid diagram from response")
+            mermaid = extract_text(response).strip()
+            
+            # Clean up mermaid code - remove markdown fences if present
+            if mermaid.startswith("```"):
+                logger.debug("[agent3] Removing markdown code fences from response")
+                lines = mermaid.split("\n")
+                if lines[0].startswith("```mermaid"):
+                    mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
+                elif lines[0].strip() == "```":
+                    mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
+            mermaid = mermaid.strip()
         
-        # Clean up mermaid code - remove markdown fences if present
-        if mermaid.startswith("```"):
-            logger.debug("[agent3] Removing markdown code fences from response")
-            lines = mermaid.split("\n")
-            if lines[0].startswith("```mermaid"):
-                mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
-            elif lines[0].strip() == "```":
-                mermaid = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
-        mermaid = mermaid.strip()
+        # QUALITY CHECK: Validate Claude output before sanitization (for erDiagram and classDiagram)
+        if 'erDiagram' in mermaid or 'classDiagram' in mermaid:
+            lines_check = mermaid.split('\n')
+            entities_with_fields = 0
+            empty_entities = 0
+            classes_with_members = 0
+            empty_classes = 0
+            
+            in_block = False
+            current_block_has_content = False
+            is_class_diagram = 'classDiagram' in mermaid
+            
+            for line in lines_check:
+                stripped = line.strip()
+                
+                if is_class_diagram:
+                    # Check for class definition
+                    if re.match(r'^class\s+\w+\s*\{', stripped):
+                        if in_block and current_block_has_content:
+                            classes_with_members += 1
+                        elif in_block:
+                            empty_classes += 1
+                        in_block = True
+                        current_block_has_content = False
+                    elif stripped == '}':
+                        if in_block and current_block_has_content:
+                            classes_with_members += 1
+                        elif in_block:
+                            empty_classes += 1
+                        in_block = False
+                    elif in_block and re.match(r'^[+\-#~]\w+', stripped):
+                        current_block_has_content = True
+                else:
+                    # Check for entity definition (erDiagram)
+                    if re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', stripped):
+                        if in_block and current_block_has_content:
+                            entities_with_fields += 1
+                        elif in_block:
+                            empty_entities += 1
+                        in_block = True
+                        current_block_has_content = False
+                    elif stripped == '}':
+                        if in_block and current_block_has_content:
+                            entities_with_fields += 1
+                        elif in_block:
+                            empty_entities += 1
+                        in_block = False
+                    elif in_block and re.match(r'^\s*(uuid|varchar|text|int|float|boolean|datetime|timestamp|json)', stripped):
+                        current_block_has_content = True
+            
+            if is_class_diagram:
+                total_classes = classes_with_members + empty_classes
+                logger.info(f"[agent3] 🔍 Claude output quality (classDiagram): {classes_with_members}/{total_classes} classes have members, {empty_classes} empty")
+                if total_classes > 0 and empty_classes > classes_with_members:
+                    logger.warning(f"[agent3] ⚠️ Claude generated mostly EMPTY classes ({empty_classes}/{total_classes})")
+                elif empty_classes > 0:
+                    logger.info(f"[agent3] ℹ️ Some classes are empty, but this may be intentional")
+            else:
+                total_entities = entities_with_fields + empty_entities
+                logger.info(f"[agent3] 🔍 Claude output quality (erDiagram): {entities_with_fields}/{total_entities} entities have fields, {empty_entities} empty")
+                if total_entities > 0 and empty_entities > entities_with_fields:
+                    logger.warning(f"[agent3] ⚠️ Claude generated mostly EMPTY entities ({empty_entities}/{total_entities})")
+                    logger.warning(f"[agent3] This may indicate an issue with the Claude prompt or response truncation")
+                elif empty_entities > 0:
+                    logger.info(f"[agent3] ℹ️ Some entities are empty, but this may be fixed by sanitization")
         
         # Remove emojis from all node labels to prevent parse errors
         # This is a common source of Mermaid parse errors
@@ -590,41 +1359,61 @@ class Agent3Service:
                 has_any_entity_def = any(re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', lines[j].strip()) for j in range(len(lines)))
                 
                 if has_any_entity_def:  # Only try to fix orphaned fields if there ARE some entity definitions
-                    # Use SIMPLE state machine: track if we're currently inside an entity block
+                    # Use IMPROVED state machine: track if we're currently inside an entity block
                     is_field_line = re.match(r'^\s*(uuid|varchar|text|int|float|boolean|datetime|timestamp|json|bigint|smallint|decimal|double|real|date|time)\s+\w+', line_stripped)
                     
                     if is_field_line:
-                        # Simple forward-looking check: are we inside an entity block?
-                        # Count all braces from the start of the diagram to current line
+                        # IMPROVED: Better brace counting that handles indented fields correctly
+                        # Track entity state more robustly
                         in_entity = False
-                        brace_count = 0
+                        current_entity = None
                         
                         for i in range(index):
                             prev_line = lines[i].strip()
                             
-                            # Check if this is an entity definition line
-                            if re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', prev_line):
-                                brace_count += 1
+                            # Check for entity definition (same line with opening brace)
+                            entity_match = re.match(r'^([A-Z_][A-Z_0-9]*)\s*\{', prev_line)
+                            if entity_match:
+                                in_entity = True
+                                current_entity = entity_match.group(1)
+                                logger.debug(f"[agent3] Line {i+1}: Entered entity '{current_entity}'")
+                                continue
                             
-                            # Check for standalone opening brace
-                            if prev_line == '{' and i > 0:
-                                # Previous line should be entity name
+                            # Check for entity name (opening brace on next line)
+                            if re.match(r'^[A-Z_][A-Z_0-9]*$', prev_line) and not in_entity:
+                                # Look ahead to see if next line has opening brace
+                                if i + 1 < len(lines) and lines[i + 1].strip() == '{':
+                                    in_entity = True
+                                    current_entity = prev_line
+                                    logger.debug(f"[agent3] Line {i+1}: Entered entity '{current_entity}' (brace on next line)")
+                                continue
+                            
+                            # Check for standalone opening brace after entity name
+                            if prev_line == '{' and i > 0 and not in_entity:
                                 entity_line = lines[i-1].strip()
                                 if re.match(r'^[A-Z_][A-Z_0-9]*$', entity_line):
-                                    brace_count += 1
+                                    in_entity = True
+                                    current_entity = entity_line
+                                    logger.debug(f"[agent3] Line {i+1}: Confirmed entity '{current_entity}' with opening brace")
+                                continue
                             
                             # Check for closing brace
-                            if prev_line == '}' or prev_line.endswith('}'):
-                                brace_count -= 1
+                            if prev_line == '}' and in_entity:
+                                logger.debug(f"[agent3] Line {i+1}: Exited entity '{current_entity}'")
+                                in_entity = False
+                                current_entity = None
                         
-                        # If brace_count > 0, we're inside an entity block
-                        in_entity = brace_count > 0
+                        # Log the state when checking this field line
+                        logger.debug(f"[agent3] Checking field at line {line_num}: in_entity={in_entity}, current_entity={current_entity}")
+                        logger.debug(f"[agent3]   Field: {line_stripped[:60]}")
                         
                         # If we're not in an entity, this field is orphaned - REMOVE IT
                         if not in_entity:
                             logger.warning(f"[agent3] ⚠️ ORPHANED entity field outside entity block at line {line_num}: {line_stripped[:80]}")
                             removed_lines.append((line_num, line_stripped[:100]))
                             continue  # Skip this line completely
+                        else:
+                            logger.debug(f"[agent3] ✓ Field is inside entity '{current_entity}' - keeping it")
             
             # Check for classDiagram members appearing without class context
             # CRITICAL FIX: Detect orphaned class members (methods/properties outside class blocks)
@@ -641,7 +1430,7 @@ class Agent3Service:
                     is_member_line = re.match(r'^\s*[+\-#~]\w', line_stripped)
                     
                     if is_member_line:
-                        # Simple forward-looking check: are we inside a class block?
+                        # IMPROVED: Better brace counting that handles class members correctly
                         # Count all braces from the start of the diagram to current line
                         in_class = False
                         brace_count = 0
@@ -654,14 +1443,16 @@ class Agent3Service:
                                 brace_count += 1
                             
                             # Check for standalone opening brace after class definition
-                            if prev_line == '{' and i > 0:
+                            elif prev_line == '{' and i > 0:
                                 check_prev = lines[i-1].strip()
                                 if check_prev.startswith('class '):
                                     brace_count += 1
                             
-                            # Check for closing brace
-                            if prev_line == '}':
+                            # Check for closing brace (must be standalone)
+                            elif prev_line == '}':
                                 brace_count -= 1
+                                if brace_count < 0:
+                                    brace_count = 0  # Prevent negative count
                         
                         # If brace_count > 0, we're inside a class block
                         in_class = brace_count > 0
@@ -685,6 +1476,26 @@ class Agent3Service:
             logger.warning(f"[agent3] 🧹 Removed {len(removed_lines)} orphaned/malformed line(s)")
             for line_num, line_preview in removed_lines:
                 logger.debug(f"[agent3]   - Line {line_num}: {line_preview}")
+            
+            # SAFETY CHECK: Count how many fields were removed vs total fields
+            if diagram_type_detected == 'er':
+                removed_field_count = sum(1 for _, line_text in removed_lines 
+                                        if re.match(r'^\s*(uuid|varchar|text|int|float|boolean|datetime|timestamp|json)', line_text))
+                total_field_count = sum(1 for line in lines 
+                                       if re.match(r'^\s*(uuid|varchar|text|int|float|boolean|datetime|timestamp|json)', line.strip()))
+                
+                if total_field_count > 0:
+                    removal_percentage = (removed_field_count / total_field_count * 100)
+                    logger.info(f"[agent3] 📊 Field removal stats: {removed_field_count}/{total_field_count} fields removed ({removal_percentage:.1f}%)")
+                    
+                    # If we removed too many fields, something is likely wrong with detection logic
+                    if removal_percentage > 50:
+                        logger.error(f"[agent3] ⚠️ SAFETY WARNING: Removed {removal_percentage:.1f}% of fields - this seems excessive!")
+                        logger.error(f"[agent3] This may indicate a bug in orphaned field detection.")
+                        logger.error(f"[agent3] Consider reviewing brace counting logic or Claude output quality.")
+                        # Still apply removal but log heavily for debugging
+                    elif removal_percentage > 25:
+                        logger.warning(f"[agent3] ⚠️ Removed {removal_percentage:.1f}% of fields - verify this is correct")
         
         mermaid = '\n'.join(fixed_lines)
         
@@ -694,22 +1505,52 @@ class Agent3Service:
         # For classDiagram: Validate all classes have proper { } structure
         if 'classDiagram' in mermaid:
             lines = mermaid.split('\n')
+            in_class_block = False
+            brace_depth = 0
+            
             for i, line in enumerate(lines):
                 stripped = line.strip()
+                
+                # Track class block state
+                if re.match(r'^class\s+\w+\s*\{', stripped):
+                    in_class_block = True
+                    brace_depth += 1
+                elif stripped == '}':
+                    brace_depth -= 1
+                    if brace_depth <= 0:
+                        in_class_block = False
+                        brace_depth = 0
+                
                 # Check if line starts with + - # ~ but we're not in a class
                 if re.match(r'^[+\-#~]\w', stripped):
-                    logger.error(f"[agent3] ❌ CRITICAL: Found orphaned member at line {i+1}: {stripped[:50]}")
-                    logger.error(f"[agent3]    This should have been caught earlier - check detection logic")
+                    if not in_class_block:
+                        logger.error(f"[agent3] ❌ CRITICAL: Found orphaned member at line {i+1}: {stripped[:50]}")
+                        logger.error(f"[agent3]    This should have been caught earlier - check detection logic")
         
         # For erDiagram: Validate all entities have proper { } structure  
         if 'erDiagram' in mermaid:
             lines = mermaid.split('\n')
+            in_entity_block = False
+            brace_depth = 0
+            
             for i, line in enumerate(lines):
                 stripped = line.strip()
+                
+                # Track entity block state
+                if re.match(r'^[A-Z_][A-Z_0-9]*\s*\{', stripped):
+                    in_entity_block = True
+                    brace_depth += 1
+                elif stripped == '}':
+                    brace_depth -= 1
+                    if brace_depth <= 0:
+                        in_entity_block = False
+                        brace_depth = 0
+                
                 # Check if line looks like a field but we're not in an entity
                 if re.match(r'^(uuid|varchar|text|int|float|boolean|datetime|timestamp|json)\s+\w+', stripped):
-                    logger.error(f"[agent3] ❌ CRITICAL: Found orphaned field at line {i+1}: {stripped[:50]}")
-                    logger.error(f"[agent3]    This should have been caught earlier - check detection logic")
+                    if not in_entity_block:
+                        logger.error(f"[agent3] ❌ CRITICAL: Found orphaned field at line {i+1}: {stripped[:50]}")
+                        logger.error(f"[agent3]    This should have been caught earlier - check detection logic")
             
             # Check if all entities are empty (fields were removed as orphaned)
             entity_pattern = r'^[A-Z_][A-Z_0-9]*\s*\{'
@@ -735,58 +1576,11 @@ class Agent3Service:
             
             logger.info(f"[agent3] 🔍 has_fields_in_entities={has_fields_in_entities}")
             
-            # If all entities are empty, generate a fallback
+            # If all entities are empty, generate a proper fallback
             if has_entities and not has_fields_in_entities:
-                logger.error("[agent3] ❌ CRITICAL: All entities are empty (all fields were orphaned)!")
-                logger.error("[agent3] Generating fallback erDiagram with sample data")
-                mermaid = """erDiagram
-    USER ||--o{ ORDER : places
-    ORDER ||--o{ ORDER_ITEM : contains
-    PRODUCT ||--o{ ORDER_ITEM : included_in
-    CATEGORY ||--o{ PRODUCT : categorizes
-    
-    USER {
-        uuid id PK
-        varchar email UK
-        varchar name
-        varchar password_hash
-        timestamp created_at
-        timestamp updated_at
-    }
-    
-    PRODUCT {
-        uuid id PK
-        varchar name
-        text description
-        float price
-        int stock_quantity
-        uuid category_id FK
-        timestamp created_at
-    }
-    
-    CATEGORY {
-        uuid id PK
-        varchar name UK
-        text description
-    }
-    
-    ORDER {
-        uuid id PK
-        uuid user_id FK
-        float total_amount
-        varchar status
-        timestamp created_at
-    }
-    
-    ORDER_ITEM {
-        uuid id PK
-        uuid order_id FK
-        uuid product_id FK
-        int quantity
-        float unit_price
-        float subtotal
-    }"""
-                logger.info("[agent3] ✅ Generated fallback erDiagram with sample entities")
+                logger.warning("[agent3] ⚠️ All entities appear empty - generating proper DBD fallback")
+                mermaid = self._generate_dbd_fallback(features, project_title)
+                logger.info("[agent3] ✅ DBD fallback generated successfully")
         
         # Fix classDiagram-specific syntax issues (LLD diagrams)
         # This handles the parse error: "Expecting 'PS', 'TAGEND', 'STR', got 'PE'"
@@ -799,50 +1593,37 @@ class Agent3Service:
             has_class_defs = any(re.match(r'^\s*class\s+\w+', line) for line in class_lines)
             has_members = any(re.match(r'^\s*[+\-#~]\w', line.strip()) for line in class_lines)
             
-            if has_members and not has_class_defs:
-                logger.error("[agent3] ❌ CRITICAL: classDiagram has NO class definitions, only orphaned members!")
-                logger.error("[agent3] This diagram is fundamentally malformed - generating fallback")
-                # Generate a simple fallback classDiagram
-                mermaid = """classDiagram
-    class SystemController {
-        +initialize()
-        +processRequest()
-        +handleResponse()
-    }
-    class ServiceLayer {
-        +executeBusinessLogic()
-        +validateData()
-        +transformData()
-    }
-    class Repository {
-        +findData()
-        +saveData()
-        +updateData()
-        +deleteData()
-    }
-    class DomainModel {
-        -id: UUID
-        -createdAt: DateTime
-        +getId()
-        +isValid()
-    }
-    
-    SystemController --> ServiceLayer : uses
-    ServiceLayer --> Repository : delegates
-    Repository --> DomainModel : manages
-    
-    classDef controllerClass fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#000000
-    classDef serviceClass fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#000000
-    classDef repoClass fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#000000
-    classDef modelClass fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000000
-    
-    class SystemController controllerClass
-    class ServiceLayer serviceClass
-    class Repository repoClass
-    class DomainModel modelClass"""
-                logger.info("[agent3] ✅ Generated fallback classDiagram with proper structure")
-                # Skip the rest of the fixing logic since we have a new diagram
+            # Count classes with actual content
+            classes_with_content = 0
+            in_class = False
+            current_class_has_content = False
+            for line in class_lines:
+                stripped = line.strip()
+                if re.match(r'^class\s+\w+\s*\{', stripped):
+                    in_class = True
+                    current_class_has_content = False
+                elif stripped == '}' and in_class:
+                    if current_class_has_content:
+                        classes_with_content += 1
+                    in_class = False
+                elif in_class and re.match(r'^[+\-#~]\w', stripped):
+                    current_class_has_content = True
+            
+            # If no classes have content, generate a proper LLD fallback
+            if has_class_defs and classes_with_content == 0:
+                logger.warning("[agent3] ⚠️ classDiagram has class definitions but NO members inside!")
+                logger.info("[agent3] 🔧 Generating proper LLD with class members...")
+                
+                # Generate a proper LLD based on features
+                mermaid = self._generate_lld_fallback(features, project_title)
                 class_lines = mermaid.split('\n')
+                has_class_defs = True
+                has_members = True
+            
+            if has_members and not has_class_defs:
+                logger.warning("[agent3] ⚠️ classDiagram has NO class definitions, only orphaned members")
+                logger.warning("[agent3] Continuing with current diagram state (no hardcoded fallback)")
+                # Continue with fixing logic to remove orphaned members
             
             fixed_class_lines = []
             inside_class = False
@@ -947,26 +1728,8 @@ class Agent3Service:
             # CRITICAL SAFETY CHECK: Ensure we don't have malformed output like "classDiagram    }    }    }"
             # This happens when all class content is removed but closing braces remain
             if re.match(r'^classDiagram\s+(\}\s*)+$', mermaid.strip(), re.MULTILINE | re.DOTALL):
-                logger.error("[agent3] ❌ Detected malformed classDiagram with only closing braces - regenerating fallback")
-                # Generate a simple fallback classDiagram
-                mermaid = """classDiagram
-    class SystemComponent {
-        +initialize()
-        +process()
-        +shutdown()
-    }
-    class DataService {
-        +fetchData()
-        +saveData()
-    }
-    class APIClient {
-        +sendRequest()
-        +handleResponse()
-    }
-    
-    SystemComponent --> DataService
-    DataService --> APIClient"""
-                logger.info("[agent3] 🔧 Generated fallback classDiagram")
+                logger.warning("[agent3] ⚠️ Detected malformed classDiagram with only closing braces")
+                logger.warning("[agent3] Continuing with current diagram state (no hardcoded fallback)")
         
         # Final cleanup: remove any remaining problematic last line
         if mermaid:
@@ -1016,6 +1779,27 @@ class Agent3Service:
             else:
                 fixed_class_lines.append(line)
         mermaid = '\n'.join(fixed_class_lines)
+        
+        # CRITICAL FIX: Remove invalid ::: syntax in classDiagram
+        # The ::: syntax is ONLY valid in flowcharts, NOT in classDiagrams
+        # Pattern: "class ClassName:::styleDefName" should be "class ClassName styleDefName"
+        if 'classDiagram' in mermaid or diagram_type.lower() == 'lld':
+            lines = mermaid.split('\n')
+            fixed_lines = []
+            fixed_count = 0
+            for line in lines:
+                # Match: class ClassName:::styleDefName
+                if re.match(r'^\s*class\s+\w+:::[\w]+\s*$', line):
+                    # Remove the :::
+                    fixed_line = re.sub(r'(\s*class\s+\w+):::([\w]+\s*)$', r'\1 \2', line)
+                    fixed_lines.append(fixed_line)
+                    fixed_count += 1
+                else:
+                    fixed_lines.append(line)
+            
+            if fixed_count > 0:
+                logger.info(f"[agent3] 🔧 Fixed {fixed_count} invalid ::: style separators in classDiagram")
+                mermaid = '\n'.join(fixed_lines)
         
         # Remove multiple consecutive spaces (but preserve indentation at line starts)
         lines = mermaid.split('\n')
@@ -1094,20 +1878,60 @@ class Agent3Service:
         if 'erDiagram' in mermaid or 'entityRelationshipDiagram' in mermaid:
             if open_brace != close_brace:
                 logger.error(f"[agent3] ❌ erDiagram has unbalanced braces - this will cause parse errors")
-                # Try to fix by removing incomplete entities
+                logger.info("[agent3] 🔧 Attempting advanced brace balancing fix...")
+                
+                # Advanced fix: Properly track entity blocks and balance braces
                 lines = mermaid.split('\n')
                 fixed_er = []
-                in_entity = False
-                for line in lines:
-                    if '{' in line and '}' not in line:
-                        in_entity = True
+                entity_stack = []  # Track open entities
+                
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    
+                    # Check for entity start: ENTITY_NAME {
+                    entity_start_match = re.match(r'^([A-Z_][A-Z_0-9]*)\s*\{$', stripped)
+                    if entity_start_match:
+                        entity_name = entity_start_match.group(1)
+                        entity_stack.append((entity_name, i))
                         fixed_er.append(line)
-                    elif '}' in line and '{' not in line:
-                        in_entity = False
+                        continue
+                    
+                    # Check for closing brace
+                    if stripped == '}':
+                        if entity_stack:
+                            entity_stack.pop()
                         fixed_er.append(line)
-                    elif not in_entity:
-                        fixed_er.append(line)
+                        continue
+                    
+                    # Check for incomplete entity definition (name without brace on next line)
+                    if re.match(r'^[A-Z_][A-Z_0-9]*$', stripped) and not entity_stack:
+                        # Look ahead to see if next line has opening brace
+                        if i + 1 < len(lines) and lines[i + 1].strip() == '{':
+                            entity_stack.append((stripped, i))
+                            fixed_er.append(stripped + ' {')
+                            # Skip the next line (the opening brace)
+                            continue
+                    
+                    # Regular line - add it
+                    fixed_er.append(line)
+                
+                # Close any unclosed entities
+                while entity_stack:
+                    entity_name, line_num = entity_stack.pop()
+                    logger.warning(f"[agent3] 🔧 Adding missing closing brace for entity '{entity_name}' (started at line {line_num+1})")
+                    fixed_er.append('}')
+                
                 mermaid = '\n'.join(fixed_er)
+                
+                # Re-verify braces
+                new_open = mermaid.count('{')
+                new_close = mermaid.count('}')
+                if new_open == new_close:
+                    logger.info(f"[agent3] ✅ Brace balancing successful: {new_open} pairs")
+                else:
+                    logger.warning(f"[agent3] ⚠️ Braces still unbalanced after fix: {{ {new_open} vs }} {new_close}")
+                    logger.info("[agent3] 🔧 Generating DBD fallback due to persistent brace issues")
+                    mermaid = self._generate_dbd_fallback(features, project_title)
         
         # Check if diagram contains styling (classDef)
         has_styling = "classDef" in mermaid or "style " in mermaid

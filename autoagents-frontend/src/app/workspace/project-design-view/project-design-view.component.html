@@ -50,12 +50,37 @@
     >
       DBD
     </button>
+
+    <!-- DBD View Mode Toggle (Graph/Table) - only visible when DBD is selected -->
+    <div *ngIf="currentDesignType === 'DBD'" class="project-design-view__view-toggle">
+      <span class="project-design-view__view-toggle-label">View:</span>
+      <button
+        type="button"
+        class="project-design-view__view-toggle-btn"
+        [class.project-design-view__view-toggle-btn--active]="dbdViewMode === 'graph'"
+        (click)="onDbdViewModeChange('graph')"
+      >
+        Graph
+      </button>
+      <button
+        type="button"
+        class="project-design-view__view-toggle-btn"
+        [class.project-design-view__view-toggle-btn--active]="dbdViewMode === 'table'"
+        (click)="onDbdViewModeChange('table')"
+      >
+        Table
+      </button>
+    </div>
   </div>
 
-  <!-- Mermaid Editor -->
+  <!-- Mermaid Editor (Graph View) -->
   <!-- Show editor if we have designs OR if we have a currentMermaid (to preserve last diagram during loading/errors) -->
   <!-- Editor remains visible during loading to show last diagram -->
-  <div *ngIf="designs || currentMermaid !== null" class="project-design-view__editor">
+  <!-- Hide when DBD table view is active -->
+  <div
+    *ngIf="(designs || currentMermaid !== null) && !(currentDesignType === 'DBD' && dbdViewMode === 'table')"
+    class="project-design-view__editor"
+  >
     <workspace-view
       [projectId]="projectId"
       [mermaidSource]="currentMermaid"
@@ -64,6 +89,14 @@
       [designGenerationKey]="designGenerationCounter"
       (mermaidChange)="onMermaidChange($event)"
     ></workspace-view>
+  </div>
+
+  <!-- DBD Table View -->
+  <div
+    *ngIf="currentDesignType === 'DBD' && dbdViewMode === 'table' && (designs || currentMermaid !== null)"
+    class="project-design-view__table-view"
+  >
+    <app-dbd-table-view [entities]="dbEntities"></app-dbd-table-view>
   </div>
 </div>
 

@@ -7,7 +7,11 @@ import {
   DbdEntity,
   DbdEntityField,
   DbdRel,
-  LldRel
+  LldRel,
+  LldArchNode,
+  LldArchEdge,
+  LldArchDiagram,
+  LldArchLayer
 } from './ast';
 
 function sanitizeName(name: string): string {
@@ -180,20 +184,87 @@ function extractEntitiesFromFeatures(features: string[]): Map<string, string[]> 
   return entityToActions;
 }
 
+/**
+ * Determine the layer for a component based on its name
+ */
+function inferLayer(name: string): LldArchLayer {
+  const lower = name.toLowerCase();
+  
+  // Frontend layer
+  if (lower.includes('component') || lower.includes('view') || lower.includes('page') || 
+      lower.includes('ui') || lower.includes('form') || lower.includes('dialog') ||
+      lower.includes('modal') || lower.includes('widget') || lower.includes('panel')) {
+    return 'frontend';
+  }
+  
+  // Database layer
+  if (lower.includes('repository') || lower.includes('dao') || lower.includes('model') ||
+      lower.includes('entity') || lower.includes('schema') || lower.includes('database') ||
+      lower.includes('db') || lower.includes('store') || lower.includes('cache')) {
+    return 'database';
+  }
+  
+  // Integration layer
+  if (lower.includes('gateway') || lower.includes('api') || lower.includes('client') ||
+      lower.includes('adapter') || lower.includes('external') || lower.includes('integration') ||
+      lower.includes('webhook') || lower.includes('connector')) {
+    return 'integration';
+  }
+  
+  // Infrastructure layer
+  if (lower.includes('config') || lower.includes('logger') || lower.includes('util') ||
+      lower.includes('helper') || lower.includes('middleware') || lower.includes('interceptor') ||
+      lower.includes('guard') || lower.includes('pipe')) {
+    return 'infrastructure';
+  }
+  
+  // Default to backend
+  return 'backend';
+}
+
+/**
+ * Build LLD as an architecture diagram (flowchart style like HLD)
+ * Groups components into layers: frontend, backend, database, integration
+ */
 export function buildLLD(context: string, stories: string[], features: string[]): DiagramRoot {
+  const nodes: LldArchNode[] = [];
+  const edges: LldArchEdge[] = [];
   const classes: LldClass[] = [];
   const rels: LldRel[] = [];
   
+  // Always add core infrastructure nodes
+  nodes.push({ id: 'AppModule', label: 'App Module', layer: 'frontend', type: 'component' });
+  nodes.push({ id: 'RouterModule', label: 'Router Module', layer: 'frontend', type: 'component' });
+  nodes.push({ id: 'APIGateway', label: 'API Gateway', layer: 'integration', type: 'gateway' });
+  nodes.push({ id: 'AuthService', label: 'Auth Service', layer: 'backend', type: 'service' });
+  nodes.push({ id: 'ConfigService', label: 'Config Service', layer: 'infrastructure', type: 'service' });
+  nodes.push({ id: 'LoggerService', label: 'Logger Service', layer: 'infrastructure', type: 'service' });
+  
+  // Core edges for infrastructure
+  edges.push({ from: 'AppModule', to: 'RouterModule', label: 'imports' });
+  edges.push({ from: 'RouterModule', to: 'APIGateway', label: 'routes to' });
+  edges.push({ from: 'APIGateway', to: 'AuthService', label: 'authenticates' });
+  
   if (!features || !Array.isArray(features) || features.length === 0) {
-    classes.push({
-      name: 'ApplicationService',
-      members: [
-        { kind: 'method', name: 'initialize', visibility: '+', params: [], returns: 'void' },
-        { kind: 'method', name: 'execute', visibility: '+', params: [], returns: 'void' }
-      ]
-    });
+    // Add default components
+    nodes.push({ id: 'HomeComponent', label: 'Home Component', layer: 'frontend', type: 'component' });
+    nodes.push({ id: 'AppService', label: 'App Service', layer: 'backend', type: 'service' });
+    nodes.push({ id: 'DataRepository', label: 'Data Repository', layer: 'database', type: 'repository' });
+    nodes.push({ id: 'Database', label: 'Database', layer: 'database', type: 'database' });
     
-    return { mode: 'lld', lld: { classes, rels } };
+    edges.push({ from: 'RouterModule', to: 'HomeComponent', label: 'navigates' });
+    edges.push({ from: 'HomeComponent', to: 'AppService', label: 'calls' });
+    edges.push({ from: 'AppService', to: 'DataRepository', label: 'uses' });
+    edges.push({ from: 'DataRepository', to: 'Database', label: 'persists' });
+    
+    return { 
+      mode: 'lld', 
+      lld: { 
+        classes, 
+        rels,
+        arch: { nodes, edges }
+      } 
+    };
   }
   
   const entityToActions = extractEntitiesFromFeatures(features);
@@ -204,7 +275,6 @@ export function buildLLD(context: string, stories: string[], features: string[])
   
   if (allText.trim()) {
     const contextNouns = extractNouns(allText);
-    
     for (const noun of contextNouns.slice(0, 3)) {
       const entityName = capitalizeFirst(noun);
       if (entityName && !entityToActions.has(entityName)) {
@@ -217,54 +287,91 @@ export function buildLLD(context: string, stories: string[], features: string[])
     entityToActions.set('App', ['execute', 'process']);
   }
   
-  for (const [entityName, actions] of entityToActions.entries()) {
+  // Generate architecture components for each entity
+  for (const [entityName] of entityToActions.entries()) {
     if (!entityName) continue;
     
-    const members: LldClassMember[] = [];
+    const baseId = entityName.replace(/\s+/g, '');
     
-    const repoName = `${entityName.toLowerCase()}Repository`;
-    members.push({
-      kind: 'field',
-      name: repoName,
-      type: 'Repository',
-      visibility: '-'
+    // Frontend component
+    const componentId = `${baseId}Component`;
+    nodes.push({ 
+      id: componentId, 
+      label: `${entityName} Component`, 
+      layer: 'frontend', 
+      type: 'component' 
     });
     
-    const uniqueActions = [...new Set(actions)].filter(a => a);
-    
-    if (uniqueActions.length === 0) {
-      uniqueActions.push('execute');
-    }
-    
-    for (const action of uniqueActions.slice(0, 6)) {
-      const methodName = action + entityName;
-      members.push({
-        kind: 'method',
-        name: methodName,
-        visibility: '+',
-        params: [],
-        returns: entityName
-      });
-    }
-    
-    classes.push({
-      name: `${entityName}Service`,
-      members
+    // Backend service
+    const serviceId = `${baseId}Service`;
+    nodes.push({ 
+      id: serviceId, 
+      label: `${entityName} Service`, 
+      layer: 'backend', 
+      type: 'service' 
     });
+    
+    // Backend controller
+    const controllerId = `${baseId}Controller`;
+    nodes.push({ 
+      id: controllerId, 
+      label: `${entityName} Controller`, 
+      layer: 'backend', 
+      type: 'controller' 
+    });
+    
+    // Repository
+    const repoId = `${baseId}Repository`;
+    nodes.push({ 
+      id: repoId, 
+      label: `${entityName} Repository`, 
+      layer: 'database', 
+      type: 'repository' 
+    });
+    
+    // Edges for this entity's architecture
+    edges.push({ from: 'RouterModule', to: componentId, label: 'routes' });
+    edges.push({ from: componentId, to: serviceId, label: 'injects' });
+    edges.push({ from: 'APIGateway', to: controllerId, label: 'routes' });
+    edges.push({ from: controllerId, to: serviceId, label: 'delegates' });
+    edges.push({ from: serviceId, to: repoId, label: 'uses' });
   }
   
-  if (classes.length > 1) {
-    const maxRels = Math.min(classes.length - 1, 3);
-    for (let i = 1; i <= maxRels; i++) {
-      rels.push({
-        from: classes[0].name,
-        to: classes[i].name,
-        type: 'assoc'
-      });
+  // Add shared database node
+  nodes.push({ id: 'Database', label: 'Database', layer: 'database', type: 'database' });
+  nodes.push({ id: 'CacheService', label: 'Cache Service', layer: 'database', type: 'cache' });
+  
+  // Connect all repositories to database
+  for (const node of nodes) {
+    if (node.type === 'repository') {
+      edges.push({ from: node.id, to: 'Database', label: 'persists' });
+      edges.push({ from: node.id, to: 'CacheService', label: 'caches' });
     }
   }
   
-  return { mode: 'lld', lld: { classes, rels } };
+  // Add external integrations based on context
+  const lowerContext = allText.toLowerCase();
+  if (lowerContext.includes('payment') || lowerContext.includes('stripe') || lowerContext.includes('paypal')) {
+    nodes.push({ id: 'PaymentGateway', label: 'Payment Gateway', layer: 'integration', type: 'gateway' });
+    edges.push({ from: 'APIGateway', to: 'PaymentGateway', label: 'processes' });
+  }
+  if (lowerContext.includes('email') || lowerContext.includes('notification') || lowerContext.includes('mail')) {
+    nodes.push({ id: 'NotificationService', label: 'Notification Service', layer: 'integration', type: 'service' });
+    edges.push({ from: 'APIGateway', to: 'NotificationService', label: 'sends' });
+  }
+  if (lowerContext.includes('storage') || lowerContext.includes('file') || lowerContext.includes('upload') || lowerContext.includes('image')) {
+    nodes.push({ id: 'StorageService', label: 'Cloud Storage', layer: 'integration', type: 'service' });
+    edges.push({ from: 'APIGateway', to: 'StorageService', label: 'stores' });
+  }
+  
+  return { 
+    mode: 'lld', 
+    lld: { 
+      classes, 
+      rels,
+      arch: { nodes: dedupeArray(nodes, n => n.id), edges: dedupeArray(edges, e => `${e.from}_${e.to}`) }
+    } 
+  };
 }
 
 // ==================== DBD LOGIC ====================
@@ -291,7 +398,8 @@ function inferFieldsForEntity(entityName: string, context: string): DbdEntityFie
   const fields: DbdEntityField[] = [];
   const lower = (entityName || '').toLowerCase();
   
-  fields.push({ name: 'id', type: 'uuid' });
+  // Primary key field
+  fields.push({ name: 'id', type: 'uuid', constraint: 'PK' });
   
   const commonFields = [
     { keywords: ['user', 'customer', 'client', 'person', 'member'], fields: ['name', 'email', 'phone', 'status'] },
@@ -310,7 +418,8 @@ function inferFieldsForEntity(entityName: string, context: string): DbdEntityFie
       if (lower.includes(keyword)) {
         for (const field of pattern.fields) {
           if (!fields.find(f => f.name === field)) {
-            fields.push({ name: field, type: inferFieldType(field) });
+            const constraint = inferFieldConstraint(field);
+            fields.push({ name: field, type: inferFieldType(field), ...(constraint && { constraint }) });
           }
         }
         matched = true;
@@ -334,6 +443,18 @@ function inferFieldsForEntity(entityName: string, context: string): DbdEntityFie
   );
   
   return fields.slice(0, 8);
+}
+
+/**
+ * Infer field constraint based on naming conventions
+ */
+function inferFieldConstraint(fieldName: string): string | undefined {
+  if (!fieldName || typeof fieldName !== 'string') return undefined;
+  
+  const lower = fieldName.toLowerCase();
+  if (lower === 'id') return 'PK';
+  if (lower.endsWith('_id')) return 'FK';
+  return undefined;
 }
 
 function inferFieldType(fieldName: string): DbdEntityField['type'] {
@@ -435,7 +556,7 @@ export function buildDBD(context: string, stories: string[], features: string[])
     const defaultEntity: DbdEntity = {
       name: 'APPLICATION_DATA',
       fields: [
-        { name: 'id', type: 'uuid' },
+        { name: 'id', type: 'uuid', constraint: 'PK' },
         { name: 'name', type: 'varchar' },
         { name: 'value', type: 'text' },
         { name: 'created_at', type: 'datetime' }
@@ -453,7 +574,7 @@ export function buildDBD(context: string, stories: string[], features: string[])
     const defaultEntity: DbdEntity = {
       name: 'DATA',
       fields: [
-        { name: 'id', type: 'uuid' },
+        { name: 'id', type: 'uuid', constraint: 'PK' },
         { name: 'value', type: 'varchar' },
         { name: 'created_at', type: 'datetime' }
       ]

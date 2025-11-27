@@ -1,0 +1,172 @@
+%% ============================================
+%% AutoAgents - Agent Pipeline for Database Design
+%% Shows flow: User Prompt → Agent-1 → Agent-2 → Agent-3 (DBD)
+%% ============================================
+
+graph TD
+    %% ============================================
+    %% User Input Stage
+    %% ============================================
+    subgraph UserInput["📝 USER INPUT"]
+        UserPrompt[/"User Prompt:
+        'Build an e-commerce
+        platform with catalog,
+        cart, and checkout'"/]
+        ProjectTitle[/"Project Title:
+        'E-Commerce Platform'"/]
+    end
+
+    %% ============================================
+    %% Agent-1: Feature Generation
+    %% ============================================
+    subgraph Agent1Stage["🤖 AGENT-1: Product Strategist"]
+        A1Process{{"Analyze Prompt
+        Extract Features"}}
+        
+        subgraph Features["Generated Features (8-12)"]
+            F1["1. Product Catalog"]
+            F2["2. Shopping Cart"]
+            F3["3. Checkout/Payment"]
+            F4["4. User Accounts"]
+            F5["5. Order Management"]
+            F6["6. Inventory"]
+            F7["7. Reviews/Ratings"]
+            F8["8. Search/Filter"]
+        end
+    end
+
+    %% ============================================
+    %% Agent-2: Story Generation
+    %% ============================================
+    subgraph Agent2Stage["🤖 AGENT-2: Product Owner"]
+        A2Process{{"Generate Stories
+        2-3 per Feature"}}
+        
+        subgraph Stories["Generated User Stories"]
+            S1["As a customer, I want to
+            browse products..."]
+            S2["As a customer, I want to
+            add items to cart..."]
+            S3["As a customer, I want to
+            complete checkout..."]
+            S4["As an admin, I want to
+            manage inventory..."]
+        end
+    end
+
+    %% ============================================
+    %% Agent-3: Database Design (Table Format)
+    %% ============================================
+    subgraph Agent3Stage["🤖 AGENT-3: Software Architect"]
+        A3Process{{"Analyze Features
+        + Stories
+        Design Schema"}}
+        
+        subgraph DBDesign["📊 DATABASE DESIGN (Table Format)"]
+            subgraph Tables["Extracted Entities"]
+                T1[["USER
+                ─────────
+                id: UUID PK
+                email: VARCHAR UK
+                password: VARCHAR
+                name: VARCHAR"]]
+                
+                T2[["PRODUCT
+                ─────────
+                id: UUID PK
+                category_id: FK
+                name: VARCHAR
+                price: DECIMAL
+                stock: INTEGER"]]
+                
+                T3[["ORDER
+                ─────────
+                id: UUID PK
+                user_id: FK
+                status: ENUM
+                total: DECIMAL"]]
+                
+                T4[["ORDER_ITEM
+                ─────────
+                id: UUID PK
+                order_id: FK
+                product_id: FK
+                quantity: INT"]]
+                
+                T5[["CART
+                ─────────
+                id: UUID PK
+                user_id: FK
+                created_at: TIME"]]
+                
+                T6[["CATEGORY
+                ─────────
+                id: UUID PK
+                name: VARCHAR
+                parent_id: FK"]]
+            end
+            
+            subgraph Relations["Relationships"]
+                R1["USER 1:N ORDER"]
+                R2["USER 1:1 CART"]
+                R3["ORDER 1:N ORDER_ITEM"]
+                R4["PRODUCT 1:N ORDER_ITEM"]
+                R5["CATEGORY 1:N PRODUCT"]
+            end
+        end
+    end
+
+    %% ============================================
+    %% Storage
+    %% ============================================
+    subgraph Storage["💾 MongoDB Storage"]
+        ProjectsDB[(PROJECTS)]
+        FeaturesDB[(FEATURES)]
+        StoriesDB[(STORIES)]
+        DesignsDB[(DESIGNS)]
+    end
+
+    %% ============================================
+    %% Connections
+    %% ============================================
+    UserPrompt --> A1Process
+    ProjectTitle --> A1Process
+    A1Process --> Features
+    
+    Features --> A2Process
+    UserPrompt -.->|Context| A2Process
+    A2Process --> Stories
+    
+    Features --> A3Process
+    Stories --> A3Process
+    UserPrompt -.->|Context| A3Process
+    A3Process --> DBDesign
+    
+    %% Storage connections
+    UserPrompt -.-> ProjectsDB
+    Features -.-> FeaturesDB
+    Stories -.-> StoriesDB
+    DBDesign -.-> DesignsDB
+
+    %% ============================================
+    %% Styling
+    %% ============================================
+    classDef userInput fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+    classDef agent1 fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#e65100
+    classDef agent2 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
+    classDef agent3 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef feature fill:#ffecb3,stroke:#ff8f00,stroke-width:1px,color:#e65100
+    classDef story fill:#c8e6c9,stroke:#43a047,stroke-width:1px,color:#1b5e20
+    classDef table fill:#e1bee7,stroke:#8e24aa,stroke-width:1px,color:#4a148c
+    classDef relation fill:#d1c4e9,stroke:#5e35b1,stroke-width:1px,color:#311b92
+    classDef database fill:#ffcdd2,stroke:#e53935,stroke-width:2px,color:#b71c1c
+    classDef process fill:#fff,stroke:#333,stroke-width:2px,color:#333
+
+    class UserPrompt,ProjectTitle userInput
+    class A1Process,A2Process,A3Process process
+    class F1,F2,F3,F4,F5,F6,F7,F8 feature
+    class S1,S2,S3,S4 story
+    class T1,T2,T3,T4,T5,T6 table
+    class R1,R2,R3,R4,R5 relation
+    class ProjectsDB,FeaturesDB,StoriesDB,DesignsDB database
+

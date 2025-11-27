@@ -35,6 +35,49 @@ This HTML file shows all three diagrams with interactive tabs.
 
 ---
 
+## 🏗️ AutoAgents System Design Diagrams (NEW)
+
+### AutoAgents HLD
+**File:** [`autoagents_hld.mermaid`](autoagents_hld.mermaid)  
+**Type:** Flowchart (graph TD)  
+**Purpose:** Complete AutoAgents system architecture  
+**Components:** User → Browser → Angular Frontend → FastAPI Backend → AI Agents → MongoDB → Claude AI
+
+### AutoAgents LLD
+**File:** [`autoagents_lld.mermaid`](autoagents_lld.mermaid)  
+**Type:** Class Diagram  
+**Purpose:** Detailed service/class interactions with methods  
+**Components:** Agent1Service, Agent2Service, Agent3Service, ClaudeClient, FastAPI Routers, Angular Services
+
+### AutoAgents DBD
+**File:** [`autoagents_dbd.mermaid`](autoagents_dbd.mermaid)  
+**Type:** ER Diagram  
+**Purpose:** MongoDB collections schema and relationships  
+**Entities:** USERS, PROJECTS, FEATURES, STORIES, DESIGNS, FEEDBACK, SESSIONS, AUDIT_LOG
+
+---
+
+## 📋 Database Architecture (Table Format)
+
+### Agent Pipeline Flow
+**File:** [`agent_pipeline_dbd.mermaid`](agent_pipeline_dbd.mermaid)  
+**Type:** Flowchart  
+**Purpose:** Shows data flow from User Prompt → Agent-1 → Agent-2 → Agent-3 (Database Tables)  
+**Output:** Visual representation of how agents transform input into database schema
+
+### Complete Database Architecture
+**File:** [`DATABASE_ARCHITECTURE.md`](DATABASE_ARCHITECTURE.md)  
+**Type:** Markdown Documentation  
+**Purpose:** Comprehensive database design with table-formatted schemas  
+**Contents:**
+- Agent pipeline data flow diagram
+- All MongoDB collections with field definitions
+- Example e-commerce database tables (USER, PRODUCT, ORDER, etc.)
+- Relationship mappings
+- Data type references
+
+---
+
 ## 📚 Documentation
 
 ### Usage Guide
@@ -137,16 +180,24 @@ Common issues **already fixed**:
 
 ```
 autoagents-backend/app/data/
-├── hld_diagram.mermaid          ← High-Level Design
-├── lld_diagram.mermaid          ← Low-Level Design
-├── dbd_diagram.mermaid          ← Database Design
-├── visualization.mermaid        ← Example (fixed)
-├── mermaid_preview.html         ← Interactive preview ⭐
-├── DIAGRAMS_README.md           ← Usage guide
-└── DIAGRAM_INDEX.md             ← This file
+├── hld_diagram.mermaid           ← High-Level Design
+├── lld_diagram.mermaid           ← Low-Level Design
+├── dbd_diagram.mermaid           ← Database Design
+├── visualization.mermaid         ← Example (fixed)
+├── mermaid_preview.html          ← Interactive preview ⭐
+├── DIAGRAMS_README.md            ← Usage guide
+├── DIAGRAM_INDEX.md              ← This file
+│
+├── autoagents_hld.mermaid        ← 🆕 AutoAgents System HLD
+├── autoagents_lld.mermaid        ← 🆕 AutoAgents System LLD
+├── autoagents_dbd.mermaid        ← 🆕 AutoAgents System DBD
+├── autoagents_preview.html       ← 🆕 AutoAgents Diagrams Preview ⭐
+│
+├── agent_pipeline_dbd.mermaid    ← 🆕 Agent Pipeline Flow Diagram
+└── DATABASE_ARCHITECTURE.md      ← 🆕 Table-Formatted DB Schema ⭐
 
 Project Root:
-├── ARCHITECTURE_DIAGRAMS.md     ← Complete documentation
+├── ARCHITECTURE_DIAGRAMS.md      ← Complete documentation
 ├── DIAGRAM_VALIDATION_SUMMARY.md ← Testing report
 └── DIAGRAM_SOLUTION_SUMMARY.md   ← Solution overview
 ```
@@ -172,7 +223,7 @@ Project Root:
 
 ---
 
-**Last Updated:** 2025-11-22  
+**Last Updated:** 2025-11-25  
 **Status:** ✅ Production Ready  
 **Issues:** None
 

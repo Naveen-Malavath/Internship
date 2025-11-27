@@ -145,6 +145,16 @@ export class MermaidFixerService {
         continue;
       }
       
+      // FIX: Remove invalid ::: syntax in classDiagram style assignments
+      // The ::: syntax is ONLY valid in flowcharts, NOT in classDiagrams
+      // Pattern: "class ClassName:::styleDefName" should be "class ClassName styleDefName"
+      if (/^\s*class\s+\w+:::\w+\s*$/.test(trimmed)) {
+        const fixed = trimmed.replace(/(\s*class\s+\w+):::(\w+\s*)$/, '$1 $2');
+        result.push(fixed);
+        console.log('[MermaidFixer] Fixed invalid ::: syntax in classDiagram:', trimmed, '->', fixed);
+        continue;
+      }
+      
       // Track class blocks
       if (/^class\s+\w+\s*\{/.test(trimmed)) {
         inClass = true;

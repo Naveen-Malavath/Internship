@@ -1178,28 +1178,49 @@ export class App implements OnInit, OnDestroy, AfterViewInit {
           
           let mermaidContent = '';
           
-          // ALWAYS use backend-generated diagram first (from Agent3 AI)
+          // Backend-generated diagram from Agent3 AI
           const backendDiagram = response.diagrams?.mermaid ?? '';
           
-          if (backendDiagram && backendDiagram.trim()) {
-            // Use AI-generated diagram from backend
+          // For LLD, always use our flowchart-style architecture builder (same style as HLD)
+          // For HLD and DBD, use backend-generated diagrams
+          if (diagramType === 'lld') {
+            // Use local flowchart-style LLD builder for architecture diagram
+            console.debug(`[app] Using flowchart-style LLD architecture builder`);
+            const context = this.lastPrompt();
+            const storyTexts = stories.map(s => s.userStory || '');
+            const featureTitles = features.map(f => f.title || '');
+            
+            const root = buildLLD(context, storyTexts, featureTitles);
+            mermaidContent = emitLLD(root);
+            
+            const clean = normalizeMermaid(stripBomAndZwsp(mermaidContent));
+            const validation = validateWithMermaid(clean);
+            
+            if (!validation.ok) {
+              console.debug(`[app] LLD architecture diagram failed validation: ${validation.message}, falling back to backend`);
+              // Fallback to backend diagram if validation fails
+              if (backendDiagram && backendDiagram.trim()) {
+                mermaidContent = backendDiagram;
+              } else {
+                mermaidContent = '';
+              }
+            } else {
+              mermaidContent = clean;
+              console.debug(`[app] LLD architecture diagram validated successfully`);
+            }
+          } else if (backendDiagram && backendDiagram.trim()) {
+            // Use AI-generated diagram from backend for HLD and DBD
             console.debug(`[app] Using AI-generated ${diagramType.toUpperCase()} diagram from backend | length=${backendDiagram.length}`);
             mermaidContent = backendDiagram;
-          } else if (diagramType === 'lld' || diagramType === 'database') {
+          } else if (diagramType === 'database') {
             // Fallback to local AST builders only if backend returns empty
             console.warn(`[app] Backend returned empty ${diagramType.toUpperCase()}, using fallback AST builder`);
             const context = this.lastPrompt();
             const storyTexts = stories.map(s => s.userStory || '');
             const featureTitles = features.map(f => f.title || '');
             
-            let root;
-            if (diagramType === 'lld') {
-              root = buildLLD(context, storyTexts, featureTitles);
-              mermaidContent = emitLLD(root);
-            } else {
-              root = buildDBD(context, storyTexts, featureTitles);
-              mermaidContent = emitDBD(root);
-            }
+            const root = buildDBD(context, storyTexts, featureTitles);
+            mermaidContent = emitDBD(root);
             
             const clean = normalizeMermaid(stripBomAndZwsp(mermaidContent));
             const validation = validateWithMermaid(clean);

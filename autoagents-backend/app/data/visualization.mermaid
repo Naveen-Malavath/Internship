@@ -1,448 +1,127 @@
 classDiagram
-    class AnalyticsController {
-    -analyticsService
-    +getDashboardData(tenantId: String)
-    +generateReport(reportRequest: ReportRequest)
-    +getRealtimeMetrics(filters: Map)
-    +scheduleReport(schedule: ReportSchedule)
-    +exportReport(reportId: String, format: String)
-    }
+    %% Controller Layer
+    class ProductController
+    ProductController : -productService ProductService
+    ProductController : +getAll() List
+    ProductController : +getById(id) Product
+    ProductController : +create(dto) Product
+    ProductController : +update(id dto) Product
+    ProductController : +delete(id) void
 
-    class PersonalizationController {
-    -personalizationService
-    +getRecommendations(customerId: String, context: Map)
-    +updatePreferences(customerId: String, preferences: CustomerPreferences)
-    +getPersonalizedPricing(customerId: String, productId: String)
-    +trackBehavior(behaviorEvent: BehaviorEvent)
-    +getPersonalizedContent(customerId: String, channel: String)
-    }
+    class CustomerController
+    CustomerController : -customerService CustomerService
+    CustomerController : +getAll() List
+    CustomerController : +getById(id) Customer
+    CustomerController : +create(dto) Customer
+    CustomerController : +update(id dto) Customer
+    CustomerController : +delete(id) void
 
-    class SecurityController {
-    -securityService
-    +validateCompliance(request: ComplianceRequest)
-    +detectFraud(transaction: Transaction)
-    +encryptData(data: String, keyId: String)
-    +auditAccess(accessEvent: AccessEvent)
-    +validatePCIDSS(merchantData: MerchantData)
-    }
+    %% Service Layer
+    class ProductService
+    ProductService : -productRepo ProductRepository
+    ProductService : -validator Validator
+    ProductService : -logger Logger
+    ProductService : +findAll() List
+    ProductService : +findById(id) Product
+    ProductService : +create(data) Product
+    ProductService : +update(id data) Product
+    ProductService : +delete(id) boolean
+    ProductService : +validate(data) boolean
 
-    class CatalogController {
-    -catalogService
-    +createProduct(product: Product)
-    +updateProduct(productId: String, updates: ProductUpdate)
-    +getProduct(productId: String)
-    +searchProducts(criteria: SearchCriteria)
-    +manageVariants(productId: String, variants: List~ProductVariant~)
-    +createBundle(bundle: ProductBundle)
-    }
+    class CustomerService
+    CustomerService : -customerRepo CustomerRepository
+    CustomerService : -validator Validator
+    CustomerService : -logger Logger
+    CustomerService : +findAll() List
+    CustomerService : +findById(id) Customer
+    CustomerService : +create(data) Customer
+    CustomerService : +update(id data) Customer
+    CustomerService : +delete(id) boolean
+    CustomerService : +validate(data) boolean
 
-    class LoyaltyController {
-    -loyaltyService
-    +enrollCustomer(customerId: String, programId: String)
-    +earnPoints(customerId: String, transaction: Transaction)
-    +redeemRewards(customerId: String, redemption: RewardRedemption)
-    +getTierStatus(customerId: String)
-    +getRewardHistory(customerId: String)
-    }
+    %% Repository Layer
+    class ProductRepository
+    ProductRepository : -database Database
+    ProductRepository : -collection string
+    ProductRepository : +save(entity) Product
+    ProductRepository : +findById(id) Product
+    ProductRepository : +findAll() List
+    ProductRepository : +update(id entity) Product
+    ProductRepository : +deleteById(id) boolean
+    ProductRepository : +exists(id) boolean
 
-    class ApiGatewayController {
-    -gatewayService
-    +routeRequest(request: ApiRequest)
-    +authenticateClient(credentials: ClientCredentials)
-    +rateLimit(clientId: String, endpoint: String)
-    +transformRequest(request: ApiRequest, mapping: TransformationMapping)
-    +aggregateResponses(requests: List~ApiRequest~)
-    }
+    class CustomerRepository
+    CustomerRepository : -database Database
+    CustomerRepository : -collection string
+    CustomerRepository : +save(entity) Customer
+    CustomerRepository : +findById(id) Customer
+    CustomerRepository : +findAll() List
+    CustomerRepository : +update(id entity) Customer
+    CustomerRepository : +deleteById(id) boolean
+    CustomerRepository : +exists(id) boolean
 
-    class OrderController {
-    -orderService
-    +createOrder(order: Order)
-    +updateOrderStatus(orderId: String, status: OrderStatus)
-    +getOrder(orderId: String)
-    +processReturn(returnRequest: ReturnRequest)
-    +splitShipment(orderId: String, splitConfig: ShipmentSplit)
-    +cancelOrder(orderId: String, reason: String)
-    }
+    %% Model/Entity Layer
+    class Product
+    Product : -id string
+    Product : -name string
+    Product : -description string
+    Product : -status string
+    Product : -isActive boolean
+    Product : -createdAt DateTime
+    Product : -updatedAt DateTime
+    Product : +toJSON() object
+    Product : +validate() boolean
 
-    class AdminController {
-    -adminService
-    +getTenantDashboard(tenantId: String)
-    +manageTenantConfig(tenantId: String, config: TenantConfig)
-    +getUserPermissions(userId: String, tenantId: String)
-    +auditTenantActivity(tenantId: String, filters: AuditFilters)
-    +generateComplianceReport(tenantId: String)
-    }
+    class Customer
+    Customer : -id string
+    Customer : -name string
+    Customer : -description string
+    Customer : -status string
+    Customer : -isActive boolean
+    Customer : -createdAt DateTime
+    Customer : -updatedAt DateTime
+    Customer : +toJSON() object
+    Customer : +validate() boolean
 
-    class InventoryController {
-    -inventoryService
-    +getInventoryLevel(sku: String, locationId: String)
-    +reserveInventory(reservation: InventoryReservation)
-    +updateStock(stockUpdate: StockUpdate)
-    +syncInventory(syncRequest: InventorySyncRequest)
-    +optimizeAllocation(allocationRequest: AllocationRequest)
-    }
+    %% DTO Layer
+    class ProductDTO
+    ProductDTO : +name string
+    ProductDTO : +description string
+    ProductDTO : +status string
 
-    class PerformanceController {
-    -performanceService
-    +getMetrics(timeRange: TimeRange)
-    +optimizeQuery(query: DatabaseQuery)
-    +manageCacheStrategy(cacheConfig: CacheConfiguration)
-    +monitorCDN(cdnConfig: CDNConfiguration)
-    +alertOnThreshold(threshold: PerformanceThreshold)
-    }
+    class CustomerDTO
+    CustomerDTO : +name string
+    CustomerDTO : +description string
+    CustomerDTO : +status string
 
-    class IntegrationController {
-    -integrationService
-    +registerConnector(connector: IntegrationConnector)
-    +executeIntegration(integrationId: String, payload: Map)
-    +getConnectorStatus(connectorId: String)
-    +transformData(data: Map, mapping: DataMapping)
-    +validateIntegration(integrationConfig: IntegrationConfig)
-    }
+    %% Shared Components
+    class Database
+    Database : -connectionString string
+    Database : +connect() void
+    Database : +disconnect() void
+    Database : +getCollection(name) Collection
 
-    class AnalyticsService {
-    -analyticsRepository
-    -dataAggregator
-    -reportGenerator
-    +aggregateCommerceData(sources: List~DataSource~)
-    +generateInsights(data: AggregatedData)
-    +createDashboard(config: DashboardConfig)
-    +scheduleReports(schedule: ReportSchedule)
-    +processRealTimeData(stream: DataStream)
-    }
+    class Validator
+    Validator : +validate(data schema) boolean
+    Validator : +sanitize(data) object
 
-    class PersonalizationService {
-    -mlEngine
-    -behaviorRepository
-    -recommendationEngine
-    +analyzeCustomerBehavior(customerId: String)
-    +generateRecommendations(profile: BehaviorProfile, context: Map)
-    +updateMLModel(trainingData: TrainingData)
-    +personalizeContent(customerId: String, content: Content)
-    +calculatePersonalizedPricing(customerId: String, product: Product)
-    }
+    class Logger
+    Logger : +info(msg) void
+    Logger : +error(msg) void
+    Logger : +debug(msg) void
 
-    class SecurityService {
-    -encryptionManager
-    -fraudDetector
-    -complianceValidator
-    +validatePCICompliance(data: PaymentData)
-    +enforceGDPRRules(request: DataRequest)
-    +detectFraudulentActivity(transaction: Transaction)
-    +encryptSensitiveData(data: SensitiveData)
-    +auditSecurityEvents(events: List~SecurityEvent~)
-    }
-
-    class CatalogService {
-    -catalogRepository
-    -searchEngine
-    -hierarchyManager
-    +manageProductHierarchy(hierarchy: ProductHierarchy)
-    +processProductVariants(variants: List~ProductVariant~)
-    +createProductBundles(bundle: ProductBundle)
-    +indexProductsForSearch(products: List~Product~)
-    +validateProductData(product: Product)
-    }
-
-    class LoyaltyService {
-    -loyaltyRepository
-    -rewardEngine
-    -tierManager
-    +calculatePointsEarned(transaction: Transaction, rules: List~RewardRule~)
-    +processRewardRedemption(redemption: RewardRedemption)
-    +updateCustomerTier(customerId: String, activity: CustomerActivity)
-    +validateRewardRules(rules: List~RewardRule~)
-    +trackCustomerEngagement(customerId: String, interaction: Interaction)
-    }
-
-    class ApiGatewayService {
-    -routingEngine
-    -authenticationManager
-    -rateLimiter
-    +routeToMicroservice(request: ApiRequest)
-    +authenticateRequest(request: ApiRequest)
-    +applyRateLimit(clientId: String, endpoint: String)
-    +transformApiRequest(request: ApiRequest, mapping: ApiMapping)
-    +aggregateServiceResponses(responses: List~ServiceResponse~)
-    }
-
-    class OrderService {
-    -orderRepository
-    -fulfillmentOrchestrator
-    -paymentProcessor
-    +orchestrateOrderFulfillment(order: Order)
-    +processOrderPayment(order: Order, payment: PaymentMethod)
-    +handleOrderModification(orderId: String, modification: OrderModification)
-    +manageOrderLifecycle(orderId: String, event: OrderEvent)
-    +processReturnExchange(returnRequest: ReturnRequest)
-    }
-
-    class AdminService {
-    -tenantRepository
-    -permissionManager
-    -auditLogger
-    +manageTenantConfiguration(tenantId: String, config: TenantConfig)
-    +enforcePermissions(userId: String, action: String, resource: String)
-    +generateTenantReports(tenantId: String, reportType: String)
-    +auditTenantOperations(tenantId: String, operations: List~Operation~)
-    +validateComplianceRules(tenantId: String, rules: List~ComplianceRule~)
-    }
-
-    class InventoryService {
-    -inventoryRepository
-    -allocationEngine
-    -syncManager
-    +synchronizeInventoryLevels(sources: List~InventorySource~)
-    +optimizeInventoryAllocation(demand: DemandForecast)
-    +preventOverselling(reservation: InventoryReservation)
-    +routeFulfillment(order: Order, inventory: InventorySnapshot)
-    +updateInventoryLevels(updates: List~InventoryUpdate~)
-    }
-
-    class PerformanceService {
-    -metricsCollector
-    -cacheManager
-    -queryOptimizer
-    +monitorSystemPerformance(components: List~SystemComponent~)
-    +optimizeDatabaseQueries(queries: List~DatabaseQuery~)
-    +manageCachingStrategy(strategy: CachingStrategy)
-    +integrateCDN(cdnConfig: CDNConfiguration)
-    +alertOnPerformanceIssues(thresholds: List~PerformanceThreshold~)
-    }
-
-    class IntegrationService {
-    -connectorRegistry
-    -dataTransformer
-    -integrationOrchestrator
-    +manageThirdPartyConnections(connections: List~ThirdPartyConnection~)
-    +orchestrateDataFlow(flow: DataFlow)
-    +transformIntegrationData(data: Map, schema: DataSchema)
-    +validateIntegrationHealth(integrationId: String)
-    +executeIntegrationWorkflow(workflow: IntegrationWorkflow)
-    }
-
-    class AnalyticsRepository {
-    +saveMetrics(metrics: List~Metric~)
-    +findMetricsByTimeRange(start: DateTime, end: DateTime)
-    +aggregateData(aggregation: AggregationQuery)
-    +saveReport(report: Report)
-    +findReportById(reportId: String)
-    }
-
-    class BehaviorRepository {
-    +saveBehaviorEvent(event: BehaviorEvent)
-    +findBehaviorByCustomer(customerId: String)
-    +findBehaviorByTimeRange(customerId: String, start: DateTime, end: DateTime)
-    +updateCustomerProfile(customerId: String, profile: BehaviorProfile)
-    +findSimilarCustomers(profile: BehaviorProfile)
-    }
-
-    class CatalogRepository {
-    +saveProduct(product: Product)
-    +findProductById(productId: String)
-    +findProductsByCategory(categoryId: String)
-    +updateProduct(productId: String, updates: ProductUpdate)
-    +deleteProduct(productId: String)
-    +findProductVariants(productId: String)
-    }
-
-    class LoyaltyRepository {
-    +saveLoyaltyMember(member: LoyaltyMember)
-    +findMemberByCustomerId(customerId: String)
-    +saveRewardTransaction(transaction: RewardTransaction)
-    +findRewardHistory(customerId: String)
-    +updateMemberTier(customerId: String, tier: LoyaltyTier)
-    }
-
-    class OrderRepository {
-    +saveOrder(order: Order)
-    +findOrderById(orderId: String)
-    +findOrdersByCustomer(customerId: String)
-    +updateOrderStatus(orderId: String, status: OrderStatus)
-    +findOrdersByStatus(status: OrderStatus)
-    +saveShipment(shipment: Shipment)
-    }
-
-    class TenantRepository {
-    +saveTenant(tenant: Tenant)
-    +findTenantById(tenantId: String)
-    +findAllTenants()
-    +updateTenantConfig(tenantId: String, config: TenantConfig)
-    +deleteTenant(tenantId: String)
-    }
-
-    class InventoryRepository {
-    +saveInventoryLevel(level: InventoryLevel)
-    +findInventoryBySKU(sku: String)
-    +findInventoryByLocation(locationId: String)
-    +updateInventoryLevel(sku: String, locationId: String, quantity: Integer)
-    +reserveInventory(reservation: InventoryReservation)
-    }
-
-    class Customer {
-    -customerId
-    -email
-    -firstName
-    -lastName
-    -dateOfBirth
-    -preferences
-    -createdAt
-    -updatedAt
-    }
-
-    class Product {
-    -productId
-    -name
-    -description
-    -category
-    -price
-    -attributes
-    -variants
-    -createdAt
-    -updatedAt
-    }
-
-    class Order {
-    -orderId
-    -customerId
-    -items
-    -totalAmount
-    -status
-    -shippingAddress
-    -billingAddress
-    -createdAt
-    -updatedAt
-    }
-
-    class LoyaltyMember {
-    -memberId
-    -customerId
-    -programId
-    -points
-    -tier
-    -joinDate
-    -lastActivity
-    }
-
-    class Tenant {
-    -tenantId
-    -name
-    -domain
-    -configuration
-    -status
-    -createdAt
-    -updatedAt
-    }
-
-    class InventoryLevel {
-    -sku
-    -locationId
-    -availableQuantity
-    -reservedQuantity
-    -totalQuantity
-    -lastUpdated
-    }
-
-    class BehaviorEvent {
-    -eventId
-    -customerId
-    -eventType
-    -eventData
-    -timestamp
-    -sessionId
-    -channel
-    }
-
-    class Report {
-    -reportId
-    -name
-    -type
-    -data
-    -generatedAt
-    -parameters
-    }
-
-    class Transaction {
-    -transactionId
-    -customerId
-    -amount
-    -currency
-    -paymentMethod
-    -status
-    -timestamp
-    }
-
-    AnalyticsController --> AnalyticsService
-    PersonalizationController --> PersonalizationService
-    SecurityController --> SecurityService
-    CatalogController --> CatalogService
-    LoyaltyController --> LoyaltyService
-    ApiGatewayController --> ApiGatewayService
-    OrderController --> OrderService
-    AdminController --> AdminService
-    InventoryController --> InventoryService
-    PerformanceController --> PerformanceService
-    IntegrationController --> IntegrationService
-
-    AnalyticsService --> AnalyticsRepository
-    PersonalizationService --> BehaviorRepository
-    CatalogService --> CatalogRepository
-    LoyaltyService --> LoyaltyRepository
-    OrderService --> OrderRepository
-    AdminService --> TenantRepository
-    InventoryService --> InventoryRepository
-
-    AnalyticsRepository --> Report
-    BehaviorRepository --> BehaviorEvent
-    CatalogRepository --> Product
-    LoyaltyRepository --> LoyaltyMember
-    OrderRepository --> Order
-    TenantRepository --> Tenant
-    InventoryRepository --> InventoryLevel
-
-    PersonalizationService --> Customer
-    OrderService --> Customer
-    LoyaltyService --> Customer
-    SecurityService --> Transaction
-
-    class AnalyticsController:::controllerClass
-    class PersonalizationController:::controllerClass
-    class SecurityController:::controllerClass
-    class CatalogController:::controllerClass
-    class LoyaltyController:::controllerClass
-    class ApiGatewayController:::controllerClass
-    class OrderController:::controllerClass
-    class AdminController:::controllerClass
-    class InventoryController:::controllerClass
-    class PerformanceController:::controllerClass
-    class IntegrationController:::controllerClass
-
-    class AnalyticsService:::serviceClass
-    class PersonalizationService:::serviceClass
-    class SecurityService:::serviceClass
-    class CatalogService:::serviceClass
-    class LoyaltyService:::serviceClass
-    class ApiGatewayService:::serviceClass
-    class OrderService:::serviceClass
-    class AdminService:::serviceClass
-    class InventoryService:::serviceClass
-    class PerformanceService:::serviceClass
-    class IntegrationService:::serviceClass
-
-    class AnalyticsRepository:::repoClass
-    class BehaviorRepository:::repoClass
-    class CatalogRepository:::repoClass
-    class LoyaltyRepository:::repoClass
-    class OrderRepository:::repoClass
-    class TenantRepository:::repoClass
-    class InventoryRepository:::repoClass
-
-    class Customer:::modelClass
-    class Product:::modelClass
-    class Order:::modelClass
-    class LoyaltyMember:::modelClass
-    class Tenant:::modelClass
-    class InventoryLevel:::modelClass
-    class BehaviorEvent:::modelClass
-    class Report:::modelClass
-    class Transaction:::modelClass
+    %% Relationships
+    ProductController --> ProductService : uses
+    ProductService --> ProductRepository : uses
+    ProductService --> Validator : uses
+    ProductService --> Logger : uses
+    ProductRepository --> Database : uses
+    ProductRepository --> Product : manages
+    ProductController ..> ProductDTO : receives
+    CustomerController --> CustomerService : uses
+    CustomerService --> CustomerRepository : uses
+    CustomerService --> Validator : uses
+    CustomerService --> Logger : uses
+    CustomerRepository --> Database : uses
+    CustomerRepository --> Customer : manages
+    CustomerController ..> CustomerDTO : receives

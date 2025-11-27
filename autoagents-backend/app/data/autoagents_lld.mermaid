@@ -1,0 +1,275 @@
+%% ============================================
+%% AutoAgents - Low-Level Design (LLD)
+%% AI-Powered Software Development Assistant
+%% ============================================
+%% Diagram Type: Class Diagram
+%% Purpose: Shows detailed class/service interactions,
+%% methods, attributes, and relationships
+%% ============================================
+
+classDiagram
+    direction TB
+
+    %% ============================================
+    %% Backend Services - Agent Layer
+    %% ============================================
+    
+    class Agent1Service {
+        -model: str
+        +generate_features(project_title, project_prompt) List~str~
+        -_generate_mock_features(project_title, project_prompt) List~str~
+    }
+    
+    class Agent2Service {
+        -model: str
+        +generate_stories(features, original_prompt) List~Dict~
+        -_normalize_features(features) List~Dict~
+        -_extract_story_payload(payload) List~Dict~
+        -_match_feature(story, features_by_id, features_by_title) Dict
+        -_ensure_story_coverage(stories, features) List~Dict~
+        -_fallback_story_payload(features) List~Dict~
+        -_coerce_list(value) List~str~
+        -_coerce_dict(value) Dict
+    }
+    
+    class Agent3Service {
+        -model: str
+        +generate_hld(features, stories, project_title, original_prompt) str
+        +generate_lld(features, stories, project_title) str
+        +generate_dbd(features, stories, project_title, original_prompt) str
+        -_extract_entities(features, stories, original_prompt, project_title) List~Dict~
+        -_sanitize_mermaid(code) str
+        -_validate_mermaid(code) bool
+    }
+
+    %% ============================================
+    %% Backend Services - Core Layer
+    %% ============================================
+    
+    class ClaudeClient {
+        <<singleton>>
+        -_client: AsyncAnthropic
+        +get_claude_client() AsyncAnthropic
+        +extract_text(response) str
+        +coerce_json(text) Dict
+    }
+    
+    class MermaidStyleGenerator {
+        +generate_style_config(diagram_type) MermaidStyleConfig
+        +apply_styling(mermaid_code, config) str
+    }
+    
+    class NodeShapeSelector {
+        +select_shape(node_type) str
+        +get_shape_for_component(component) str
+    }
+    
+    class FeedbackChatbotService {
+        -model: str
+        +process_feedback(message, context) str
+        +get_suggestions(diagram_code) List~str~
+    }
+
+    %% ============================================
+    %% Backend - FastAPI Routers
+    %% ============================================
+    
+    class AuthRouter {
+        <<router>>
+        +register(user_data) UserResponse
+        +login(credentials) TokenResponse
+        +get_current_user(token) UserResponse
+    }
+    
+    class ProjectsRouter {
+        <<router>>
+        +create_project(project_data) ProjectResponse
+        +get_projects(user_id) List~ProjectResponse~
+        +get_project(project_id) ProjectResponse
+        +delete_project(project_id) void
+    }
+    
+    class FeaturesRouter {
+        <<router>>
+        +generate_features(project_id) List~FeatureResponse~
+        +get_features(project_id) List~FeatureResponse~
+        +update_feature(feature_id, data) FeatureResponse
+    }
+    
+    class StoriesRouter {
+        <<router>>
+        +generate_stories(project_id) List~StoryResponse~
+        +get_stories(project_id) List~StoryResponse~
+        +get_stories_by_feature(feature_id) List~StoryResponse~
+    }
+    
+    class DiagramsRouter {
+        <<router>>
+        +generate_designs(project_id) DesignResponse
+        +get_designs(project_id) DesignResponse
+        +regenerate_diagram(project_id, diagram_type) DesignResponse
+    }
+    
+    class VisualizerRouter {
+        <<router>>
+        +generate_visualization(payload) VisualizationResponse
+        +preview_mermaid(code) PreviewResponse
+    }
+
+    %% ============================================
+    %% Backend - Pydantic Schemas
+    %% ============================================
+    
+    class UserCreate {
+        <<schema>>
+        +name: str
+        +email: EmailStr
+        +password: str
+    }
+    
+    class ProjectCreate {
+        <<schema>>
+        +user_id: str
+        +title: str
+        +prompt: str
+        +status: str
+    }
+    
+    class FeatureModel {
+        <<schema>>
+        +id: str
+        +project_id: str
+        +feature_text: str
+        +order_index: int
+        +created_at: datetime
+    }
+    
+    class StoryModel {
+        <<schema>>
+        +id: str
+        +feature_id: str
+        +story_text: str
+        +acceptance_criteria: List~str~
+        +created_at: datetime
+    }
+    
+    class DesignResponse {
+        <<schema>>
+        +_id: str
+        +project_id: str
+        +hld_mermaid: str
+        +lld_mermaid: str
+        +dbd_mermaid: str
+        +style_config: MermaidStyleConfig
+        +created_at: datetime
+    }
+
+    %% ============================================
+    %% Frontend Services (Angular)
+    %% ============================================
+    
+    class FE_Agent3Service {
+        <<Angular Service>>
+        -backendUrl: string
+        -http: HttpClient
+        +generateMermaid(payload) Observable~AgentVisualizationResponse~
+        +generateAllDiagrams(payload) Observable~AllDiagramsResponse~
+    }
+    
+    class FE_DesignService {
+        <<Angular Service>>
+        -apiUrl: string
+        -http: HttpClient
+        +generateDesigns(projectId) Observable~DesignResponse~
+        +getLatestDesigns(projectId) Observable~DesignResponse~
+    }
+    
+    class FE_FeedbackService {
+        <<Angular Service>>
+        -apiUrl: string
+        -http: HttpClient
+        +sendFeedback(message, context) Observable~FeedbackResponse~
+        +getSuggestions(diagramCode) Observable~SuggestionsResponse~
+    }
+    
+    class FE_MermaidFixerService {
+        <<Angular Service>>
+        +sanitizeMermaid(code) string
+        +validateSyntax(code) ValidationResult
+        +fixCommonErrors(code) string
+    }
+
+    %% ============================================
+    %% Frontend Components (Angular)
+    %% ============================================
+    
+    class ProjectWizardComponent {
+        <<Angular Component>>
+        +currentStep: number
+        +projectData: ProjectCreate
+        +onSubmit() void
+        +nextStep() void
+        +previousStep() void
+    }
+    
+    class ProjectDesignViewComponent {
+        <<Angular Component>>
+        +projectId: string
+        +designs: DesignResponse
+        +selectedDiagram: string
+        +loadDesigns() void
+        +regenerateDiagram(type) void
+        +exportDiagram(format) void
+    }
+
+    %% ============================================
+    %% Relationships - Agent Dependencies
+    %% ============================================
+    
+    Agent1Service ..> ClaudeClient : uses
+    Agent2Service ..> ClaudeClient : uses
+    Agent3Service ..> ClaudeClient : uses
+    Agent3Service ..> MermaidStyleGenerator : uses
+    Agent3Service ..> NodeShapeSelector : uses
+    FeedbackChatbotService ..> ClaudeClient : uses
+
+    %% ============================================
+    %% Relationships - Router to Service
+    %% ============================================
+    
+    FeaturesRouter --> Agent1Service : triggers
+    StoriesRouter --> Agent2Service : triggers
+    DiagramsRouter --> Agent3Service : triggers
+    VisualizerRouter --> Agent3Service : triggers
+    VisualizerRouter --> FeedbackChatbotService : triggers
+
+    %% ============================================
+    %% Relationships - Router to Schema
+    %% ============================================
+    
+    AuthRouter ..> UserCreate : validates
+    ProjectsRouter ..> ProjectCreate : validates
+    FeaturesRouter ..> FeatureModel : returns
+    StoriesRouter ..> StoryModel : returns
+    DiagramsRouter ..> DesignResponse : returns
+
+    %% ============================================
+    %% Relationships - Frontend to Backend
+    %% ============================================
+    
+    FE_Agent3Service ..> VisualizerRouter : HTTP POST
+    FE_DesignService ..> DiagramsRouter : HTTP POST/GET
+    FE_FeedbackService ..> VisualizerRouter : HTTP POST
+    
+    ProjectWizardComponent --> FE_DesignService : uses
+    ProjectDesignViewComponent --> FE_DesignService : uses
+    ProjectDesignViewComponent --> FE_Agent3Service : uses
+    ProjectDesignViewComponent --> FE_MermaidFixerService : uses
+
+    %% ============================================
+    %% Relationships - Agent Pipeline
+    %% ============================================
+    
+    Agent1Service --|> Agent2Service : feeds features
+    Agent2Service --|> Agent3Service : feeds stories
+

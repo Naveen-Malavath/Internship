@@ -103,3 +103,46 @@
   overflow: hidden;
 }
 
+.project-design-view__table-view {
+  flex: 1;
+  overflow: auto;
+}
+
+// DBD View Toggle (Graph/Table)
+.project-design-view__view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  padding-left: 1rem;
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.project-design-view__view-toggle-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #666;
+}
+
+.project-design-view__view-toggle-btn {
+  padding: 0.375rem 0.75rem;
+  background-color: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  &.project-design-view__view-toggle-btn--active {
+    background-color: #28a745;
+    color: white;
+    border-color: #28a745;
+  }
+}
+

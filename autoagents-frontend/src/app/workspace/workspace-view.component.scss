@@ -499,9 +499,10 @@
 
 .studio-panel__preview {
   position: relative;
-  min-height: clamp(720px, 75vh, 1200px);
+  min-height: clamp(400px, 50vh, 600px);
+  max-height: clamp(500px, 60vh, 800px);
   margin: 0 1.6rem;
-  padding: clamp(1.5rem, 2.8vw, 2.5rem);
+  padding: clamp(1rem, 2vw, 1.5rem);
   border-radius: 1.2rem;
   border: 1px solid rgba(59, 130, 246, 0.25);
   background: radial-gradient(circle at top, rgba(30, 41, 59, 0.85), rgba(2, 6, 23, 0.8));
@@ -513,8 +514,9 @@
   height: 100%;
   overflow: auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding: 1rem;
 }
 
 .studio-panel__preview.light {
@@ -523,12 +525,12 @@
 }
 
 .preview-canvas {
-  min-height: clamp(660px, 75vh, 1200px);
-  padding: clamp(1rem, 1.5vw, 2rem);
+  min-height: clamp(300px, 45vh, 500px);
+  padding: clamp(0.5rem, 1vw, 1rem);
   display: flex;
   width: 100%;
   min-width: 100%;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 0;
 }
@@ -537,7 +539,7 @@
   display: flex;
   width: 100%;
   min-width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .mermaid-svg-wrapper {
@@ -545,13 +547,13 @@
   max-width: 100%;
   display: flex;
   justify-content: center;
-  align-items: center;
-  transform-origin: center center;
+  align-items: flex-start;
+  transform-origin: top center;
   
   svg {
     display: block;
     max-width: 100%;
-    max-height: 100%;
+    height: auto;
   }
 }
 
@@ -560,8 +562,8 @@
   width: auto !important;
   height: auto !important;
   max-width: 100%;
-  max-height: 100%;
-  min-width: 700px;
+  max-height: clamp(400px, 50vh, 700px);
+  min-width: 300px;
 }
 
 .studio-panel__insights {
@@ -769,6 +771,7 @@
   }
 
   .studio-panel__preview {
-    min-height: 520px;
+    min-height: 300px;
+    max-height: 400px;
   }
 }
