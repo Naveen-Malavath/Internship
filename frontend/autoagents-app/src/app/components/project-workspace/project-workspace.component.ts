@@ -952,18 +952,8 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
     } catch (error: any) {
       console.error('[RENDER] Mermaid render error:', error.message?.substring(0, 100));
       
-      // If skipAutoFix is true, don't try to fix - just show the error
-      if (skipAutoFix) {
-        console.log('[RENDER] skipAutoFix=true, showing error without fix attempt');
-        this.isFixingDiagram.set(false);
-        container.innerHTML = `<div style="color: #94a3b8; padding: 20px; text-align: center;">
-          <p>Diagram has syntax issues but rendering skipped auto-fix.</p>
-          <p style="font-size: 12px; opacity: 0.7;">Edit the code or click Regenerate.</p>
-        </div>`;
-        return;
-      }
-      
-      // If we haven't tried fixing yet and this is a real error, try to fix
+      // Always try to fix on render error (up to MAX_FIX_ATTEMPTS)
+      // skipAutoFix only skips the PRE-render validation fix, not render error fixes
       if (this.fixAttempts < this.MAX_FIX_ATTEMPTS) {
         this.fixAttempts++;
         this.isFixingDiagram.set(true);

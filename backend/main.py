@@ -1235,7 +1235,16 @@ Return ONLY the summary text."""
     },
 
     "hld": {
-        "system": """You are a senior software architect creating High Level Design (HLD) diagrams. Generate professional, enterprise-grade architecture diagrams using Mermaid syntax.
+        "system": """You are a senior software architect creating a HIGH LEVEL SYSTEM ARCHITECTURE DIAGRAM (HLD).
+
+This is a HIGH LEVEL SYSTEM ARCHITECTURE DIAGRAM that shows:
+- The overall system architecture at a bird's eye view
+- Major system components and their interactions
+- External systems and integrations
+- Data flow between layers
+- Infrastructure components (load balancers, gateways, caches)
+
+Generate professional, enterprise-grade architecture diagrams using Mermaid syntax.
 
 STYLE REQUIREMENTS:
 - Use clean, professional naming conventions
@@ -1251,22 +1260,24 @@ OUTPUT FORMAT:
 Return a valid Mermaid flowchart diagram. Use graph TB (top-bottom) or graph LR (left-right).
 Do NOT include any markdown code fences. Return ONLY the Mermaid code starting with 'graph'.
 Do NOT include any style or classDef statements.""",
-        "user_template": """Create a High Level Design (HLD) diagram for this project:
+        "user_template": """Create a HIGH LEVEL SYSTEM ARCHITECTURE DIAGRAM (HLD) for this project:
+
+This diagram should show the OVERALL SYSTEM ARCHITECTURE - the big picture view of all major components.
 
 PROJECT SUMMARY:
 {summary}
 
 Requirements:
-1. Show all major system components
+1. Show all major system components at a high level
 2. Include client applications (web, mobile, admin)
 3. Show API gateway and load balancer if applicable
-4. Include all backend services
+4. Include all backend services/microservices
 5. Show databases and caching layers
-6. Include external integrations (payment, auth, notifications)
+6. Include external integrations (payment, auth, notifications, third-party APIs)
 7. Use subgraphs for logical grouping (Client Layer, API Layer, Service Layer, Data Layer)
-8. Add meaningful labels on all connections
+8. Add meaningful labels on all connections showing data flow
 
-Generate a professional Mermaid flowchart diagram."""
+Generate a professional HIGH LEVEL SYSTEM ARCHITECTURE flowchart diagram."""
     },
 
     "dbd": {
@@ -1341,7 +1352,14 @@ Generate a professional Mermaid sequenceDiagram showing the main API flow."""
     },
 
     "lld": {
-        "system": """You are a senior software architect creating Low Level Design (LLD) class diagrams. 
+        "system": """You are a senior software architect creating a LOW LEVEL SYSTEM ARCHITECTURE DIAGRAM (LLD).
+
+This is a LOW LEVEL SYSTEM ARCHITECTURE DIAGRAM that shows:
+- Detailed class structures with attributes and methods
+- Object-oriented design patterns
+- Class relationships (inheritance, composition, aggregation)
+- Interface definitions and implementations
+- The internal code architecture of the system
 
 !!! ABSOLUTE REQUIREMENT !!!
 Your output MUST start with the word 'classDiagram' on line 1.
@@ -1449,7 +1467,9 @@ OUTPUT RULES:
 - Include 15-25 classes minimum
 - Show ALL relationships
 - Use proper class syntax with curly braces""",
-        "user_template": """Create a Low Level Design (LLD) CLASS DIAGRAM.
+        "user_template": """Create a LOW LEVEL SYSTEM ARCHITECTURE DIAGRAM (LLD) using CLASS DIAGRAM format.
+
+This diagram shows the INTERNAL CODE ARCHITECTURE - the detailed class structure of the system.
 
 PROJECT SUMMARY:
 {summary}
@@ -1463,7 +1483,7 @@ DATABASE TABLES:
 API ENDPOINTS:
 {api_summary}
 
-GENERATE A MERMAID classDiagram with:
+GENERATE A LOW LEVEL SYSTEM ARCHITECTURE as a Mermaid classDiagram with:
 1. Entity classes for each database table (User, Product, Order, etc.)
 2. Repository interfaces (IUserRepository, IProductRepository)
 3. Repository implementations
@@ -1478,6 +1498,7 @@ Show relationships:
 - Entity relationships (*--, o--)
 
 Generate 15-25 classes with full attributes and methods.
+This is a LOW LEVEL SYSTEM ARCHITECTURE showing internal code structure.
 Start output with 'classDiagram' - no other diagram type."""
     },
 
