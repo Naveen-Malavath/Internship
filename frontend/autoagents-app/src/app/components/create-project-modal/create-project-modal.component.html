@@ -1,0 +1,658 @@
+<div class="modal-container">
+  <div class="modal-header">
+    <div>
+      <h1 class="modal-title">Create New Project</h1>
+      <p class="modal-subtitle">Configure a Jira-style workspace with templates, workflows, and AI-assisted briefs.</p>
+    </div>
+    <button mat-icon-button mat-dialog-close class="close-button">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <div class="stepper">
+    @for (step of steps; track step.number) {
+      <div class="step" [class.active]="currentStep() === step.number" [class.completed]="currentStep() > step.number">
+        <div class="step-number">{{ step.number }}</div>
+        <div class="step-label">{{ step.label }}</div>
+      </div>
+    }
+  </div>
+
+  <div class="modal-content">
+    @if (currentStep() === 1) {
+      <div class="template-section">
+        <p class="section-description">Templates align workflows, focus areas, and AI prompts for the industry you are targeting.</p>
+        
+        <div class="templates-grid">
+          @for (template of templates; track template.title) {
+            <div class="template-card" (click)="selectTemplate(template)">
+              <div class="card-header">
+                <h3 class="card-title">{{ template.title }}</h3>
+                <div class="card-tags">
+                  <span class="tag tag-industry">{{ template.industry }}</span>
+                  <span class="tag tag-methodology">{{ template.methodology }}</span>
+                  @if (template.additionalTag) {
+                    <span class="tag tag-additional">{{ template.additionalTag }}</span>
+                  }
+                </div>
+              </div>
+              
+              <p class="card-description">{{ template.description }}</p>
+              
+              <ul class="card-features">
+                @for (feature of template.features; track feature) {
+                  <li>{{ feature }}</li>
+                }
+              </ul>
+              
+              <p class="card-personas">
+                <strong>Personas:</strong> <span class="personas-text">{{ template.personas }}</span>
+              </p>
+            </div>
+          }
+        </div>
+      </div>
+    }
+    
+    @if (currentStep() === 2) {
+      <div class="project-details-section">
+        <h2 class="section-title">PROJECT BASICS</h2>
+        <p class="section-description">Name your project, capture the prompt summary, and pick the right workflow to start.</p>
+        
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Project name</label>
+            <input 
+              type="text" 
+              class="form-input" 
+              [(ngModel)]="projectData.projectName"
+              placeholder="Enter project name">
+          </div>
+          
+          <div class="form-field">
+            <label class="form-label">Project key</label>
+            <input 
+              type="text" 
+              class="form-input" 
+              [(ngModel)]="projectData.projectKey"
+              placeholder="DBS">
+          </div>
+          
+          <div class="form-field">
+            <label class="form-label">Industry</label>
+            <input 
+              type="text" 
+              class="form-input" 
+              [(ngModel)]="projectData.industry"
+              placeholder="Select industry">
+          </div>
+          
+          <div class="form-field">
+            <label class="form-label">Methodology</label>
+            <select class="form-select" [(ngModel)]="projectData.methodology">
+              <option value="Scrum">Scrum</option>
+              <option value="Kanban">Kanban</option>
+              <option value="Hybrid">Hybrid</option>
+              <option value="Mixed">Mixed</option>
+            </select>
+          </div>
+          
+          <div class="form-field">
+            <label class="form-label">Timezone</label>
+            <select class="form-select" [(ngModel)]="projectData.timezone">
+              @for (tz of timezones; track tz) {
+                <option [value]="tz">{{ tz }}</option>
+              }
+            </select>
+          </div>
+          
+          <div class="form-field">
+            <label class="form-label">Team size</label>
+            <select class="form-select" [(ngModel)]="projectData.teamSize">
+              @for (size of teamSizes; track size) {
+                <option [value]="size">{{ size }}</option>
+              }
+            </select>
+          </div>
+          
+          <div class="form-field">
+            <label class="form-label">Kick-off date</label>
+            <input 
+              type="date" 
+              class="form-input" 
+              [(ngModel)]="projectData.kickoffDate"
+              placeholder="mm/dd/yyyy">
+          </div>
+          
+          <div class="form-field">
+            <label class="form-label">Target launch</label>
+            <input 
+              type="date" 
+              class="form-input" 
+              [(ngModel)]="projectData.targetLaunch"
+              placeholder="mm/dd/yyyy">
+          </div>
+        </div>
+        
+        <div class="form-field full-width">
+          <label class="form-label">Prompt summary</label>
+          <textarea 
+            class="form-textarea" 
+            [(ngModel)]="projectData.promptSummary"
+            rows="4"
+            placeholder="Describe your project..."></textarea>
+        </div>
+        
+        <h2 class="section-title">PREFERRED WORKFLOW</h2>
+        
+        <div class="workflows-grid">
+          @for (workflow of workflows; track workflow.title) {
+            <div 
+              class="workflow-card"
+              [class.selected]="projectData.selectedWorkflow?.title === workflow.title"
+              (click)="selectWorkflow(workflow)">
+              <div class="workflow-header">
+                <h3 class="workflow-title">{{ workflow.title }}</h3>
+                <span class="tag tag-methodology">{{ workflow.type }}</span>
+              </div>
+              <p class="workflow-description">{{ workflow.description }}</p>
+              <ul class="workflow-issues">
+                @for (issue of workflow.issueTypes; track issue) {
+                  <li>{{ issue }}</li>
+                }
+              </ul>
+              @if (workflow.cadence) {
+                <p class="workflow-cadence">{{ workflow.cadence }}</p>
+              }
+            </div>
+          }
+        </div>
+        
+        <h2 class="section-title">PROJECT ATTACHMENTS</h2>
+        <p class="section-description">Include briefs, design artifacts, or compliance files. All formats supported.</p>
+        
+        <div class="attachments-section">
+          <input 
+            type="file" 
+            #fileInput
+            (change)="onFileSelected($event)"
+            multiple
+            [disabled]="projectData.attachments.length >= 7"
+            style="display: none">
+          
+          <button 
+            class="select-files-button"
+            (click)="fileInput.click()"
+            [disabled]="projectData.attachments.length >= 7">
+            <mat-icon>attach_file</mat-icon>
+            Select files ({{ projectData.attachments.length }}/7)
+          </button>
+          
+          @if (projectData.attachments.length > 0) {
+            <div class="attachments-list">
+              @for (file of projectData.attachments; track file.name; let i = $index) {
+                <div class="attachment-item">
+                  <mat-icon class="file-icon">description</mat-icon>
+                  <div class="file-info">
+                    <span class="file-name">{{ file.name }}</span>
+                    <span class="file-size">{{ formatFileSize(file.size) }}</span>
+                  </div>
+                  <button 
+                    class="remove-button"
+                    (click)="removeAttachment(i)">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+    
+    @if (currentStep() === 3) {
+      <div class="ai-assist-section">
+        <h2 class="section-title">AI-ASSISTED BRIEF</h2>
+        <p class="section-description">Use AI prompts to refine your executive summary, epic ideas, and risk register before the build kicks off.</p>
+        
+        <div class="ai-prompts-grid">
+          <div class="ai-prompt-card">
+            <div class="prompt-header">
+              <h3 class="prompt-title">Project summary <span class="required-star">*</span></h3>
+              <span class="tag tag-methodology">SUMMARY</span>
+            </div>
+            <p class="prompt-description">
+              Draft an executive summary for a {{ '{' }}industry{{ '}' }} initiative focused on {{ '{' }}focusAreas{{ '}' }}. Highlight customer impact and business outcomes in under 120 words.
+            </p>
+            <button class="generate-button" (click)="generateAIContent('summary')" [disabled]="loadingSummary()">
+              @if (loadingSummary()) {
+                <span class="spinner"></span>
+                Generating...
+              } @else {
+                Generate
+              }
+            </button>
+          </div>
+          
+          <div class="ai-prompt-card">
+            <div class="prompt-header">
+              <h3 class="prompt-title">Epic-level roadmap ideas</h3>
+              <span class="tag tag-industry">EPICS</span>
+            </div>
+            <p class="prompt-description">
+              Provide 4-6 epic level initiatives for a {{ '{' }}methodology{{ '}' }} team launching a {{ '{' }}industry{{ '}' }} product. Each epic should include a single sentence justification.
+            </p>
+            <button class="generate-button" (click)="generateAIContent('epics')" [disabled]="loadingEpics()">
+              @if (loadingEpics()) {
+                <span class="spinner"></span>
+                Generating...
+              } @else {
+                Generate
+              }
+            </button>
+          </div>
+          
+          <div class="ai-prompt-card">
+            <div class="prompt-header">
+              <h3 class="prompt-title">Acceptance criteria checklist</h3>
+              <span class="tag tag-additional">ACCEPTANCE CRITERIA</span>
+            </div>
+            <p class="prompt-description">
+              List key acceptance criteria for the MVP release of a {{ '{' }}industry{{ '}' }} product that emphasises {{ '{' }}focusAreas{{ '}' }}. Format as bullet points.
+            </p>
+            <button class="generate-button" (click)="generateAIContent('acceptance')" [disabled]="loadingAcceptance()">
+              @if (loadingAcceptance()) {
+                <span class="spinner"></span>
+                Generating...
+              } @else {
+                Generate
+              }
+            </button>
+          </div>
+          
+          <div class="ai-prompt-card">
+            <div class="prompt-header">
+              <h3 class="prompt-title">Delivery risk register</h3>
+              <span class="tag tag-methodology">STORIES</span>
+            </div>
+            <p class="prompt-description">
+              Summarise the top delivery risks for a {{ '{' }}methodology{{ '}' }} implementation, covering technology, compliance, and people considerations.
+            </p>
+            <button class="generate-button" (click)="generateAIContent('risks')" [disabled]="loadingRisks()">
+              @if (loadingRisks()) {
+                <span class="spinner"></span>
+                Generating...
+              } @else {
+                Generate
+              }
+            </button>
+          </div>
+        </div>
+        
+        @if (projectData.executiveSummary) {
+          <div class="generated-section">
+            <h3 class="generated-title">Executive summary</h3>
+            <textarea 
+              class="form-textarea generated-content" 
+              [(ngModel)]="projectData.executiveSummary"
+              rows="5"
+              placeholder="Executive summary will appear here..."></textarea>
+          </div>
+        }
+        
+        @if (projectData.acceptanceCriteria) {
+          <div class="generated-section">
+            <h3 class="generated-title">Acceptance Criteria</h3>
+            <textarea 
+              class="form-textarea generated-content" 
+              [(ngModel)]="projectData.acceptanceCriteria"
+              rows="8"
+              placeholder="Acceptance criteria will appear here..."></textarea>
+          </div>
+        }
+        
+        @if (projectData.generatedEpics) {
+          <div class="generated-section">
+            <h3 class="generated-title">Epic-level Roadmap Ideas</h3>
+            <textarea 
+              class="form-textarea generated-content" 
+              [(ngModel)]="projectData.generatedEpics"
+              rows="8"
+              placeholder="Epic ideas will appear here..."></textarea>
+          </div>
+        }
+        
+        @if (projectData.generatedRisks) {
+          <div class="generated-section">
+            <h3 class="generated-title">Delivery Risk Register</h3>
+            <textarea 
+              class="form-textarea generated-content" 
+              [(ngModel)]="projectData.generatedRisks"
+              rows="8"
+              placeholder="Risk analysis will appear here..."></textarea>
+          </div>
+        }
+        
+        <div class="epic-section">
+          <div class="section-header">
+            <h2 class="section-title">EPIC IDEAS</h2>
+            <button class="add-button" (click)="addEpic()" [disabled]="projectData.epicIdeas.length >= 2">
+              <mat-icon>add</mat-icon>
+              Add epic ({{ projectData.epicIdeas.length }}/2)
+            </button>
+          </div>
+          
+          @if (projectData.epicIdeas.length > 0) {
+            <div class="items-list">
+              @for (epic of projectData.epicIdeas; track i; let i = $index) {
+                <div class="list-item">
+                  <div class="input-wrapper">
+                    <input 
+                      type="text" 
+                      class="list-item-input" 
+                      [(ngModel)]="projectData.epicIdeas[i]"
+                      (keypress)="onEpicKeyPress($event, i)"
+                      [maxlength]="1200"
+                      placeholder="Epic {{ i + 1 }}: Enter epic description">
+                    <span class="word-count" [class.over-limit]="getWordCount(projectData.epicIdeas[i]) > 200">
+                      {{ getWordCount(projectData.epicIdeas[i]) }}/200 words
+                    </span>
+                  </div>
+                  <button class="remove-list-button" (click)="removeEpic(i)">
+                    Remove
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+        
+        <div class="risk-section">
+          <div class="section-header">
+            <h2 class="section-title">RISK HIGHLIGHTS</h2>
+            <button class="add-button" (click)="addRisk()" [disabled]="projectData.riskHighlights.length >= 2">
+              <mat-icon>add</mat-icon>
+              Add risk ({{ projectData.riskHighlights.length }}/2)
+            </button>
+          </div>
+          
+          @if (projectData.riskHighlights.length > 0) {
+            <div class="items-list">
+              @for (risk of projectData.riskHighlights; track i; let i = $index) {
+                <div class="list-item">
+                  <div class="input-wrapper">
+                    <input 
+                      type="text" 
+                      class="list-item-input" 
+                      [(ngModel)]="projectData.riskHighlights[i]"
+                      (keypress)="onRiskKeyPress($event, i)"
+                      [maxlength]="1200"
+                      placeholder="Enter risk description">
+                    <span class="word-count" [class.over-limit]="getWordCount(projectData.riskHighlights[i]) > 200">
+                      {{ getWordCount(projectData.riskHighlights[i]) }}/200 words
+                    </span>
+                  </div>
+                  <button class="remove-list-button" (click)="removeRisk(i)">
+                    Remove
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+    
+    @if (currentStep() === 4) {
+      <div class="features-section">
+        <div class="features-header">
+          <div class="header-left">
+            <h2 class="section-title">APPLICATION FEATURES</h2>
+            <p class="section-description">AI-generated features based on your project requirements</p>
+          </div>
+          <div class="header-actions">
+            <button 
+              mat-raised-button 
+              class="approve-all-button" 
+              (click)="approveAllFeatures()"
+              [disabled]="allFeaturesApproved() || generatedFeatures().length === 0">
+              <mat-icon>done_all</mat-icon>
+              Approve All
+            </button>
+            <button 
+              mat-raised-button 
+              class="add-manual-button" 
+              (click)="addManualFeature()">
+              <mat-icon>add</mat-icon>
+              Add Manual Feature
+            </button>
+            <button 
+              mat-raised-button 
+              class="regenerate-button" 
+              (click)="regenerateFeatures()"
+              [disabled]="loadingFeatures()">
+              <mat-icon>refresh</mat-icon>
+              Regenerate
+            </button>
+          </div>
+        </div>
+
+        @if (loadingFeatures()) {
+          <div class="loading-features">
+            <div class="loading-animation">
+              <div class="pulse-ring"></div>
+              <div class="pulse-ring delay-1"></div>
+              <div class="pulse-ring delay-2"></div>
+              <div class="loading-icon">
+                <mat-icon>auto_awesome</mat-icon>
+              </div>
+            </div>
+            <h3 class="loading-title">Generating Features...</h3>
+            <p class="loading-subtitle">AI is analyzing your project and creating 12 essential features</p>
+            <div class="progress-bar">
+              <div class="progress-fill"></div>
+            </div>
+          </div>
+        }
+
+        @if (manualFeatures().length > 0) {
+          <div class="manual-features-section">
+            <h3 class="manual-features-title">Manual Features</h3>
+            <div class="manual-features-list">
+              @for (feature of manualFeatures(); track $index; let i = $index) {
+                <div class="manual-feature-item">
+                  <div class="feature-number">{{ generatedFeatures().length + i + 1 }}</div>
+                  <input 
+                    type="text" 
+                    class="manual-feature-input" 
+                    [(ngModel)]="manualFeatures()[i]"
+                    (keypress)="onManualFeatureKeyPress($event, i)"
+                    placeholder="Enter feature name">
+                  <button 
+                    mat-icon-button 
+                    class="remove-feature-button" 
+                    (click)="removeManualFeature(i)">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (!loadingFeatures() && generatedFeatures().length > 0) {
+          <div class="features-grid">
+            @for (feature of generatedFeatures(); track $index; let i = $index) {
+              <div class="feature-card" [class.approved]="feature.approved" (click)="openFeatureDetail(feature, i)">
+                <div class="feature-number">{{ i + 1 }}</div>
+                <div class="feature-content">
+                  <h3 class="feature-title">{{ feature.title }}</h3>
+                  <p class="feature-reason">{{ feature.reason }}</p>
+                  
+                  <div class="acceptance-criteria-section">
+                    <h4 class="criteria-label">Acceptance Criteria</h4>
+                    <p class="feature-criteria">{{ feature.acceptanceCriteria }}</p>
+                  </div>
+                  
+                  <button 
+                    mat-raised-button 
+                    class="approve-button"
+                    [class.approved]="feature.approved"
+                    (click)="onApproveClick($event, i)">
+                    <mat-icon>{{ feature.approved ? 'check_circle' : 'check' }}</mat-icon>
+                    {{ feature.approved ? 'Approved' : 'Approve' }}
+                  </button>
+                </div>
+                <div class="feature-icon">
+                  <mat-icon>{{ feature.approved ? 'verified' : 'check_circle' }}</mat-icon>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+    
+    @if (currentStep() === 5) {
+      <div class="stories-section">
+        <div class="stories-header">
+          <div class="header-left">
+            <h2 class="section-title">USER STORIES</h2>
+            <p class="section-description">AI-generated user stories (2 per feature) based on your features</p>
+          </div>
+          <div class="header-actions">
+            <button 
+              mat-raised-button 
+              class="approve-all-button" 
+              (click)="approveAllStories()"
+              [disabled]="allStoriesApproved() || generatedStories().length === 0">
+              <mat-icon>done_all</mat-icon>
+              Approve All
+            </button>
+            <button 
+              mat-raised-button 
+              class="add-manual-button" 
+              (click)="addManualStory()">
+              <mat-icon>add</mat-icon>
+              Add Manual Story
+            </button>
+            <button 
+              mat-raised-button 
+              class="regenerate-button" 
+              (click)="regenerateStories()"
+              [disabled]="loadingStories()">
+              <mat-icon>refresh</mat-icon>
+              Regenerate
+            </button>
+          </div>
+        </div>
+
+        @if (loadingStories()) {
+          <div class="loading-features">
+            <div class="loading-animation">
+              <div class="pulse-ring"></div>
+              <div class="pulse-ring delay-1"></div>
+              <div class="pulse-ring delay-2"></div>
+              <div class="loading-icon">
+                <mat-icon>description</mat-icon>
+              </div>
+            </div>
+            <h3 class="loading-title">Generating User Stories...</h3>
+            <p class="loading-subtitle">AI is creating 2 user stories for each feature</p>
+            <div class="progress-bar">
+              <div class="progress-fill"></div>
+            </div>
+          </div>
+        }
+
+        @if (manualStories().length > 0) {
+          <div class="manual-features-section">
+            <h3 class="manual-features-title">Manual Stories</h3>
+            <div class="manual-features-list">
+              @for (story of manualStories(); track $index; let i = $index) {
+                <div class="manual-feature-item">
+                  <div class="feature-number">{{ generatedStories().length + i + 1 }}</div>
+                  <input 
+                    type="text" 
+                    class="manual-story-input" 
+                    [(ngModel)]="manualStories()[i]"
+                    (keypress)="onManualStoryKeyPress($event, i)"
+                    placeholder="As a [user], I want to [action] so that [benefit]">
+                  <button 
+                    mat-icon-button 
+                    class="remove-feature-button" 
+                    (click)="removeManualStory(i)">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (!loadingStories() && generatedStories().length > 0) {
+          <div class="stories-grid">
+            @for (story of generatedStories(); track $index; let i = $index) {
+              <div class="story-card" [class.approved]="story.approved">
+                <div class="story-header">
+                  <div class="story-number">{{ i + 1 }}</div>
+                  <div class="story-badge">{{ story.featureRef }}</div>
+                </div>
+                <div class="story-content">
+                  <h3 class="story-title">{{ story.title }}</h3>
+                  <p class="story-description">{{ story.description }}</p>
+                </div>
+                <div class="story-actions">
+                  <button 
+                    mat-button 
+                    class="approve-button" 
+                    [class.approved]="story.approved"
+                    (click)="approveStory(i)">
+                    <mat-icon>{{ story.approved ? 'check_circle' : 'check_circle_outline' }}</mat-icon>
+                    {{ story.approved ? 'Approved' : 'Approve' }}
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+    
+    
+  </div>
+
+  <div class="modal-footer">
+    <button mat-button class="cancel-button" mat-dialog-close>Cancel</button>
+    <div class="navigation-buttons">
+      <button 
+        mat-button 
+        class="previous-button" 
+        (click)="previousStep()"
+        [disabled]="currentStep() === 1">
+        Previous
+      </button>
+      @if (currentStep() === 5) {
+        <button 
+          mat-raised-button 
+          class="finish-button" 
+          (click)="finishProject()">
+          <mat-icon>check_circle</mat-icon>
+          Create Project
+        </button>
+      } @else {
+        <button 
+          mat-raised-button 
+          class="next-button" 
+          (click)="nextStep()"
+          [disabled]="currentStep() === 3 && !projectData.executiveSummary"
+          [matTooltip]="currentStep() === 3 && !projectData.executiveSummary ? 'Generate Project Summary to continue' : ''"
+          matTooltipPosition="above"
+          matTooltipShowDelay="300"
+          [matTooltipDisabled]="!(currentStep() === 3 && !projectData.executiveSummary)">
+          Next
+        </button>
+      }
+    </div>
+  </div>
+</div>

@@ -1,0 +1,329 @@
+<div class="wireframe-viewer">
+  <!-- Header Section -->
+  <div class="viewer-header">
+    <div class="header-left">
+      <div class="title-section">
+        <mat-icon class="title-icon">web</mat-icon>
+        <h2 class="title">UI Wireframes</h2>
+        <span class="page-count" *ngIf="wireframeData?.pages?.length">
+          {{ wireframeData?.pages?.length }} pages
+        </span>
+      </div>
+      <p class="subtitle">Interactive HTML/CSS wireframe previews with responsive viewports</p>
+    </div>
+    
+    <div class="header-actions">
+      <!-- Page Count Settings -->
+      <div class="page-settings">
+        <span class="settings-heading">Page Count</span>
+        <div class="mode-toggle">
+          <span class="mode-label" [class.active]="pageMode === 'auto'">AI Decides</span>
+          <mat-slide-toggle 
+            [checked]="pageMode === 'manual'"
+            (change)="onPageModeChange($event.checked ? 'manual' : 'auto')"
+            color="primary">
+          </mat-slide-toggle>
+          <span class="mode-label" [class.active]="pageMode === 'manual'">Manual</span>
+        </div>
+        
+        @if (pageMode === 'manual') {
+          <div class="page-count-select" @slideIn>
+            <label>Pages:</label>
+            <mat-select [value]="pageCount" (selectionChange)="onPageCountChange($event.value)" 
+                        class="page-select" panelClass="page-count-panel"
+                        disableOptionCentering>
+              @for (count of pageCountOptions; track count) {
+                <mat-option [value]="count">{{ count }}</mat-option>
+              }
+            </mat-select>
+          </div>
+        }
+      </div>
+      
+      <button class="feature-action-btn secondary-btn" (click)="downloadAllPages()" 
+              [disabled]="!wireframeData?.pages?.length"
+              matTooltip="Download all pages">
+        <mat-icon>download</mat-icon>
+        Download All
+      </button>
+      <button class="feature-action-btn primary-btn" (click)="onRegenerateAll()" 
+              [disabled]="isGenerating"
+              matTooltip="Generate all wireframes">
+        <mat-icon>auto_awesome</mat-icon>
+        {{ isGenerating ? 'Generating...' : (wireframeData?.pages?.length ? 'Regenerate All' : 'Generate All') }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Page Tabs -->
+  <div class="page-tabs-container" *ngIf="wireframeData?.pages?.length">
+    <div class="page-tabs">
+      @for (page of wireframeData?.pages; track page.id) {
+        <button 
+          class="page-tab"
+          [class.active]="selectedPageId() === page.id"
+          [class.has-error]="page.error"
+          (click)="selectPage(page.id)">
+          <mat-icon class="tab-icon" [style.color]="getPageTypeColor(page.type)">
+            {{ getPageIcon(page.type) }}
+          </mat-icon>
+          <span class="tab-label">{{ page.name }}</span>
+          <span class="tab-type">{{ page.type }}</span>
+          @if (page.error) {
+            <mat-icon class="error-icon" matTooltip="Generation error">error</mat-icon>
+          }
+        </button>
+      }
+    </div>
+    
+    <div class="tabs-actions">
+      <button class="icon-btn" (click)="onRegeneratePage()" 
+              [disabled]="isGenerating"
+              matTooltip="Regenerate this page">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="viewer-content" [class.fullscreen]="isFullscreen()">
+    <!-- Toolbar -->
+    <div class="content-toolbar">
+      <div class="toolbar-left">
+        <!-- Viewport Selector -->
+        <div class="viewport-selector">
+          <span class="selector-label">Viewport:</span>
+          <div class="viewport-buttons">
+            <button 
+              class="viewport-btn"
+              [class.active]="viewportSize() === 'mobile'"
+              (click)="setViewport('mobile')"
+              matTooltip="Mobile (375px)">
+              <mat-icon>smartphone</mat-icon>
+            </button>
+            <button 
+              class="viewport-btn"
+              [class.active]="viewportSize() === 'tablet'"
+              (click)="setViewport('tablet')"
+              matTooltip="Tablet (768px)">
+              <mat-icon>tablet</mat-icon>
+            </button>
+            <button 
+              class="viewport-btn"
+              [class.active]="viewportSize() === 'desktop'"
+              (click)="setViewport('desktop')"
+              matTooltip="Desktop (100%)">
+              <mat-icon>desktop_windows</mat-icon>
+            </button>
+          </div>
+          <span class="viewport-size">{{ viewportLabel() }}</span>
+        </div>
+      </div>
+      
+      <div class="toolbar-right">
+        @if (hasUnsavedChanges()) {
+          <button class="action-btn warning small" (click)="revertChanges()">
+            <mat-icon>undo</mat-icon>
+            Revert
+          </button>
+          <button class="action-btn success small" (click)="saveChanges()">
+            <mat-icon>save</mat-icon>
+            Save
+          </button>
+        }
+        <button class="icon-btn" (click)="toggleCodeEditor()" 
+                [matTooltip]="isCodeEditorVisible() ? 'Hide code' : 'Show code'">
+          <mat-icon>{{ isCodeEditorVisible() ? 'code_off' : 'code' }}</mat-icon>
+        </button>
+        <button class="icon-btn" (click)="copyHtml()" matTooltip="Copy HTML">
+          <mat-icon>content_copy</mat-icon>
+        </button>
+        <button class="icon-btn" (click)="downloadHtml()" matTooltip="Download HTML">
+          <mat-icon>download</mat-icon>
+        </button>
+        <button class="icon-btn" (click)="openInNewTab()" matTooltip="Open in new tab">
+          <mat-icon>open_in_new</mat-icon>
+        </button>
+        <button class="icon-btn" (click)="toggleFullscreen()" 
+                [matTooltip]="isFullscreen() ? 'Exit fullscreen' : 'Fullscreen'">
+          <mat-icon>{{ isFullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <!-- Split View: Code + Preview -->
+    <div class="split-view" [class.code-hidden]="!isCodeEditorVisible()">
+      <!-- Code Editor -->
+      @if (isCodeEditorVisible()) {
+        <div class="code-panel">
+          <div class="panel-header">
+            <span class="panel-title">
+              <mat-icon>code</mat-icon>
+              HTML Code
+            </span>
+            <span class="file-name">{{ selectedPage()?.id }}.html</span>
+          </div>
+          <div class="code-editor-wrapper">
+            <div class="line-numbers">
+              @for (num of getLineNumbers(); track num) {
+                <span>{{ num }}</span>
+              }
+            </div>
+            <textarea 
+              #codeEditor
+              class="code-textarea"
+              [value]="editedHtml()"
+              (input)="onCodeChange($event)"
+              spellcheck="false"
+              placeholder="HTML code will appear here..."></textarea>
+          </div>
+        </div>
+      }
+
+      <!-- Preview Panel -->
+      <div class="preview-panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <mat-icon>visibility</mat-icon>
+            Live Preview
+          </span>
+          <span class="preview-info">
+            @if (selectedPage()?.type) {
+              <span class="type-badge" [style.background]="getPageTypeColor(selectedPage()!.type) + '20'" 
+                    [style.color]="getPageTypeColor(selectedPage()!.type)">
+                {{ selectedPage()?.type }}
+              </span>
+            }
+          </span>
+        </div>
+        
+        <div class="preview-container">
+          @if (isGenerating) {
+            <!-- Loading Animation - Exactly matching Mermaid diagram generation -->
+            <div class="generation-loading-overlay">
+              <div class="generation-loader">
+                <div class="loader-spinner"></div>
+                <div class="loader-ring"></div>
+              </div>
+              <h3 class="generation-title">Generating Wireframes</h3>
+              <p class="generation-subtitle">{{ getCleanProgress() }}</p>
+              
+              <!-- Live Page Progress -->
+              <div class="page-progress-list">
+                @for (page of completedPages; track page) {
+                  <div class="page-done">
+                    <mat-icon class="done-icon">check_circle</mat-icon>
+                    <span class="page-name">{{ page }}</span>
+                  </div>
+                }
+                @if (currentPage) {
+                  <div class="page-current">
+                    <div class="current-spinner"></div>
+                    <span class="page-name">{{ currentPage }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          } @else if (!wireframeData?.pages?.length) {
+            <div class="placeholder-message">
+              <mat-icon class="placeholder-icon">auto_awesome</mat-icon>
+              <h3>No Wireframes Generated Yet</h3>
+              <p>Click <a class="generate-link" (click)="onRegenerateAll()">Generate All</a> above to create professional UI wireframes for your project.</p>
+            </div>
+          } @else if (selectedPage()?.error) {
+            <div class="error-state">
+              <mat-icon class="error-icon">error_outline</mat-icon>
+              <h3>Generation Error</h3>
+              <p>{{ selectedPage()?.error }}</p>
+              <button class="action-btn primary" (click)="onRegeneratePage()">
+                <mat-icon>refresh</mat-icon>
+                Try Again
+              </button>
+            </div>
+          } @else {
+            <div class="iframe-wrapper" [style.width]="viewportWidth()">
+              <iframe 
+                #previewIframe
+                class="preview-iframe"
+                [src]="iframeSrc()"
+                title="Wireframe Preview">
+              </iframe>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Page Info Footer -->
+    @if (selectedPage()) {
+      <div class="page-info-footer">
+        <div class="info-left">
+          <span class="info-item">
+            <mat-icon>description</mat-icon>
+            {{ selectedPage()?.name }}
+          </span>
+          <span class="info-item">
+            <mat-icon>category</mat-icon>
+            {{ selectedPage()?.type }}
+          </span>
+          @if (selectedPage()?.description) {
+            <span class="info-item description">
+              {{ selectedPage()?.description }}
+            </span>
+          }
+        </div>
+        <div class="info-right">
+          <span class="char-count">
+            {{ (editedHtml() || selectedPage()?.html || '').length }} characters
+          </span>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Fullscreen Overlay -->
+  @if (isFullscreen()) {
+    <div class="fullscreen-overlay">
+      <div class="fullscreen-header">
+        <div class="fullscreen-title">
+          <mat-icon>web</mat-icon>
+          <span>{{ selectedPage()?.name }} - Wireframe Preview</span>
+        </div>
+        <div class="fullscreen-controls">
+          <div class="viewport-buttons">
+            <button 
+              class="viewport-btn"
+              [class.active]="viewportSize() === 'mobile'"
+              (click)="setViewport('mobile')">
+              <mat-icon>smartphone</mat-icon>
+            </button>
+            <button 
+              class="viewport-btn"
+              [class.active]="viewportSize() === 'tablet'"
+              (click)="setViewport('tablet')">
+              <mat-icon>tablet</mat-icon>
+            </button>
+            <button 
+              class="viewport-btn"
+              [class.active]="viewportSize() === 'desktop'"
+              (click)="setViewport('desktop')">
+              <mat-icon>desktop_windows</mat-icon>
+            </button>
+          </div>
+          <button class="close-btn" (click)="toggleFullscreen()">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </div>
+      <div class="fullscreen-content">
+        <div class="fullscreen-iframe-wrapper" [style.width]="viewportWidth()">
+          <iframe 
+            [src]="iframeSrc()"
+            class="fullscreen-iframe"
+            title="Wireframe Preview">
+          </iframe>
+        </div>
+      </div>
+    </div>
+  }
+</div>

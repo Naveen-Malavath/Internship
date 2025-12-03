@@ -1,0 +1,358 @@
+<div class="workspace-container">
+  <!-- Project Info Section -->
+  <div class="project-info-section">
+    <!-- Left: Project Details + Metrics -->
+    <div class="project-left-column">
+      <div class="project-main-card">
+        <div class="project-header">
+          <h2 class="project-title">{{ project.projectName || 'Digital Banking Suite' }}</h2>
+          <p class="project-description">{{ project.promptSummary || 'Deliver a secure, personalised banking experience with account management, payments, and analytics.' }}</p>
+        </div>
+        
+        <div class="project-meta">
+          <div class="meta-item">
+            <span class="meta-label">KEY</span>
+            <span class="meta-value">{{ project.projectKey || 'DBS' }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">INDUSTRY</span>
+            <span class="meta-value">{{ project.industry || 'Financial Services' }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">METHODOLOGY</span>
+            <span class="meta-value">{{ project.methodology || 'Scrum' }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">TEAM SIZE</span>
+            <span class="meta-value">{{ project.teamSize || 'TBD' }}</span>
+          </div>
+        </div>
+        
+        <!-- Metrics inline -->
+        <div class="inline-metrics">
+          <h4 class="metrics-heading">PROJECT METRICS</h4>
+          <div class="metrics-row">
+            <div class="metric">
+              <span class="metric-value">{{ featureCount }}</span>
+              <span class="metric-label">FEATURES</span>
+            </div>
+            <div class="metric">
+              <span class="metric-value">{{ storyCount }}</span>
+              <span class="metric-label">STORIES</span>
+            </div>
+            <div class="metric">
+              <span class="metric-value">{{ completedDesignsCount }}</span>
+              <span class="metric-label">DESIGNS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Right: Prompt Overview (full height) -->
+    <div class="prompt-overview-card">
+      <h3 class="card-title">PROMPT OVERVIEW</h3>
+      <div class="overview-text-container">
+        <pre class="overview-text">{{ project.finalPrompt || project.promptSummary || 'No prompt available.' }}</pre>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Stories Section -->  <!-- Latest Stories Section -->
+  <div class="stories-section">
+    <h2 class="section-title">Latest Stories</h2>
+    
+    <div class="stories-list">
+      @for (story of project.stories; track $index) {
+        <div class="story-card">
+          <div class="story-header">
+            <span class="story-badge">{{ story.featureRef }}</span>
+            <h3 class="story-title">{{ story.title }}</h3>
+          </div>
+          <p class="story-description">{{ story.description }}</p>
+          
+          <div class="acceptance-criteria">
+            <h4 class="criteria-title">Acceptance Criteria</h4>
+            <ul class="criteria-list">
+              <li>Given {{ story.title }}, when the capability is triggered, then value is delivered.</li>
+              <li>Given authenticated access, when roles are enforced, then data remains protected.</li>
+              <li>Given monitoring hooks, when events occur, then stakeholders receive alerts.</li>
+            </ul>
+          </div>
+        </div>
+      }
+      
+      @if (project.stories.length === 0) {
+        <div class="empty-stories">
+          <mat-icon>description</mat-icon>
+          <p>No stories available yet.</p>
+        </div>
+      }
+    </div>
+  </div>
+  
+  <!-- Design Types Grid - Just above Mermaid Editor -->
+  <div class="design-types-section">
+    <div class="section-header">
+      <h2 class="section-title">Design Artifacts</h2>
+      <button class="generate-all-btn" (click)="generateAllDesigns()" [disabled]="isGenerating()">
+        <mat-icon>auto_awesome</mat-icon>
+        Generate All
+      </button>
+    </div>
+    
+    <div class="design-types-grid">
+      @for (designType of designTypes; track designType.value) {
+        <div 
+          class="design-type-card"
+          [class.selected]="selectedDesignType() === designType.value"
+          [class.locked]="isDesignLocked(designType.value)"
+          [class.completed]="isDesignCompleted(designType.value)"
+          [class.generating]="isDesignGenerating(designType.value)"
+          (click)="onDesignCardClick(designType.value)">
+          
+          <div class="design-card-header">
+            <mat-icon class="design-icon" [style.color]="getStatusColor(designType.value)">
+              {{ designType.icon }}
+            </mat-icon>
+            @if (isDesignCompleted(designType.value)) {
+              <mat-icon class="status-icon completed">check_circle</mat-icon>
+            }
+            @if (isDesignGenerating(designType.value)) {
+              <div class="card-spinner"></div>
+            }
+          </div>
+          
+          <div class="design-card-content">
+            <h4 class="design-label">{{ designType.label }}</h4>
+            <p class="design-description">{{ designType.description }}</p>
+          </div>
+          
+          @if (isDesignLocked(designType.value)) {
+            <div class="locked-overlay">
+              <mat-icon>lock</mat-icon>
+              <span class="lock-hint">Requires: {{ designType.dependencies.join(', ').toUpperCase() }}</span>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+  
+  <!-- Mermaid Diagram Section -->
+  <div class="diagram-section">
+    <div class="diagram-editor">
+      <div class="editor-header">
+        <h3 class="editor-title">{{ getDesignTypeInfo(selectedDesignType())?.label?.toUpperCase() || 'DIAGRAM' }} EDITOR</h3>
+        
+        <div class="header-controls">
+          <div class="diagram-type-select">
+            <label>Design Type:</label>
+            <mat-select [value]="selectedDesignType()" (selectionChange)="onDesignTypeSelectChange($event.value)"
+                        class="design-type-dropdown" panelClass="design-type-panel"
+                        disableOptionCentering>
+              @for (type of designTypes; track type.value) {
+                <mat-option [value]="type.value" [disabled]="isDesignLocked(type.value)">
+                  {{ isDesignLocked(type.value) ? '🔒 ' : isDesignCompleted(type.value) ? '✓ ' : '' }}{{ type.label }}
+                </mat-option>
+              }
+            </mat-select>
+          </div>
+          
+          @if (!isDesignLocked(selectedDesignType())) {
+            <button 
+              class="action-button primary" 
+              (click)="generateDesign(selectedDesignType())"
+              [disabled]="isGenerating()">
+              <mat-icon>auto_awesome</mat-icon>
+              {{ isDesignCompleted(selectedDesignType()) ? 'Regenerate' : 'Generate' }}
+            </button>
+          }
+          <button class="action-button" (click)="copyMermaid()" [disabled]="!isDesignCompleted(selectedDesignType())">
+            <mat-icon>content_copy</mat-icon>
+            Copy
+          </button>
+        </div>
+      </div>
+      
+      <p class="editor-subtitle">
+        @if (isGeneratingAll()) {
+          {{ generationProgress() || 'Generating designs...' }}
+        } @else if (isDesignLocked(selectedDesignType())) {
+          Complete {{ getDesignTypeInfo(selectedDesignType())?.dependencies?.join(', ')?.toUpperCase() }} first to unlock this design.
+        } @else if (isDesignCompleted(selectedDesignType())) {
+          Edit the Mermaid definition. Changes render instantly.
+        } @else {
+          Click 'Generate' to create the {{ getDesignTypeInfo(selectedDesignType())?.label }} diagram.
+        }
+      </p>
+      
+      <div class="code-editor">
+        @if (isGeneratingAll() && !isViewingDuringGeneration()) {
+          <div class="code-editor-loading">
+            <div class="loading-shimmer"></div>
+            <p>Generating designs in progress...</p>
+          </div>
+        } @else {
+          <textarea
+            class="mermaid-textarea"
+            [ngModel]="mermaidCode()"
+            (ngModelChange)="mermaidCode.set($event); onMermaidCodeChange()"
+            spellcheck="false"
+            [disabled]="isDesignLocked(selectedDesignType())"></textarea>
+          <div class="line-numbers">
+            @for (line of mermaidCode().split('\n'); track $index; let i = $index) {
+              <span>{{ i + 1 }}</span>
+            }
+          </div>
+        }
+      </div>
+      
+      <div class="editor-footer">
+        <span>{{ diagramLineCount() }} lines</span>
+        <span>{{ diagramCharCount() }} characters</span>
+        @if (currentDesignState().timestamp) {
+          <span class="timestamp">Generated: {{ currentDesignState().timestamp }}</span>
+        }
+      </div>
+    </div>
+    
+    <div class="diagram-preview">
+      <div class="preview-header">
+        <div class="header-left">
+          <h3 class="preview-title">LIVE PREVIEW</h3>
+          <p class="preview-subtitle">The diagram reflects edits in real time.</p>
+        </div>
+        
+        <div class="header-actions">
+          <div class="theme-badge" [class.dark]="isDarkTheme()">
+            THEME: {{ isDarkTheme() ? 'DARK' : 'LIGHT' }}
+          </div>
+          <button class="theme-toggle-button" (click)="toggleTheme()">
+            Switch to {{ isDarkTheme() ? 'light' : 'dark' }} mode
+          </button>
+          <button class="fullscreen-button" (click)="toggleFullscreen()" [disabled]="showPlaceholder()">
+            <mat-icon>fullscreen</mat-icon>
+          </button>
+        </div>
+      </div>
+      
+      <div class="preview-container" [class.dark-theme]="isDarkTheme()" [class.light-theme]="!isDarkTheme()">
+        @if (isGeneratingAll() && !isViewingDuringGeneration()) {
+          <div class="generation-loading-overlay">
+            <div class="generation-loader">
+              <div class="loader-spinner"></div>
+              <div class="loader-ring"></div>
+            </div>
+            <h3 class="generation-title">{{ generationProgress() }}</h3>
+            <p class="generation-subtitle">Click on any completed design card to view it</p>
+          </div>
+        } @else if (isGenerating() && !isGeneratingAll()) {
+          <div class="generation-loading-overlay">
+            <div class="generation-loader">
+              <div class="loader-spinner"></div>
+              <div class="loader-ring"></div>
+            </div>
+            <h3 class="generation-title">Generating {{ getDesignTypeInfo(selectedDesignType())?.label }}...</h3>
+            <p class="generation-subtitle">Please wait while we create your design</p>
+          </div>
+        } @else if (showPlaceholder()) {
+          <div class="placeholder-message">
+            <mat-icon class="placeholder-icon">auto_awesome</mat-icon>
+            <h3>No Diagram Generated Yet</h3>
+            <p>Select a design type above and click <a class="generate-link" (click)="generateDesign(selectedDesignType())">Generate</a> to create your architecture diagram.</p>
+          </div>
+        } @else {
+          <div #mermaidContainer class="mermaid-output"></div>
+        }
+      </div>
+      
+      @if (currentDesignState().summary && (!isGeneratingAll() || isViewingDuringGeneration())) {
+        <div class="design-summary">
+          <h4>Design Summary</h4>
+          <p>{{ currentDesignState().summary }}</p>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Wireframe Section - Separate from Mermaid diagrams -->
+  <div class="wireframe-section">
+    <app-wireframe-viewer
+      [wireframeData]="wireframeData()"
+      [isGenerating]="isGeneratingWireframes()"
+      [generationProgress]="wireframeProgress()"
+      [pageMode]="wireframePageMode()"
+      [pageCount]="wireframePageCount()"
+      [pageCountOptions]="pageCountOptions"
+      (regeneratePage)="regenerateWireframePage($event)"
+      (regenerateAll)="generateWireframes()"
+      (pageModeChange)="wireframePageMode.set($event)"
+      (pageCountChange)="onPageCountChange($event)">
+    </app-wireframe-viewer>
+  </div>
+</div>
+
+<!-- Fullscreen Overlay -->
+@if (isFullscreen()) {
+  <div class="fullscreen-overlay" [class.dark-theme]="isDarkTheme()" [class.light-theme]="!isDarkTheme()">
+    <div class="fullscreen-header">
+      <h2>{{ getDesignTypeInfo(selectedDesignType())?.label }} - Live Preview</h2>
+      <div class="fullscreen-actions">
+        <button class="fullscreen-theme-btn" (click)="toggleTheme()">
+          <mat-icon>{{ isDarkTheme() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+          {{ isDarkTheme() ? 'Light' : 'Dark' }} Mode
+        </button>
+        <button class="fullscreen-zoom-btn" (click)="resetZoom()">
+          <mat-icon>fit_screen</mat-icon>
+          Reset Zoom
+        </button>
+        <button class="fullscreen-close-btn" (click)="toggleFullscreen()">
+          <mat-icon>close</mat-icon>
+          Exit Fullscreen
+        </button>
+      </div>
+    </div>
+    <div class="fullscreen-content" 
+         (wheel)="onFullscreenWheel($event)"
+         (mousedown)="onFullscreenMouseDown($event)"
+         (mousemove)="onFullscreenMouseMove($event)"
+         (mouseup)="onFullscreenMouseUp()"
+         (mouseleave)="onFullscreenMouseUp()">
+      <div class="fullscreen-diagram-wrapper"
+           [style.transform]="'scale(' + zoomLevel() + ') translate(' + panX() + 'px, ' + panY() + 'px)'"
+           [style.cursor]="isPanning() ? 'grabbing' : 'grab'">
+        <div #fullscreenMermaidContainer class="fullscreen-mermaid"></div>
+      </div>
+    </div>
+    <div class="fullscreen-zoom-indicator">
+      {{ (zoomLevel() * 100).toFixed(0) }}%
+    </div>
+  </div>
+}
+
+<!-- Floating Chat Button -->
+<button class="chat-fab" (click)="toggleChat()" matTooltip="Open chat">
+  <mat-icon>{{ isChatOpen() ? 'close' : 'chat' }}</mat-icon>
+</button>
+
+<!-- Chat Panel -->
+@if (isChatOpen()) {
+  <div class="chat-panel">
+    <div class="chat-header">
+      <h3>Project Chat</h3>
+      <button mat-icon-button (click)="toggleChat()">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+    <div class="chat-messages">
+      <p class="chat-placeholder">Start a conversation about your project...</p>
+    </div>
+    <div class="chat-input">
+      <input type="text" placeholder="Type a message..." />
+      <button mat-icon-button>
+        <mat-icon>send</mat-icon>
+      </button>
+    </div>
+  </div>
+}

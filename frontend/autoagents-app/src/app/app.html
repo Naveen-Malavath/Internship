@@ -1,0 +1,64 @@
+
+<div class="app-container">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="header-left">
+        <h1 class="header-title">AutoAgents Workspace</h1>
+        @if (activeProject()) {
+          <p class="active-project-label">Active project · {{ activeProject()?.projectName }} ({{ activeProject()?.projectKey }})</p>
+        }
+      </div>
+      <div class="header-status">
+        <!-- Dev Mode Toggle -->
+        <div class="dev-mode-toggle" [class.active]="devModeService.isDevMode()">
+          <button class="dev-toggle-btn" (click)="toggleDevMode()">
+            <span class="toggle-icon">{{ devModeService.isDevMode() ? '🔧' : '⚙️' }}</span>
+            <span class="toggle-label">DEV MODE: {{ devModeService.isDevMode() ? 'ON' : 'OFF' }}</span>
+          </button>
+        </div>
+        
+        <!-- Quick Start (visible only in dev mode) -->
+        @if (devModeService.isDevMode() && !activeProject()) {
+          <button class="btn-quick-start" (click)="quickStartDevMode()">
+            ⚡ Quick Start
+          </button>
+        }
+        
+        <span class="status-text">ALL SYSTEMS OPERATIONAL</span>
+        <button class="btn-new-project-header" (click)="openCreateProjectModal()">New Project</button>
+      </div>
+    </div>
+    @if (!activeProject()) {
+      <p class="header-subtitle">No active project yet. Launch a new project to get started.</p>
+    }
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="workspace-section">
+      <div class="workspace-header">
+        <div>
+          <h2 class="workspace-title">Project Workspace</h2>
+          <p class="workspace-subtitle">Stay on top of project health, feature approvals, and story progress.</p>
+        </div>
+      </div>
+      
+      @if (activeProject()) {
+        <app-project-workspace [project]="activeProject()!"></app-project-workspace>
+      } @else {
+        <div class="workspace-content">
+          <div class="empty-state">
+            <h3 class="empty-state-title">No items yet</h3>
+            <p class="empty-state-description">
+              Add features, upload project assets, or generate stories to populate the workspace.
+            </p>
+            <button class="btn-new-project-main" (click)="openCreateProjectModal()">New Project</button>
+          </div>
+        </div>
+      }
+    </div>
+  </main>
+</div>
+
+<router-outlet />

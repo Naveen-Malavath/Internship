@@ -1,0 +1,287 @@
+// Include theming for Angular Material with `mat.theme()`.
+@use '@angular/material' as mat;
+
+html {
+  @include mat.theme((
+    color: (
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+}
+
+/* Global Styles */
+html, body { 
+  height: 100%; 
+  margin: 0;
+  padding: 0;
+}
+
+body { 
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: #0a0e27;
+  color: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.6);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  
+  &:hover {
+    background: rgba(71, 85, 105, 0.8);
+    background-clip: padding-box;
+  }
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(71, 85, 105, 0.6) rgba(15, 23, 42, 0.5);
+}
+
+/* Custom Dialog Styles */
+.custom-dialog-container {
+  .mat-mdc-dialog-container {
+    padding: 0;
+    background: transparent;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    overflow: hidden !important; /* Remove outer scrollbar */
+  }
+  
+  .mat-mdc-dialog-surface {
+    background: transparent;
+    box-shadow: none;
+    overflow: hidden !important; /* Remove outer scrollbar */
+  }
+}
+
+.cdk-overlay-dark-backdrop {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+/* Loading Dialog Styles */
+.loading-dialog {
+  .mat-mdc-dialog-container {
+    padding: 0;
+    background: transparent;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  }
+  
+  .mat-mdc-dialog-surface {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+/* Feature Detail Dialog Styles */
+.feature-detail-dialog {
+  .mat-mdc-dialog-container {
+    padding: 0;
+    background: transparent;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    overflow: hidden !important;
+    overflow-x: hidden !important;
+  }
+  
+  .mat-mdc-dialog-surface {
+    background: transparent;
+    box-shadow: none;
+    overflow: hidden !important;
+    overflow-x: hidden !important;
+    max-width: 100%;
+  }
+}
+
+/* Material Select Dropdown Panel - Dark Theme */
+.mat-mdc-select-panel,
+.page-count-panel {
+  background: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+  min-width: unset !important;
+  width: auto !important;
+  
+  .mat-mdc-option {
+    color: #e2e8f0;
+    font-size: 13px;
+    min-height: 32px;
+    padding: 0 16px;
+    
+    .mdc-list-item__primary-text {
+      text-align: center;
+    }
+    
+    &:hover:not(.mat-mdc-option-disabled) {
+      background: rgba(59, 130, 246, 0.15);
+    }
+    
+    &.mat-mdc-option-active {
+      background: rgba(59, 130, 246, 0.2);
+    }
+    
+    &.mdc-list-item--selected {
+      background: rgba(59, 130, 246, 0.25) !important;
+      color: #60a5fa;
+      
+      .mdc-list-item__primary-text {
+        color: #60a5fa !important;
+      }
+    }
+  }
+}
+
+/* Page count specific panel - match trigger width and alignment */
+.page-count-panel.mat-mdc-select-panel {
+  min-width: 55px !important;
+  max-width: 55px !important;
+  width: 55px !important;
+  margin-left: -8px !important;
+  margin-top: 4px !important;
+  overflow-y: auto !important;
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE/Edge */
+  
+  &::-webkit-scrollbar {
+    display: none !important; /* Chrome/Safari/Opera */
+    width: 0 !important;
+  }
+  
+  .mat-mdc-option {
+    padding: 0 12px !important;
+    min-width: unset !important;
+    cursor: pointer !important;
+    
+    /* Hide the checkmark/tick */
+    .mat-pseudo-checkbox {
+      display: none !important;
+    }
+  }
+  
+  /* Also hide the checkmark from selected state */
+  .mdc-list-item__end {
+    display: none !important;
+  }
+  
+  .mat-mdc-option-pseudo-checkbox {
+    display: none !important;
+  }
+}
+
+/* Override the default min-width that causes misalignment */
+.cdk-overlay-pane:has(.page-count-panel) {
+  min-width: fit-content !important;
+  width: fit-content !important;
+}
+
+/* Ensure the panel wrapper doesn't add extra offset */
+.mat-mdc-select-panel-wrap {
+  padding: 0 !important;
+}
+
+/* Design Type dropdown panel */
+.design-type-panel.mat-mdc-select-panel {
+  min-width: 180px !important;
+  margin-top: 4px !important;
+  margin-left: -11px !important;
+  overflow-y: auto !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  
+  &::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+  }
+  
+  .mat-mdc-option {
+    cursor: pointer !important;
+    font-size: 0.8125rem !important;
+    
+    .mdc-list-item__primary-text {
+      text-align: left !important;
+    }
+    
+    /* Hide the checkmark/tick */
+    .mat-pseudo-checkbox {
+      display: none !important;
+    }
+    
+    &.mat-mdc-option-disabled {
+      opacity: 0.5;
+    }
+  }
+  
+  .mdc-list-item__end {
+    display: none !important;
+  }
+  
+  .mat-mdc-option-pseudo-checkbox {
+    display: none !important;
+  }
+}
+
+/* Material Slide Toggle - Smooth Transition */
+.mat-mdc-slide-toggle {
+  --mdc-switch-state-layer-size: 40px;
+  
+  .mdc-switch {
+    --mdc-switch-handle-shape: 50%;
+  }
+  
+  /* Smooth transition for the entire switch */
+  button.mdc-switch {
+    transition: none !important;
+  }
+  
+  .mdc-switch__track {
+    transition: background-color 0.3s ease-in-out !important;
+  }
+  
+  .mdc-switch__handle-track {
+    transition: transform 0.3s ease-in-out !important;
+  }
+  
+  .mdc-switch__handle {
+    transition: background-color 0.3s ease-in-out !important;
+  }
+  
+  .mdc-switch__shadow {
+    transition: box-shadow 0.3s ease-in-out !important;
+  }
+  
+  .mdc-switch__icon {
+    transition: opacity 0.2s ease-in-out !important;
+  }
+}
+
+/* Override Angular Material's default instant transitions */
+.mdc-switch--unselected .mdc-switch__handle-track,
+.mdc-switch--selected .mdc-switch__handle-track {
+  transition: transform 0.3s ease-in-out !important;
+}
+
+.mdc-switch--unselected .mdc-switch__track,
+.mdc-switch--selected .mdc-switch__track {
+  transition: background-color 0.3s ease-in-out, 
+              border-color 0.3s ease-in-out !important;
+}

@@ -1,0 +1,133 @@
+<div class="feature-detail-modal">
+  <div class="modal-header">
+    <h2 mat-dialog-title>
+      <mat-icon>layers</mat-icon>
+      Epic Brief
+    </h2>
+    <button mat-icon-button (click)="cancel()" class="close-button">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <div mat-dialog-content class="modal-content">
+    
+    <!-- OVERVIEW Section -->
+    <div class="section-container">
+      <h3 class="section-title">OVERVIEW</h3>
+      
+      <div class="form-grid">
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Feature summary</mat-label>
+          <input matInput [(ngModel)]="feature.title" placeholder="Streamlined onboarding for SMEs">
+        </mat-form-field>
+
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Business Justification</mat-label>
+          <textarea matInput [(ngModel)]="feature.reason" rows="2" 
+                    placeholder="Why this feature matters for the business..."></textarea>
+        </mat-form-field>
+      </div>
+    </div>
+
+    <!-- Problem & User Section -->
+    <div class="section-container">
+      <h3 class="section-title">PROBLEM & USER</h3>
+      
+      <mat-form-field class="full-width" appearance="outline">
+        <mat-label>Problem statement</mat-label>
+        <textarea matInput [(ngModel)]="feature.problemStatement" rows="3" 
+                  placeholder="SME owners struggle to activate accounts without guided onboarding, causing churn..."></textarea>
+      </mat-form-field>
+
+      <mat-form-field class="full-width" appearance="outline">
+        <mat-label>Primary user persona / segment</mat-label>
+        <input matInput [(ngModel)]="feature.userPersona" 
+               placeholder="SME business owner seeking streamlined onboarding">
+      </mat-form-field>
+
+      <mat-form-field class="full-width" appearance="outline">
+        <mat-label>Detailed description / narrative</mat-label>
+        <textarea matInput [(ngModel)]="feature.detailedDescription" rows="4" 
+                  placeholder="Outline the end-to-end flow, scope boundaries, and interaction model..."></textarea>
+      </mat-form-field>
+    </div>
+
+    <!-- Business Outcomes Section -->
+    <div class="section-container">
+      <h3 class="section-title">BUSINESS OUTCOMES</h3>
+      
+      <mat-form-field class="full-width" appearance="outline">
+        <mat-label>Business objective / KPI</mat-label>
+        <textarea matInput [(ngModel)]="feature.businessObjective" rows="2" 
+                  placeholder="Improve 30-day activation from 55% to 75% while reducing support tickets by 20%..."></textarea>
+      </mat-form-field>
+
+      <mat-form-field class="full-width" appearance="outline">
+        <mat-label>Success metrics</mat-label>
+        <textarea matInput [(ngModel)]="feature.successMetrics" rows="3" 
+                  placeholder="e.g. Activation rate > 75%&#10;Support tickets reduced by 20%&#10;Time to first value < 10 minutes"></textarea>
+      </mat-form-field>
+    </div>
+
+    <!-- Acceptance & Delivery Section -->
+    <div class="section-container">
+      <h3 class="section-title">ACCEPTANCE & DELIVERY</h3>
+      
+      <mat-form-field class="full-width" appearance="outline">
+        <mat-label>Acceptance criteria</mat-label>
+        <textarea matInput [(ngModel)]="feature.acceptanceCriteria" rows="4" 
+                  placeholder="Given ... When ... Then ..."></textarea>
+      </mat-form-field>
+
+      <mat-form-field class="full-width" appearance="outline">
+        <mat-label>Dependencies</mat-label>
+        <textarea matInput [(ngModel)]="feature.dependencies" rows="3" 
+                  placeholder="• Requires user authentication system&#10;• Depends on payment gateway integration"></textarea>
+      </mat-form-field>
+    </div>
+
+    <!-- Customer-Specific Fields (can be added manually) -->
+    <div class="section-container customer-section">
+      <h3 class="section-title">ORGANIZATIONAL DETAILS <span class="optional-tag">(Optional - Customer Input)</span></h3>
+      
+      <div class="form-grid">
+        <mat-form-field appearance="outline">
+          <mat-label>Feature key</mat-label>
+          <input matInput placeholder="e.g., SME-ONB">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Status</mat-label>
+          <input matInput placeholder="Draft">
+        </mat-form-field>
+
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Team / Squad</mat-label>
+          <input matInput placeholder="e.g., Growth Platform">
+        </mat-form-field>
+
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Stakeholders / Owners</mat-label>
+          <textarea matInput rows="2" placeholder="Name - Role"></textarea>
+        </mat-form-field>
+
+        <mat-form-field class="full-width" appearance="outline">
+          <mat-label>Constraints</mat-label>
+          <textarea matInput rows="2" placeholder="Budget, timeline, compliance requirements..."></textarea>
+        </mat-form-field>
+      </div>
+    </div>
+
+  </div>
+
+  <div mat-dialog-actions class="modal-actions">
+    <button mat-stroked-button (click)="cancel()" class="cancel-btn">
+      <mat-icon>close</mat-icon>
+      Cancel
+    </button>
+    <button mat-raised-button color="primary" (click)="save()" class="save-btn">
+      <mat-icon>check</mat-icon>
+      Save Changes
+    </button>
+  </div>
+</div>
