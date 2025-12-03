@@ -1944,6 +1944,13 @@ STYLE REQUIREMENTS:
 - Use modern UI patterns
 - Include placeholder content
 
+CRITICAL SVG/ICON RULES:
+- ALL SVG icons MUST have explicit width and height attributes: width="24" height="24" (or smaller)
+- NEVER use viewBox without explicit width/height
+- For icons in navigation/buttons, use: class="w-5 h-5" or class="w-6 h-6"
+- Maximum icon size: 48x48 pixels
+- Example: <svg width="24" height="24" viewBox="0 0 24 24" class="w-6 h-6">
+
 OUTPUT FORMAT:
 Return valid HTML with inline Tailwind CSS classes. Include a complete page layout.
 Return ONLY the HTML code starting with <!DOCTYPE html> or <div>.""",
