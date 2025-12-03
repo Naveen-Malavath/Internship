@@ -466,13 +466,14 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
     
     // Define generation groups based on dependencies
     // Each group can run in parallel, but groups must run sequentially
+    // IMPORTANT: Check DESIGN_TYPES in api.service.ts for actual dependencies
     const generationGroups: DesignType[][] = [
       ['hld'],                                    // Group 1: HLD first (no deps)
       ['dbd', 'mindmap', 'gantt'],               // Group 2: Only need HLD
-      ['api'],                                    // Group 3: Needs HLD + DBD
-      ['lld', 'dfd', 'journey', 'sequence', 'state'], // Group 4: Need HLD + API
-      ['component', 'security'],                  // Group 5: Need HLD + API
-      ['infrastructure'],                         // Group 6: Needs HLD
+      ['api', 'dfd'],                            // Group 3: api needs HLD+DBD, dfd needs HLD+DBD
+      ['lld', 'security', 'journey', 'sequence', 'state'], // Group 4: All need HLD+API
+      ['component'],                              // Group 5: Needs HLD+LLD
+      ['infrastructure'],                         // Group 6: Needs HLD+Security
       ['gitflow']                                 // Group 7: Needs Infrastructure
     ];
     
