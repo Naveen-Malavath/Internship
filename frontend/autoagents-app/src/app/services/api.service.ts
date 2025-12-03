@@ -218,7 +218,9 @@ export const DESIGN_TYPES: DesignTypeInfo[] = [
   providedIn: 'root'
 })
 export class ApiService {
-  private apiUrl = 'http://localhost:8000';
+  // Use relative URL for production (Nginx will proxy /api to backend)
+  // Use absolute URL for local development
+  private apiUrl = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
   constructor(private http: HttpClient) {}
 
