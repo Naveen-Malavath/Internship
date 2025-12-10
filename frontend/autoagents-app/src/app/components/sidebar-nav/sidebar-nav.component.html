@@ -1,0 +1,132 @@
+<!-- Mobile Menu Toggle Button -->
+<button 
+  class="mobile-menu-toggle"
+  (click)="onMobileMenuToggle()"
+  [attr.aria-expanded]="navService.isMobileMenuOpen()"
+  aria-label="Toggle navigation menu">
+  <mat-icon>{{ navService.isMobileMenuOpen() ? 'close' : 'menu' }}</mat-icon>
+</button>
+
+<!-- Mobile Overlay -->
+@if (navService.isMobileMenuOpen() && isMobile()) {
+  <div 
+    class="mobile-overlay"
+    (click)="onOverlayClick()"
+    [@fadeInOut]>
+  </div>
+}
+
+<!-- Sidebar Navigation -->
+<nav 
+  class="sidebar-nav"
+  [class.collapsed]="navService.isCollapsed()"
+  [class.mobile-open]="navService.isMobileMenuOpen()"
+  [class.mobile]="isMobile()"
+  role="navigation"
+  aria-label="Main navigation">
+  
+  <!-- Logo/Brand Section -->
+  <div class="nav-header">
+    <div class="brand">
+      <div class="brand-icon">
+        <mat-icon>auto_awesome</mat-icon>
+      </div>
+      @if (!navService.isCollapsed()) {
+        <span class="brand-text">AutoAgents</span>
+      }
+    </div>
+    
+    <!-- Collapse Toggle (Desktop only) -->
+    @if (!isMobile()) {
+      <button 
+        class="collapse-toggle"
+        (click)="onToggleCollapse()"
+        [attr.aria-label]="navService.isCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+        [matTooltip]="navService.isCollapsed() ? 'Expand' : 'Collapse'"
+        matTooltipPosition="right">
+        <mat-icon>{{ navService.isCollapsed() ? 'chevron_right' : 'chevron_left' }}</mat-icon>
+      </button>
+    }
+  </div>
+
+  <!-- Navigation Items -->
+  <div class="nav-items-container">
+    <ul class="nav-items" role="menubar">
+      @for (item of navService.navItems(); track trackByNavItem($index, item)) {
+        <li 
+          class="nav-item"
+          [class.active]="navService.isActiveRoute(item.route)"
+          [class.disabled]="item.disabled"
+          [class.expanded]="isExpanded(item.id)"
+          [class.has-children]="item.children && item.children.length > 0"
+          [class.focused]="focusedIndex() === $index"
+          role="none">
+          
+          <a
+            class="nav-link"
+            [routerLink]="item.disabled ? null : item.route"
+            [routerLinkActive]="'router-active'"
+            [routerLinkActiveOptions]="{ exact: item.route === '/' }"
+            (click)="onNavItemClick(item); $event.preventDefault()"
+            (mouseenter)="onNavItemHover(item.id)"
+            (mouseleave)="onNavItemHover(null)"
+            [matTooltip]="getTooltip(item)"
+            matTooltipPosition="right"
+            [attr.aria-current]="navService.isActiveRoute(item.route) ? 'page' : null"
+            [attr.aria-disabled]="item.disabled"
+            [tabindex]="item.disabled ? -1 : 0"
+            role="menuitem"
+            matRipple
+            [matRippleDisabled]="!!item.disabled">
+            
+            <span class="nav-icon">
+              <mat-icon>{{ item.icon }}</mat-icon>
+            </span>
+            
+            @if (!navService.isCollapsed()) {
+              <span class="nav-label">{{ item.label }}</span>
+              
+              @if (item.badge && item.badge > 0) {
+                <span class="nav-badge" [attr.aria-label]="item.badge + ' items'">
+                  {{ item.badge > 99 ? '99+' : item.badge }}
+                </span>
+              }
+              
+              @if (item.children && item.children.length > 0) {
+                <mat-icon class="expand-icon">
+                  {{ isExpanded(item.id) ? 'expand_less' : 'expand_more' }}
+                </mat-icon>
+              }
+            } @else {
+              @if (item.badge && item.badge > 0) {
+                <span class="nav-badge-dot" aria-hidden="true"></span>
+              }
+            }
+          </a>
+          
+          <!-- Child Items (if any) -->
+          @if (item.children && item.children.length > 0 && isExpanded(item.id) && !navService.isCollapsed()) {
+            <ul class="nav-children" role="menu">
+              @for (child of item.children; track child.id) {
+                <li class="nav-child-item" role="none">
+                  <a
+                    class="nav-child-link"
+                    [routerLink]="child.disabled ? null : child.route"
+                    [routerLinkActive]="'router-active'"
+                    (click)="onNavItemClick(child); $event.preventDefault()"
+                    [attr.aria-disabled]="child.disabled"
+                    [tabindex]="child.disabled ? -1 : 0"
+                    role="menuitem"
+                    matRipple
+                    [matRippleDisabled]="!!child.disabled">
+                    <span class="nav-child-label">{{ child.label }}</span>
+                  </a>
+                </li>
+              }
+            </ul>
+          }
+        </li>
+      }
+    </ul>
+  </div>
+</nav>

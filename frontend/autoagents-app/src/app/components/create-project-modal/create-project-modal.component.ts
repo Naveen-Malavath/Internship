@@ -16,6 +16,7 @@ import { PromptReviewDialogComponent } from '../prompt-review-dialog/prompt-revi
 import { FeatureDetailModalComponent } from '../feature-detail-modal/feature-detail-modal.component';
 import { Feature, Story } from '../../services/api.service';
 import { DevModeService } from '../../services/dev-mode.service';
+import { ActivityService } from '../../services/activity.service';
 import { MOCK_FEATURES, MOCK_STORIES, MOCK_PROJECT_CONTEXT } from '../../services/dev-data';
 
 interface Template {
@@ -101,6 +102,7 @@ export class CreateProjectModalComponent {
   
   // Dev mode service
   devModeService = inject(DevModeService);
+  activityService = inject(ActivityService);
   
   constructor(
     private apiService: ApiService,
@@ -856,6 +858,22 @@ Focus Areas: ${this.projectData.executiveSummary || 'N/A'}`;
     };
     
     console.log('Creating project with data:', projectResult);
+    
+    // Track activity - project created
+    console.log('[ActivityTracking] Project created:', this.projectData.projectName);
+    this.activityService.logProjectCreated(this.projectData.projectName);
+    
+    // Track features generated
+    if (this.generatedFeatures().length > 0) {
+      console.log('[ActivityTracking] Features generated:', this.generatedFeatures().length);
+      this.activityService.logFeaturesGenerated(this.generatedFeatures().length);
+    }
+    
+    // Track stories generated
+    if (this.generatedStories().length > 0) {
+      console.log('[ActivityTracking] Stories generated:', this.generatedStories().length);
+      this.activityService.logStoriesGenerated(this.generatedStories().length);
+    }
     
     // Close dialog and return the project data
     this.dialogRef.close(projectResult);

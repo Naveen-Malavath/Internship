@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.angular/
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Tests
+*.spec.ts
+coverage/
+e2e/
+
+# Documentation
+*.md
+
+# Editor configs
+.editorconfig

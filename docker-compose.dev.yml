@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: ./backend
+    container_name: autoagents-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+  frontend:
+    image: node:20-alpine
+    container_name: autoagents-frontend-dev
+    working_dir: /app
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./frontend/autoagents-app:/app
+      - /app/node_modules  # Preserve node_modules inside container
+    command: sh -c "npm install && npm start -- --host 0.0.0.0"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  default:
+    name: autoagents-network

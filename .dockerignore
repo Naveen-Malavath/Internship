@@ -1,0 +1,49 @@
+# Python virtual environment
+backend/env/
+backend/venv/
+backend/.venv/
+
+# Python cache
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.Python
+**/*.so
+
+# Node modules
+frontend/autoagents-app/node_modules/
+frontend/autoagents-app/.angular/
+frontend/autoagents-app/dist/
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files (keep for local, exclude from image)
+.env.local
+.env.*.local
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+**/*.spec.ts
+**/*_test.py
+**/test_*.py
+
+# Logs
+**/*.log
+**/logs/
+
+# OS files
+.DS_Store
+Thumbs.db

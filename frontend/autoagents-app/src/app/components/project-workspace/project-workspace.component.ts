@@ -9,6 +9,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Feature, Story, ApiService, DesignType, DesignResponse, DESIGN_TYPES, DesignTypeInfo, WireframeData, WireframePage } from '../../services/api.service';
 import { WireframeViewerComponent } from '../wireframe-viewer/wireframe-viewer.component';
 import { DevModeService } from '../../services/dev-mode.service';
+import { ActivityService } from '../../services/activity.service';
 import { MOCK_WIREFRAME_DATA } from '../../services/dev-data';
 import mermaid from 'mermaid';
 
@@ -61,6 +62,7 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
   
   private apiService = inject(ApiService);
   private devModeService = inject(DevModeService);
+  private activityService = inject(ActivityService);
   
   // Design types metadata
   designTypes = DESIGN_TYPES;
@@ -419,6 +421,10 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
           summary: response.summary,
           timestamp: new Date().toLocaleString()
         });
+        
+        // Track activity - design completed
+        console.log('[ActivityTracking] Design completed:', type);
+        this.activityService.logDesignGenerated(type);
         
         // Store summary for chaining
         if (response.summary) {
@@ -1501,6 +1507,10 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
                 summary: `Generated ${response.pages.length} wireframe pages`,
                 timestamp: new Date().toLocaleString()
               });
+              
+              // Track activity - wireframes completed
+              console.log('[ActivityTracking] Wireframes generated:', response.pages.length);
+              this.activityService.logWireframesGenerated(response.pages.length);
               
               this.wireframeProgress.set(`Generated ${response.pages.length} wireframe pages!`);
               return; // Success - exit the retry loop
