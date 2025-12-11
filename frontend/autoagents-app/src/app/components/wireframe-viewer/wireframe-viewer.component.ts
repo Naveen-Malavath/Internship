@@ -32,10 +32,6 @@ export interface WireframePage {
   html: string;
   description?: string;
   error?: string;
-  // Angular component code
-  component_ts?: string;
-  component_html?: string;
-  component_scss?: string;
 }
 
 export interface WireframeData {
@@ -57,7 +53,6 @@ export interface WireframeData {
 }
 
 type ViewportSize = 'mobile' | 'tablet' | 'desktop';
-type CodeViewMode = 'preview' | 'typescript' | 'html' | 'scss';
 
 @Component({
   selector: 'app-wireframe-viewer',
@@ -110,9 +105,6 @@ export class WireframeViewerComponent implements AfterViewInit, OnChanges, OnIni
   isCodeEditorVisible = signal<boolean>(false);
   isFullscreen = signal<boolean>(false);
   
-  // Code view mode - which type of code to display
-  codeViewMode = signal<CodeViewMode>('preview');
-  
   // Live progress tracking
   completedPages: string[] = [];
   currentPage: string = '';
@@ -143,105 +135,12 @@ export class WireframeViewerComponent implements AfterViewInit, OnChanges, OnIni
     }
   });
   
-  // The actual render width for the iframe content (always render at desktop size, then scale)
-  // The actual render width for the iframe content
-  // For desktop: use 100% (original behavior)
-  // For mobile/tablet: use fixed 1200px width then scale down
-  iframeRenderWidth = computed(() => {
-    switch (this.viewportSize()) {
-      case 'mobile': return '1200px';
-      case 'tablet': return '1200px';
-      case 'desktop': return '100%'; // Original desktop behavior - no fixed width
-    }
-  });
-  
-  // Calculate scale factor for mobile/tablet to fit content
-  // Desktop uses scale 1 with 100% width (no scaling needed)
-  viewportScale = computed(() => {
-    switch (this.viewportSize()) {
-      case 'mobile': return 375 / 1200; // ~0.3125
-      case 'tablet': return 768 / 1200; // ~0.64
-      case 'desktop': return 1;
-    }
-  });
-  
-  // Calculate the height the iframe needs to be to fill the visible area after scaling
-  // For desktop: use 100% height (original behavior)
-  // For mobile/tablet: calculate inverse height based on scale
-  iframeScaledHeight = computed(() => {
-    if (this.viewportSize() === 'desktop') {
-      return '100%'; // Original desktop behavior
-    }
-    const scale = this.viewportScale();
-    // When scaled down, we need to increase the height inversely
-    // For example, at 0.3125 scale, height needs to be 1/0.3125 = 3.2x to fill 500px visible area
-    const baseHeight = 500; // matches the wrapper height
-    return `${Math.ceil(baseHeight / scale)}px`;
-  });
-  
-  // Calculate fullscreen scaled height
-  // For desktop: use 100% height (original behavior)
-  // For mobile/tablet: calculate inverse height based on scale
-  fullscreenScaledHeight = computed(() => {
-    if (this.viewportSize() === 'desktop') {
-      return '100%'; // Original desktop behavior
-    }
-    const scale = this.viewportScale();
-    // Fullscreen height is viewport height minus header (140px)
-    // We estimate based on a typical height
-    const baseHeight = 800; // Approximate fullscreen visible area
-    return `${Math.ceil(baseHeight / scale)}px`;
-  });
-  
   viewportLabel = computed(() => {
     switch (this.viewportSize()) {
       case 'mobile': return '375px (Mobile)';
       case 'tablet': return '768px (Tablet)';
       case 'desktop': return '100% (Desktop)';
     }
-  });
-  
-  // Get current code content based on view mode
-  currentCodeContent = computed(() => {
-    const page = this.selectedPage();
-    if (!page) return '';
-    
-    switch (this.codeViewMode()) {
-      case 'preview': return this.editedHtml() || page.html || '';
-      case 'typescript': return page.component_ts || '// No TypeScript code generated yet';
-      case 'html': return page.component_html || '<!-- No HTML template generated yet -->';
-      case 'scss': return page.component_scss || '/* No SCSS styles generated yet */';
-    }
-  });
-  
-  // Get file extension for current code view
-  currentFileExtension = computed(() => {
-    switch (this.codeViewMode()) {
-      case 'preview': return 'html';
-      case 'typescript': return 'ts';
-      case 'html': return 'html';
-      case 'scss': return 'scss';
-    }
-  });
-  
-  // Get file name for current code view
-  currentFileName = computed(() => {
-    const page = this.selectedPage();
-    if (!page) return 'code';
-    
-    const baseName = this.toKebabCase(page.name);
-    switch (this.codeViewMode()) {
-      case 'preview': return `${page.id}-wireframe.html`;
-      case 'typescript': return `${baseName}.component.ts`;
-      case 'html': return `${baseName}.component.html`;
-      case 'scss': return `${baseName}.component.scss`;
-    }
-  });
-  
-  // Check if component code is available
-  hasComponentCode = computed(() => {
-    const page = this.selectedPage();
-    return !!(page?.component_ts || page?.component_html || page?.component_scss);
   });
   
   constructor(private sanitizer: DomSanitizer) {}
@@ -289,93 +188,10 @@ export class WireframeViewerComponent implements AfterViewInit, OnChanges, OnIni
     // Log first 500 chars of HTML for debugging
     console.log('[WireframeViewer] HTML preview:', html.substring(0, 500));
     
-    // Inject responsive CSS and viewport meta to make content adapt to viewport size
-    const responsiveHtml = this.injectResponsiveStyles(html);
-    
-    const blob = new Blob([responsiveHtml], { type: 'text/html' });
+    const blob = new Blob([html], { type: 'text/html' });
     this.currentBlobUrl = URL.createObjectURL(blob);
     console.log('[WireframeViewer] Created blob URL:', this.currentBlobUrl);
     this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.currentBlobUrl));
-  }
-  
-  /**
-   * Injects base CSS into the HTML content to ensure proper rendering.
-   * Since we now use CSS transform scaling for mobile/tablet viewports,
-   * we render content at full desktop width and scale it down visually.
-   */
-  private injectResponsiveStyles(html: string): string {
-    // Base CSS to inject - ensures proper rendering at full width
-    const baseCSS = `
-    <style data-wireframe-base="true">
-      /* Base styles for consistent rendering */
-      *, *::before, *::after {
-        box-sizing: border-box;
-      }
-      
-      html, body {
-        margin: 0;
-        padding: 0;
-        min-height: 100%;
-        background: white;
-      }
-      
-      /* Ensure body fills the iframe */
-      body {
-        min-width: 100%;
-      }
-      
-      /* Make images scale properly within their containers */
-      img {
-        max-width: 100%;
-        height: auto;
-      }
-      
-      /* Ensure tables display properly */
-      table {
-        border-collapse: collapse;
-      }
-    </style>
-    `;
-    
-    // Viewport meta tag - set to render at desktop width
-    const viewportMeta = '<meta name="viewport" content="width=1200, initial-scale=1.0">';
-    
-    // Check if HTML already has viewport meta
-    const hasViewportMeta = /<meta[^>]*name=["']viewport["'][^>]*>/i.test(html);
-    
-    // Check if HTML has head tag
-    const hasHeadTag = /<head[^>]*>/i.test(html);
-    const hasHtmlTag = /<html[^>]*>/i.test(html);
-    
-    let modifiedHtml = html;
-    
-    if (hasHeadTag) {
-      // Inject after opening head tag
-      modifiedHtml = modifiedHtml.replace(
-        /(<head[^>]*>)/i, 
-        `$1\n${!hasViewportMeta ? viewportMeta : ''}\n${baseCSS}`
-      );
-    } else if (hasHtmlTag) {
-      // Create head tag and inject
-      modifiedHtml = modifiedHtml.replace(
-        /(<html[^>]*>)/i,
-        `$1\n<head>\n${viewportMeta}\n${baseCSS}\n</head>`
-      );
-    } else {
-      // No html/head structure, wrap everything
-      modifiedHtml = `<!DOCTYPE html>
-<html>
-<head>
-${viewportMeta}
-${baseCSS}
-</head>
-<body>
-${html}
-</body>
-</html>`;
-    }
-    
-    return modifiedHtml;
   }
   
   ngOnInit() {
@@ -451,23 +267,6 @@ ${html}
   
   toggleCodeEditor() {
     this.isCodeEditorVisible.set(!this.isCodeEditorVisible());
-    // Reset to preview mode when opening code editor
-    if (this.isCodeEditorVisible()) {
-      this.codeViewMode.set('preview');
-    }
-  }
-  
-  // Set code view mode
-  setCodeViewMode(mode: CodeViewMode) {
-    this.codeViewMode.set(mode);
-  }
-  
-  // Helper to convert string to kebab-case
-  private toKebabCase(str: string): string {
-    return str
-      .replace(/([a-z])([A-Z])/g, '$1-$2')
-      .replace(/[\s_]+/g, '-')
-      .toLowerCase();
   }
   
   toggleFullscreen() {
@@ -512,13 +311,8 @@ ${html}
   }
   
   copyHtml() {
-    const content = this.currentCodeContent();
-    navigator.clipboard.writeText(content);
-  }
-  
-  // Copy current code content (alias for copyHtml for clarity)
-  copyCurrentCode() {
-    this.copyHtml();
+    const html = this.editedHtml() || this.selectedPage()?.html || '';
+    navigator.clipboard.writeText(html);
   }
   
   downloadHtml() {
@@ -535,49 +329,6 @@ ${html}
     URL.revokeObjectURL(url);
   }
   
-  // Download current code view (respects codeViewMode)
-  downloadCurrentCode() {
-    const content = this.currentCodeContent();
-    const fileName = this.currentFileName();
-    const mimeType = this.codeViewMode() === 'scss' ? 'text/x-scss' : 
-                     this.codeViewMode() === 'typescript' ? 'text/typescript' : 'text/html';
-    
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-  
-  // Download all component files for current page
-  downloadComponentFiles() {
-    const page = this.selectedPage();
-    if (!page) return;
-    
-    const baseName = this.toKebabCase(page.name);
-    const files = [
-      { content: page.component_ts || '', name: `${baseName}.component.ts`, type: 'text/typescript' },
-      { content: page.component_html || '', name: `${baseName}.component.html`, type: 'text/html' },
-      { content: page.component_scss || '', name: `${baseName}.component.scss`, type: 'text/x-scss' }
-    ];
-    
-    files.forEach((file, index) => {
-      if (file.content) {
-        setTimeout(() => {
-          const blob = new Blob([file.content], { type: file.type });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = file.name;
-          a.click();
-          URL.revokeObjectURL(url);
-        }, index * 300);
-      }
-    });
-  }
-  
   downloadAllPages() {
     if (!this.wireframeData?.pages) return;
     
@@ -592,64 +343,6 @@ ${html}
         a.click();
         URL.revokeObjectURL(url);
       }, index * 500);
-    });
-  }
-  
-  // Download all pages with their component code
-  downloadAllWithComponents() {
-    if (!this.wireframeData?.pages) return;
-    
-    let downloadIndex = 0;
-    this.wireframeData.pages.forEach((page) => {
-      const baseName = this.toKebabCase(page.name);
-      
-      // Download wireframe HTML
-      setTimeout(() => {
-        const blob = new Blob([page.html], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${page.id}-wireframe.html`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }, downloadIndex++ * 300);
-      
-      // Download component files if available
-      if (page.component_ts) {
-        setTimeout(() => {
-          const blob = new Blob([page.component_ts!], { type: 'text/typescript' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${baseName}.component.ts`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }, downloadIndex++ * 300);
-      }
-      
-      if (page.component_html) {
-        setTimeout(() => {
-          const blob = new Blob([page.component_html!], { type: 'text/html' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${baseName}.component.html`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }, downloadIndex++ * 300);
-      }
-      
-      if (page.component_scss) {
-        setTimeout(() => {
-          const blob = new Blob([page.component_scss!], { type: 'text/x-scss' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${baseName}.component.scss`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }, downloadIndex++ * 300);
-      }
     });
   }
   
@@ -732,18 +425,8 @@ ${html}
   }
   
   getLineNumbers(): number[] {
-    const content = this.currentCodeContent();
-    const lines = content.split('\n').length;
+    const html = this.editedHtml() || '';
+    const lines = html.split('\n').length;
     return Array.from({ length: lines }, (_, i) => i + 1);
-  }
-  
-  // Get syntax highlighting language indicator
-  getCodeLanguage(): string {
-    switch (this.codeViewMode()) {
-      case 'preview': return 'HTML';
-      case 'typescript': return 'TypeScript';
-      case 'html': return 'HTML Template';
-      case 'scss': return 'SCSS';
-    }
   }
 }

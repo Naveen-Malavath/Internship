@@ -13,15 +13,10 @@ load_dotenv()
 
 app = FastAPI(title="AutoAgents API")
 
-# Import and register coding agent router
-from agents.coding_agent.router import router as coding_router
-from agents.coding_agent.orchestrator import init_coding_agent
-app.include_router(coding_router)
-
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=["http://localhost:4201", "http://localhost:4200"],  # Added port 4200
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,10 +28,7 @@ anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # Model configurations
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
-SONNET_MODEL = "claude-sonnet-4-5-20250929"
-
-# Initialize coding agent with shared client (Haiku primary, Sonnet fallback)
-init_coding_agent(anthropic_client, HAIKU_MODEL, SONNET_MODEL)
+SONNET_MODEL = "claude-sonnet-4-20250514"
 
 # Self-healing retry mechanism
 async def call_claude_with_retry(model: str, system_prompt: str, user_prompt: str, max_tokens: int = 1024, max_retries: int = 5, fallback_model: str = None):
@@ -329,7 +321,7 @@ CRITICAL: Return ONLY a valid JSON object starting with {{ and ending with }}. N
                 # Get fixed response from Claude
                 try:
                     response_text = await call_claude_with_retry(
-                        model=HAIKU_MODEL,
+                        model="claude-haiku-4-5-20251001",
                         system_prompt="You are a JSON formatting expert. Return only valid JSON, no explanations.",
                         user_prompt=fix_prompt,
                         max_tokens=4096,
@@ -599,7 +591,7 @@ Generate 6 features in strict JSON format."""
         # Call Claude Haiku 4.5 with retry mechanism
         print("[DEBUG] Calling Claude API for feature generation...")
         generated_content = await call_claude_with_retry(
-            model=HAIKU_MODEL,
+            model="claude-haiku-4-5-20251001",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=4096,
@@ -748,7 +740,7 @@ Return the stories in strict JSON format with title, description, and featureRef
         # Call Claude Haiku 4.5 with retry mechanism
         print("[DEBUG] Calling Claude API for story generation...")
         generated_content = await call_claude_with_retry(
-            model=HAIKU_MODEL,
+            model="claude-haiku-4-5-20251001",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=4096,
@@ -3078,10 +3070,6 @@ class WireframePage(BaseModel):
     html: str
     description: Optional[str] = ""
     error: Optional[str] = None
-    # Angular component code
-    component_ts: Optional[str] = ""      # TypeScript component code
-    component_html: Optional[str] = ""    # Angular HTML template
-    component_scss: Optional[str] = ""    # Component styles
 
 class WireframePagesResponse(BaseModel):
     pages: list[WireframePage]
@@ -3093,16 +3081,8 @@ class WireframePagesResponse(BaseModel):
 class WireframePagesRequest(BaseModel):
     project_summary: str
     features_summary: Optional[str] = ""
-    stories_summary: Optional[str] = ""  # User stories with descriptions
     hld_summary: Optional[str] = ""
     api_summary: Optional[str] = ""
-    dbd_summary: Optional[str] = ""      # Database design summary
-    lld_summary: Optional[str] = ""      # Low-level design summary
-    dfd_summary: Optional[str] = ""      # Data flow diagram summary
-    component_summary: Optional[str] = "" # Component diagram summary
-    security_summary: Optional[str] = "" # Security architecture summary
-    infrastructure_summary: Optional[str] = ""  # Infrastructure design summary
-    state_summary: Optional[str] = ""    # State diagram summary
     page_mode: Optional[str] = "auto"  # 'auto' or 'manual'
     page_count: Optional[int] = None   # Number of pages when manual mode
 
@@ -3119,42 +3099,15 @@ async def generate_wireframe_pages(request: WireframePagesRequest):
         # Initialize orchestrator
         orchestrator = WireframeOrchestrator(anthropic_client)
         
-        # Build comprehensive project context from all summaries
-        all_summaries = []
-        if request.hld_summary:
-            all_summaries.append(f"HIGH-LEVEL DESIGN:\n{request.hld_summary}")
-        if request.dbd_summary:
-            all_summaries.append(f"DATABASE DESIGN:\n{request.dbd_summary}")
-        if request.api_summary:
-            all_summaries.append(f"API DESIGN:\n{request.api_summary}")
-        if request.lld_summary:
-            all_summaries.append(f"LOW-LEVEL DESIGN:\n{request.lld_summary}")
-        if request.dfd_summary:
-            all_summaries.append(f"DATA FLOW:\n{request.dfd_summary}")
-        if request.component_summary:
-            all_summaries.append(f"COMPONENT ARCHITECTURE:\n{request.component_summary}")
-        if request.security_summary:
-            all_summaries.append(f"SECURITY ARCHITECTURE:\n{request.security_summary}")
-        if request.infrastructure_summary:
-            all_summaries.append(f"INFRASTRUCTURE:\n{request.infrastructure_summary}")
-        if request.state_summary:
-            all_summaries.append(f"STATE MANAGEMENT:\n{request.state_summary}")
-        
-        combined_architecture = "\n\n".join(all_summaries) if all_summaries else ""
-        
-        # Prepare context with all project data
+        # Prepare context with page settings
         context = {
             "project_summary": request.project_summary,
             "features_summary": request.features_summary or "",
-            "stories_summary": request.stories_summary or "",
             "hld_summary": request.hld_summary or "",
             "api_summary": request.api_summary or "",
-            "architecture_context": combined_architecture,  # All design summaries combined
             "page_mode": request.page_mode or "auto",
             "page_count": request.page_count
         }
-        
-        print(f"[DEBUG] Context includes: features={bool(request.features_summary)}, stories={bool(request.stories_summary)}, architecture_summaries={len(all_summaries)}")
         
         # Generate wireframes
         result = await orchestrator.generate_wireframes(context)

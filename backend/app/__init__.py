@@ -1,1 +1,0 @@
-"""AutoAgents Demo Backend Application."""

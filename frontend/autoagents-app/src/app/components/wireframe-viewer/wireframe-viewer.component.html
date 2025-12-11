@@ -42,18 +42,10 @@
       
       <button class="feature-action-btn secondary-btn" (click)="downloadAllPages()" 
               [disabled]="!wireframeData?.pages?.length"
-              matTooltip="Download all wireframe HTML pages">
+              matTooltip="Download all pages">
         <mat-icon>download</mat-icon>
         Download All
       </button>
-      @if (hasComponentCode()) {
-        <button class="feature-action-btn secondary-btn" (click)="downloadAllWithComponents()" 
-                [disabled]="!wireframeData?.pages?.length"
-                matTooltip="Download all pages with Angular component code">
-          <mat-icon>folder_zip</mat-icon>
-          Download All + Code
-        </button>
-      }
       <button class="feature-action-btn primary-btn" (click)="onRegenerateAll()" 
               [disabled]="isGenerating"
               matTooltip="Generate all wireframes">
@@ -143,17 +135,12 @@
                 [matTooltip]="isCodeEditorVisible() ? 'Hide code' : 'Show code'">
           <mat-icon>{{ isCodeEditorVisible() ? 'code_off' : 'code' }}</mat-icon>
         </button>
-        <button class="icon-btn" (click)="copyCurrentCode()" [matTooltip]="'Copy ' + getCodeLanguage()">
+        <button class="icon-btn" (click)="copyHtml()" matTooltip="Copy HTML">
           <mat-icon>content_copy</mat-icon>
         </button>
-        <button class="icon-btn" (click)="downloadCurrentCode()" [matTooltip]="'Download ' + currentFileName()">
+        <button class="icon-btn" (click)="downloadHtml()" matTooltip="Download HTML">
           <mat-icon>download</mat-icon>
         </button>
-        @if (hasComponentCode()) {
-          <button class="icon-btn" (click)="downloadComponentFiles()" matTooltip="Download all component files (.ts, .html, .scss)">
-            <mat-icon>source</mat-icon>
-          </button>
-        }
         <button class="icon-btn" (click)="openInNewTab()" matTooltip="Open in new tab">
           <mat-icon>open_in_new</mat-icon>
         </button>
@@ -172,99 +159,24 @@
           <div class="panel-header">
             <span class="panel-title">
               <mat-icon>code</mat-icon>
-              {{ getCodeLanguage() }}
+              HTML Code
             </span>
-            <span class="file-name">{{ currentFileName() }}</span>
+            <span class="file-name">{{ selectedPage()?.id }}.html</span>
           </div>
-          
-          <!-- Code Type Tabs -->
-          <div class="code-tabs">
-            <button 
-              class="code-tab"
-              [class.active]="codeViewMode() === 'preview'"
-              (click)="setCodeViewMode('preview')"
-              matTooltip="Wireframe preview HTML">
-              <mat-icon>web</mat-icon>
-              <span>Preview HTML</span>
-            </button>
-            <button 
-              class="code-tab"
-              [class.active]="codeViewMode() === 'typescript'"
-              [class.has-code]="selectedPage()?.component_ts"
-              (click)="setCodeViewMode('typescript')"
-              matTooltip="Angular TypeScript component">
-              <mat-icon>integration_instructions</mat-icon>
-              <span>TypeScript</span>
-              @if (selectedPage()?.component_ts) {
-                <span class="code-indicator"></span>
-              }
-            </button>
-            <button 
-              class="code-tab"
-              [class.active]="codeViewMode() === 'html'"
-              [class.has-code]="selectedPage()?.component_html"
-              (click)="setCodeViewMode('html')"
-              matTooltip="Angular HTML template">
-              <mat-icon>html</mat-icon>
-              <span>HTML Template</span>
-              @if (selectedPage()?.component_html) {
-                <span class="code-indicator"></span>
-              }
-            </button>
-            <button 
-              class="code-tab"
-              [class.active]="codeViewMode() === 'scss'"
-              [class.has-code]="selectedPage()?.component_scss"
-              (click)="setCodeViewMode('scss')"
-              matTooltip="Component SCSS styles">
-              <mat-icon>style</mat-icon>
-              <span>SCSS</span>
-              @if (selectedPage()?.component_scss) {
-                <span class="code-indicator"></span>
-              }
-            </button>
-          </div>
-          
           <div class="code-editor-wrapper">
             <div class="line-numbers">
               @for (num of getLineNumbers(); track num) {
                 <span>{{ num }}</span>
               }
             </div>
-            @if (codeViewMode() === 'preview') {
-              <textarea 
-                #codeEditor
-                class="code-textarea"
-                [value]="editedHtml()"
-                (input)="onCodeChange($event)"
-                spellcheck="false"
-                placeholder="HTML code will appear here..."></textarea>
-            } @else {
-              <textarea 
-                class="code-textarea readonly"
-                [value]="currentCodeContent()"
-                readonly
-                spellcheck="false"
-                [placeholder]="'No ' + getCodeLanguage() + ' code generated yet...'"></textarea>
-            }
+            <textarea 
+              #codeEditor
+              class="code-textarea"
+              [value]="editedHtml()"
+              (input)="onCodeChange($event)"
+              spellcheck="false"
+              placeholder="HTML code will appear here..."></textarea>
           </div>
-          
-          <!-- Component Code Status -->
-          @if (codeViewMode() !== 'preview') {
-            <div class="code-status">
-              @if (currentCodeContent() && currentCodeContent().length > 50) {
-                <span class="status-success">
-                  <mat-icon>check_circle</mat-icon>
-                  {{ getCodeLanguage() }} code available ({{ currentCodeContent().length }} chars)
-                </span>
-              } @else {
-                <span class="status-pending">
-                  <mat-icon>info</mat-icon>
-                  Regenerate wireframe to generate {{ getCodeLanguage() }} component code
-                </span>
-              }
-            </div>
-          }
         </div>
       }
 
@@ -329,30 +241,13 @@
               </button>
             </div>
           } @else {
-            <div class="iframe-wrapper" [style.width]="viewportWidth()" [class.desktop-mode]="viewportSize() === 'desktop'">
-              @if (viewportSize() === 'desktop') {
-                <!-- Desktop: Original behavior without scaling -->
-                <iframe 
-                  #previewIframe
-                  class="preview-iframe"
-                  [src]="iframeSrc()"
-                  title="Wireframe Preview">
-                </iframe>
-              } @else {
-                <!-- Mobile/Tablet: Scale down content to fit viewport -->
-                <div class="iframe-scaler" 
-                     [style.width]="iframeRenderWidth()"
-                     [style.height]="iframeScaledHeight()"
-                     [style.transform]="'scale(' + viewportScale() + ')'"
-                     [style.transform-origin]="'top left'">
-                  <iframe 
-                    #previewIframe
-                    class="preview-iframe"
-                    [src]="iframeSrc()"
-                    title="Wireframe Preview">
-                  </iframe>
-                </div>
-              }
+            <div class="iframe-wrapper" [style.width]="viewportWidth()">
+              <iframe 
+                #previewIframe
+                class="preview-iframe"
+                [src]="iframeSrc()"
+                title="Wireframe Preview">
+              </iframe>
             </div>
           }
         </div>
@@ -376,20 +271,11 @@
               {{ selectedPage()?.description }}
             </span>
           }
-          @if (hasComponentCode()) {
-            <span class="info-item component-badge">
-              <mat-icon>integration_instructions</mat-icon>
-              Angular Component
-            </span>
-          }
         </div>
         <div class="info-right">
           <span class="char-count">
-            {{ currentCodeContent().length }} characters
+            {{ (editedHtml() || selectedPage()?.html || '').length }} characters
           </span>
-          @if (isCodeEditorVisible() && codeViewMode() !== 'preview') {
-            <span class="file-type-badge">{{ currentFileExtension() }}</span>
-          }
         </div>
       </div>
     }
@@ -430,28 +316,12 @@
         </div>
       </div>
       <div class="fullscreen-content">
-        <div class="fullscreen-iframe-wrapper" [style.width]="viewportWidth()" [class.desktop-mode]="viewportSize() === 'desktop'">
-          @if (viewportSize() === 'desktop') {
-            <!-- Desktop: Original behavior without scaling -->
-            <iframe 
-              [src]="iframeSrc()"
-              class="fullscreen-iframe"
-              title="Wireframe Preview">
-            </iframe>
-          } @else {
-            <!-- Mobile/Tablet: Scale down content to fit viewport -->
-            <div class="iframe-scaler" 
-                 [style.width]="iframeRenderWidth()"
-                 [style.height]="fullscreenScaledHeight()"
-                 [style.transform]="'scale(' + viewportScale() + ')'"
-                 [style.transform-origin]="'top left'">
-              <iframe 
-                [src]="iframeSrc()"
-                class="fullscreen-iframe"
-                title="Wireframe Preview">
-              </iframe>
-            </div>
-          }
+        <div class="fullscreen-iframe-wrapper" [style.width]="viewportWidth()">
+          <iframe 
+            [src]="iframeSrc()"
+            class="fullscreen-iframe"
+            title="Wireframe Preview">
+          </iframe>
         </div>
       </div>
     </div>

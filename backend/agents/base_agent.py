@@ -13,11 +13,11 @@ import json
 class BaseAgent(ABC):
     """Base class for all agents in the wireframe system"""
     
-    # Model configurations - use Claude Haiku 4.5 as primary, Sonnet 4.5 for premium tasks
+    # Model configurations - use Claude Haiku 4.5 for fast, quality output
     MODELS = {
         "fast": "claude-haiku-4-5-20251001",      # For simple tasks (planning)
         "balanced": "claude-haiku-4-5-20251001",  # For complex tasks (HTML generation)
-        "premium": "claude-sonnet-4-5-20250929"   # For critical tasks (fallback quality)
+        "premium": "claude-haiku-4-5-20251001"    # For critical tasks
     }
     
     def __init__(self, client: Anthropic, model_tier: str = "balanced"):

@@ -34,8 +34,7 @@ class WireframeOrchestrator:
         Generate complete wireframe package
         
         Args:
-            project_context: Dict with project_summary, features_summary, stories_summary,
-                           hld_summary, api_summary, architecture_context
+            project_context: Dict with project_summary, features, hld_summary, api_summary
             progress_callback: Optional async callback for progress updates
             
         Returns:
@@ -52,34 +51,8 @@ class WireframeOrchestrator:
             }
         }
         
-        # Build comprehensive project context string for page agents
-        full_context_parts = []
-        
-        if project_context.get("project_summary"):
-            full_context_parts.append(f"PROJECT DESCRIPTION:\n{project_context['project_summary']}")
-        
-        if project_context.get("features_summary"):
-            full_context_parts.append(f"FEATURES:\n{project_context['features_summary']}")
-        
-        if project_context.get("stories_summary"):
-            full_context_parts.append(f"USER STORIES:\n{project_context['stories_summary']}")
-        
-        if project_context.get("architecture_context"):
-            full_context_parts.append(f"ARCHITECTURE & DESIGN:\n{project_context['architecture_context']}")
-        elif project_context.get("hld_summary") or project_context.get("api_summary"):
-            arch_parts = []
-            if project_context.get("hld_summary"):
-                arch_parts.append(f"HLD: {project_context['hld_summary']}")
-            if project_context.get("api_summary"):
-                arch_parts.append(f"API: {project_context['api_summary']}")
-            full_context_parts.append(f"ARCHITECTURE:\n" + "\n".join(arch_parts))
-        
-        comprehensive_context = "\n\n".join(full_context_parts)
-        
-        print(f"[Orchestrator] Full context length: {len(comprehensive_context)} chars")
-        
         try:
-            # STEP 1: Planning - pass full context
+            # STEP 1: Planning
             if progress_callback:
                 await progress_callback("planning", "Analyzing project structure...")
             
@@ -100,28 +73,20 @@ class WireframeOrchestrator:
             components = await self.design_system_agent.execute({"plan": plan})
             result["shared_components"] = components
             
-            # STEP 3: Generate pages in parallel with full context + feature mapping
+            # STEP 3: Generate pages in parallel
             if progress_callback:
                 await progress_callback("pages", f"Generating {len(pages_to_generate)} pages...")
             
             print(f"[Orchestrator] Step 3: Generating {len(pages_to_generate)} pages in parallel...")
             
-            # Create tasks for parallel execution - pass comprehensive context AND feature mapping
+            # Create tasks for parallel execution
             tasks = []
             for page in pages_to_generate:
-                # Build page-specific context including its related features and stories
-                page_specific_context = self._build_page_context(
-                    page=page,
-                    comprehensive_context=comprehensive_context,
-                    features_summary=project_context.get("features_summary", ""),
-                    stories_summary=project_context.get("stories_summary", "")
-                )
-                
                 task = self._generate_page(
                     page=page,
                     components=components,
                     theme=plan.get("theme", {}),
-                    project_context=page_specific_context
+                    project_context=project_context.get("project_summary", "")
                 )
                 tasks.append(task)
             
@@ -138,10 +103,7 @@ class WireframeOrchestrator:
                         "name": pages_to_generate[i].get("name", f"Page {i}"),
                         "type": pages_to_generate[i].get("type", "generic"),
                         "html": self._get_error_page(str(page_result)),
-                        "error": str(page_result),
-                        "component_ts": "",
-                        "component_html": "",
-                        "component_scss": ""
+                        "error": str(page_result)
                     })
                 else:
                     result["pages"].append(page_result)
@@ -162,66 +124,6 @@ class WireframeOrchestrator:
             print(f"[Orchestrator] Error: {str(e)}")
             raise
     
-    def _build_page_context(
-        self,
-        page: Dict[str, Any],
-        comprehensive_context: str,
-        features_summary: str,
-        stories_summary: str
-    ) -> str:
-        """Build page-specific context with related features and stories"""
-        
-        context_parts = [comprehensive_context]
-        
-        # Add page-specific information from planning
-        page_info = []
-        page_info.append(f"\n\n=== CURRENT PAGE: {page.get('name', 'Page')} ===")
-        page_info.append(f"Page Type: {page.get('type', 'generic')}")
-        page_info.append(f"Description: {page.get('description', 'No description')}")
-        
-        # Add related features
-        related_features = page.get('related_features', [])
-        if related_features:
-            page_info.append(f"\nRELATED FEATURES (implement these on this page):")
-            for feature in related_features:
-                page_info.append(f"  - {feature}")
-                # Try to find and include feature details from the summary
-                if features_summary and feature.lower() in features_summary.lower():
-                    # Extract relevant feature section
-                    page_info.append(f"    (See feature details in context above)")
-        
-        # Add related stories
-        related_stories = page.get('related_stories', [])
-        if related_stories:
-            page_info.append(f"\nRELATED USER STORIES (this page must support these):")
-            for story in related_stories:
-                page_info.append(f"  - {story}")
-        
-        # Add functionality requirements
-        functionality = page.get('functionality', [])
-        if functionality:
-            page_info.append(f"\nREQUIRED FUNCTIONALITY:")
-            for func in functionality:
-                page_info.append(f"  - {func}")
-        
-        # Add UI elements
-        ui_elements = page.get('ui_elements', [])
-        if ui_elements:
-            page_info.append(f"\nREQUIRED UI ELEMENTS:")
-            for element in ui_elements:
-                page_info.append(f"  - {element}")
-        
-        # Add data to display
-        data_displayed = page.get('data_displayed', [])
-        if data_displayed:
-            page_info.append(f"\nDATA TO DISPLAY:")
-            for data in data_displayed:
-                page_info.append(f"  - {data}")
-        
-        context_parts.append("\n".join(page_info))
-        
-        return "\n".join(context_parts)
-    
     async def _generate_page(
         self,
         page: Dict[str, Any],
@@ -234,9 +136,8 @@ class WireframeOrchestrator:
         page_type = page.get("type", "generic")
         agent = PageAgentFactory.create(page_type, self.client)
         
-        # Pass the full page definition including feature mapping
         context = {
-            "page": page,  # Now includes related_features, related_stories, functionality
+            "page": page,
             "components": components,
             "theme": theme,
             "project_context": project_context

@@ -293,11 +293,7 @@ export class CreateProjectModalComponent {
       error: (error) => {
         console.error('API Error:', error);
         this.setLoadingState(type, false);
-        let errorMessage = error.message || 'Unknown error';
-        if (error.status === 404) {
-          errorMessage = 'API Endpoint not found. The backend server might be running an older version of the code.';
-        }
-        alert(`Failed to generate content. Error: ${errorMessage}\n\nPlease check:\n1. Backend is running on http://localhost:8000\n2. Try restarting the backend server`);
+        alert(`Failed to generate content. Error: ${error.message || 'Unknown error'}\n\nPlease check:\n1. Backend is running on http://localhost:8000\n2. Check browser console for details`);
       }
     });
   }
@@ -551,11 +547,7 @@ export class CreateProjectModalComponent {
       error: (error) => {
         console.error('Features generation error:', error);
         this.loadingFeatures.set(false);
-        let errorMessage = error.message || 'Unknown error';
-        if (error.status === 404) {
-          errorMessage = 'API Endpoint not found. The backend server might be running an older version of the code.';
-        }
-        alert(`Failed to generate features. Error: ${errorMessage}\n\nPlease check:\n1. Backend is running on http://localhost:8000\n2. Try restarting the backend server`);
+        alert(`Failed to generate features. Error: ${error.message || 'Unknown error'}\n\nPlease check:\n1. Backend is running on http://localhost:8000\n2. Check browser console for details`);
       }
     });
   }
@@ -726,11 +718,7 @@ Focus Areas: ${this.projectData.executiveSummary || 'N/A'}`;
       error: (error) => {
         console.error('Stories generation error:', error);
         this.loadingStories.set(false);
-        let errorMessage = error.message || 'Unknown error';
-        if (error.status === 404) {
-          errorMessage = 'API Endpoint not found. The backend server might be running an older version of the code.';
-        }
-        alert(`Failed to generate stories. Error: ${errorMessage}\n\nPlease check:\n1. Backend is running on http://localhost:8000\n2. Try restarting the backend server`);
+        alert(`Failed to generate stories. Error: ${error.message || 'Unknown error'}\n\nPlease check:\n1. Backend is running on http://localhost:8000\n2. Check browser console for details`);
       }
     });
   }
