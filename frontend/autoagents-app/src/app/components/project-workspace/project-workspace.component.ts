@@ -10,6 +10,7 @@ import { Feature, Story, ApiService, DesignType, DesignResponse, DESIGN_TYPES, D
 import { WireframeViewerComponent } from '../wireframe-viewer/wireframe-viewer.component';
 import { DevModeService } from '../../services/dev-mode.service';
 import { MOCK_WIREFRAME_DATA } from '../../services/dev-data';
+import { CodeGenerationService, CodingRequestDto, GeneratedFileDto, FullBackendRequestDto, FullProjectRequestDto, FullFrontendRequestDto } from '../../services/code-generation.service';
 import mermaid from 'mermaid';
 
 export interface ProjectData {
@@ -61,6 +62,7 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
   
   private apiService = inject(ApiService);
   private devModeService = inject(DevModeService);
+  private codeGenerationService = inject(CodeGenerationService);
   
   // Design types metadata
   designTypes = DESIGN_TYPES;
@@ -92,6 +94,22 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
   wireframeData = signal<WireframeData | null>(null);
   isGeneratingWireframes = signal(false);
   wireframeProgress = signal<string>('');
+  
+  // Coding Agent (Narrow V1) state
+  codingModuleName = 'User';  // Temporary hard-coded for Narrow V1
+  generatingCode = signal(false);
+  generatedFiles = signal<GeneratedFileDto[] | null>(null);
+  codeGenerationError = signal<string | null>(null);
+  
+  // Full Backend Project (ZIP) state
+  generatingBackendZip = signal(false);
+  
+  // Full Project (Backend + Frontend ZIP) state
+  generatingFullProjectZip = signal(false);
+  
+  // Frontend Coding Agent (JSON response) state
+  generatingFrontendCode = signal(false);
+  generatedFrontendFiles = signal<GeneratedFileDto[] | null>(null);
   
   // Wireframe generation settings
   wireframePageMode = signal<'auto' | 'manual'>('auto');  // 'auto' = LLM decides, 'manual' = user specifies
@@ -1367,9 +1385,9 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
     }
     
     try {
-      // Check if dev mode is enabled - when ON, make real API calls for testing
-      if (!this.devModeService.isDevMode()) {
-        console.log('[PROD MODE] Using mock wireframe data');
+      // Check if dev mode is enabled - when ON, use mock data for testing
+      if (this.devModeService.isDevMode()) {
+        console.log('[DEV MODE] Using mock wireframe data');
         const mockData = MOCK_WIREFRAME_DATA as WireframeData;
         
         // Simulate realistic loading steps with live page updates
@@ -1412,16 +1430,59 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
         });
         
       } else {
-        // Dev mode is ON - make real API call with retry logic
-        console.log('[DEV MODE] Making real API call...');
+        // Production mode - make real API call with full project context
+        console.log('[PROD MODE] Making real API call with full project context...');
         
         const summaries = this.designSummaries();
         
+        // Build comprehensive features summary with full details
+        const featuresWithDetails = this.project?.features
+          ?.filter(f => f.approved !== false)
+          ?.map(f => `
+Feature: ${f.title}
+- Reason: ${f.reason}
+- Problem: ${f.problemStatement}
+- Objective: ${f.businessObjective}
+- User Persona: ${f.userPersona}
+- Description: ${f.detailedDescription}
+- Acceptance Criteria: ${f.acceptanceCriteria}
+- Success Metrics: ${f.successMetrics}
+- Dependencies: ${f.dependencies}
+          `.trim())
+          ?.join('\n\n') || '';
+        
+        // Build stories summary with descriptions
+        const storiesWithDetails = this.project?.stories
+          ?.filter(s => s.approved !== false)
+          ?.map(s => `Story: ${s.title} (Feature: ${s.featureRef})\n  ${s.description}`)
+          ?.join('\n') || '';
+        
+        // Collect all diagram summaries
+        const allDiagramSummaries = {
+          hld: summaries.get('hld') || '',
+          dbd: summaries.get('dbd') || '',
+          api: summaries.get('api') || '',
+          lld: summaries.get('lld') || '',
+          dfd: summaries.get('dfd') || '',
+          component: summaries.get('component') || '',
+          security: summaries.get('security') || '',
+          infrastructure: summaries.get('infrastructure') || '',
+          state: summaries.get('state') || ''
+        };
+        
         const request = {
           project_summary: this.project?.promptSummary || '',
-          features_summary: this.project?.features?.map(f => f.title).join(', ') || '',
-          hld_summary: summaries.get('hld') || '',
-          api_summary: summaries.get('api') || '',
+          features_summary: featuresWithDetails,
+          stories_summary: storiesWithDetails,
+          hld_summary: allDiagramSummaries.hld,
+          api_summary: allDiagramSummaries.api,
+          dbd_summary: allDiagramSummaries.dbd,
+          lld_summary: allDiagramSummaries.lld,
+          dfd_summary: allDiagramSummaries.dfd,
+          component_summary: allDiagramSummaries.component,
+          security_summary: allDiagramSummaries.security,
+          infrastructure_summary: allDiagramSummaries.infrastructure,
+          state_summary: allDiagramSummaries.state,
           // Page count settings
           page_mode: this.wireframePageMode(),
           page_count: this.wireframePageMode() === 'manual' ? this.wireframePageCount() : undefined
@@ -1429,7 +1490,7 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
         
         console.log('[WIREFRAME] Current wireframePageMode:', this.wireframePageMode());
         console.log('[WIREFRAME] Current wireframePageCount:', this.wireframePageCount());
-        console.log('[WIREFRAME] API Request:', request);
+        console.log('[WIREFRAME] API Request with full context:', request);
         
         // Start progress animation while API call is in progress
         const expectedPages = this.wireframePageMode() === 'manual' ? this.wireframePageCount() : 5;
@@ -1595,5 +1656,271 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
         this.wireframeProgress.set('');
       }, 3000);
     }
+  }
+
+  // ============================================================================
+  // CODING AGENT (NARROW V1) METHODS
+  // ============================================================================
+  
+  /**
+   * Copy file content to clipboard
+   */
+  copyFileContent(file: GeneratedFileDto): void {
+    navigator.clipboard.writeText(file.content).then(() => {
+      console.log('[CodingAgent] Copied file to clipboard:', file.path);
+    });
+  }
+  
+  /**
+   * Generate backend module code using the Coding Agent.
+   * Uses DBD mermaid, API mermaid, and stories from the current project.
+   */
+  onGenerateBackendModule(): void {
+    console.log('[CodingAgent] Starting backend module generation...');
+    
+    // Reset state
+    this.codeGenerationError.set(null);
+    this.generatedFiles.set(null);
+    this.generatingCode.set(true);
+    
+    // Get DBD mermaid code from design state
+    const dbdState = this.getDesignState('dbd');
+    const dbdMermaid = dbdState?.mermaidCode || '';
+    
+    // Get API mermaid code from design state
+    const apiState = this.getDesignState('api');
+    const apiMermaid = apiState?.mermaidCode || '';
+    
+    // Convert approved stories to plain text array
+    const storiesArray = this.project?.stories
+      ?.filter(s => s.approved !== false)  // Include if approved or not explicitly rejected
+      ?.map(s => `${s.title}: ${s.description}`) || [];
+    
+    console.log('[CodingAgent] DBD mermaid length:', dbdMermaid.length);
+    console.log('[CodingAgent] API mermaid length:', apiMermaid.length);
+    console.log('[CodingAgent] Stories count:', storiesArray.length);
+    
+    const request: CodingRequestDto = {
+      moduleName: this.codingModuleName,
+      dbdMermaid: dbdMermaid,
+      apiMermaid: apiMermaid,
+      stories: storiesArray
+    };
+    
+    this.codeGenerationService.generateModule(request).subscribe({
+      next: (response) => {
+        console.log('[CodingAgent] Generation successful:', response.files.length, 'files');
+        this.generatedFiles.set(response.files);
+        this.generatingCode.set(false);
+      },
+      error: (err) => {
+        console.error('[CodingAgent] Generation failed:', err);
+        this.codeGenerationError.set('Failed to generate backend module. Check backend logs.');
+        this.generatingCode.set(false);
+      }
+    });
+  }
+
+  /**
+   * Generate full backend project and trigger browser download as ZIP.
+   * Uses DBD mermaid, API mermaid, and stories from the current project.
+   */
+  onGenerateFullBackendZip(): void {
+    console.log('[CodingAgent] Starting full backend ZIP generation...');
+    
+    this.generatingBackendZip.set(true);
+    
+    // Get DBD mermaid code from design state
+    const dbdState = this.getDesignState('dbd');
+    const dbdMermaid = dbdState?.mermaidCode || '';
+    
+    // Get API mermaid code from design state
+    const apiState = this.getDesignState('api');
+    const apiMermaid = apiState?.mermaidCode || '';
+    
+    // Convert approved stories to plain text array
+    const storiesArray = this.project?.stories
+      ?.filter(s => s.approved !== false)
+      ?.map(s => `${s.title}: ${s.description}`) || [];
+    
+    const projectName = this.project?.projectName || 'autoagents_backend';
+    
+    console.log('[CodingAgent] Project name:', projectName);
+    console.log('[CodingAgent] DBD mermaid length:', dbdMermaid.length);
+    console.log('[CodingAgent] API mermaid length:', apiMermaid.length);
+    console.log('[CodingAgent] Stories count:', storiesArray.length);
+    
+    const request: FullBackendRequestDto = {
+      projectName: projectName,
+      dbdMermaid: dbdMermaid,
+      apiMermaid: apiMermaid,
+      stories: storiesArray
+    };
+    
+    this.codeGenerationService.generateFullBackendZip(request).subscribe({
+      next: (blob) => {
+        console.log('[CodingAgent] ZIP generation successful, size:', blob.size, 'bytes');
+        this.generatingBackendZip.set(false);
+        
+        // Trigger browser download
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${projectName}_backend.zip`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        console.error('[CodingAgent] ZIP generation failed:', err);
+        this.generatingBackendZip.set(false);
+        // Show error in the existing error signal
+        this.codeGenerationError.set('Failed to generate backend ZIP. Check backend logs.');
+      }
+    });
+  }
+
+  /**
+   * Generate full project (backend + frontend) and trigger browser download as ZIP.
+   * Uses DBD mermaid, API mermaid, stories, and wireframes from the current project.
+   */
+  onGenerateFullProjectZip(): void {
+    if (this.generatingFullProjectZip()) {
+      return;
+    }
+    
+    console.log('[CodingAgent] Starting full project ZIP generation...');
+    
+    this.generatingFullProjectZip.set(true);
+    
+    // Get DBD mermaid code from design state
+    const dbdState = this.getDesignState('dbd');
+    const dbdMermaid = dbdState?.mermaidCode || '';
+    
+    // Get API mermaid code from design state
+    const apiState = this.getDesignState('api');
+    const apiMermaid = apiState?.mermaidCode || '';
+    
+    // Convert approved stories to plain text array
+    const storiesArray = this.project?.stories
+      ?.filter(s => s.approved !== false)
+      ?.map(s => `${s.title}: ${s.description}`) || [];
+    
+    // Collect wireframes from wireframe data
+    const wireframeData = this.wireframeData();
+    const wireframesArray = wireframeData?.pages
+      ?.map(page => page.html || '') 
+      ?.filter(html => html.length > 0) || [];
+    
+    const projectName = this.project?.projectName || 'autoagents_project';
+    
+    console.log('[CodingAgent] Project name:', projectName);
+    console.log('[CodingAgent] DBD mermaid length:', dbdMermaid.length);
+    console.log('[CodingAgent] API mermaid length:', apiMermaid.length);
+    console.log('[CodingAgent] Stories count:', storiesArray.length);
+    console.log('[CodingAgent] Wireframes count:', wireframesArray.length);
+    
+    const request: FullProjectRequestDto = {
+      projectName: projectName,
+      dbdMermaid: dbdMermaid,
+      apiMermaid: apiMermaid,
+      stories: storiesArray,
+      wireframes: wireframesArray
+    };
+    
+    this.codeGenerationService.generateFullProjectZip(request).subscribe({
+      next: (blob) => {
+        console.log('[CodingAgent] Full project ZIP generation successful, size:', blob.size, 'bytes');
+        this.generatingFullProjectZip.set(false);
+        
+        // Trigger browser download
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${projectName}.zip`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        console.error('[CodingAgent] Full project ZIP generation failed:', err);
+        this.generatingFullProjectZip.set(false);
+        // Show error in the existing error signal
+        this.codeGenerationError.set('Failed to generate full project ZIP. Check backend logs.');
+      }
+    });
+  }
+
+  /**
+   * Generate Angular frontend code from wireframes, diagrams, and stories.
+   * Returns JSON with generated files (displayed in UI, not downloaded as ZIP).
+   */
+  onGenerateFrontendCode(): void {
+    if (this.generatingFrontendCode()) {
+      return;
+    }
+    
+    console.log('[CodingAgent] Starting frontend code generation...');
+    
+    this.generatingFrontendCode.set(true);
+    this.generatedFrontendFiles.set(null);
+    this.codeGenerationError.set(null);
+    
+    // Collect wireframe HTML from wireframeData
+    const wireframeData = this.wireframeData();
+    const wireframesArray = wireframeData?.pages
+      ?.map(page => page.html || '')
+      ?.filter(html => html.length > 0) || [];
+    
+    // Get API mermaid code from design state
+    const apiState = this.getDesignState('api');
+    const apiMermaid = apiState?.mermaidCode || '';
+    
+    // Convert approved stories to plain text array
+    const storiesArray = this.project?.stories
+      ?.filter(s => s.approved !== false)
+      ?.map(s => `${s.title}: ${s.description}`) || [];
+    
+    // Collect all mermaid diagrams from design states
+    const hldState = this.getDesignState('hld');
+    const lldState = this.getDesignState('lld');
+    const dbdState = this.getDesignState('dbd');
+    const componentState = this.getDesignState('component');
+    const sequenceState = this.getDesignState('sequence');
+    const dfdState = this.getDesignState('dfd');
+    
+    const projectName = this.project?.projectName || 'autoagents_frontend';
+    
+    console.log('[CodingAgent] Project name:', projectName);
+    console.log('[CodingAgent] Wireframes count:', wireframesArray.length);
+    console.log('[CodingAgent] API mermaid length:', apiMermaid.length);
+    console.log('[CodingAgent] Stories count:', storiesArray.length);
+    
+    const request: FullFrontendRequestDto = {
+      projectName: projectName,
+      wireframes: wireframesArray,
+      apiMermaid: apiMermaid,
+      stories: storiesArray,
+      mermaidDiagrams: {
+        hld: hldState?.mermaidCode,
+        lld: lldState?.mermaidCode,
+        dbd: dbdState?.mermaidCode,
+        api: apiMermaid,
+        component: componentState?.mermaidCode,
+        sequence: sequenceState?.mermaidCode,
+        dfd: dfdState?.mermaidCode,
+      }
+    };
+    
+    this.codeGenerationService.generateFrontendProject(request).subscribe({
+      next: (response) => {
+        console.log('[CodingAgent] Frontend code generation successful:', response.files.length, 'files');
+        this.generatingFrontendCode.set(false);
+        this.generatedFrontendFiles.set(response.files);
+      },
+      error: (err) => {
+        console.error('[CodingAgent] Frontend code generation failed:', err);
+        this.generatingFrontendCode.set(false);
+        this.codeGenerationError.set('Failed to generate frontend code. Check backend logs.');
+      }
+    });
   }
 }

@@ -1,0 +1,13 @@
+{
+  "module_name": "User",
+  "dbd_mermaid": "erDiagram\n  USER {\n    string id PK\n    string email\n    string password_hash\n    datetime created_at\n    datetime updated_at\n  }\n",
+  "api_mermaid": "flowchart LR\n  Client -->|POST /users| UsersAPI\n  Client -->|GET /users| UsersAPI\n  Client -->|GET /users/id| UsersAPI\n  Client -->|PUT /users/id| UsersAPI\n  Client -->|DELETE /users/id| UsersAPI\n",
+  "stories": [
+    "As a user, I can create an account with email and password so I can log in.",
+    "As a user, I can fetch my profile data by id.",
+    "As an admin, I can list all users in the system.",
+    "As a user, I can update my profile information.",
+    "As an admin, I can delete a user account."
+  ]
+}
+

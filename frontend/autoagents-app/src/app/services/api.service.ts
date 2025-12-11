@@ -153,6 +153,10 @@ export interface WireframePage {
   html: string;
   description?: string;
   error?: string;
+  // Angular component code
+  component_ts?: string;      // TypeScript component code
+  component_html?: string;    // Angular HTML template
+  component_scss?: string;    // Component styles
 }
 
 export interface WireframeData {
@@ -176,8 +180,18 @@ export interface WireframeData {
 export interface WireframePagesRequest {
   project_summary: string;
   features_summary?: string;
+  stories_summary?: string;      // User stories with descriptions
   hld_summary?: string;
   api_summary?: string;
+  dbd_summary?: string;          // Database design summary
+  lld_summary?: string;          // Low-level design summary
+  dfd_summary?: string;          // Data flow diagram summary
+  component_summary?: string;    // Component diagram summary
+  security_summary?: string;     // Security architecture summary
+  infrastructure_summary?: string;  // Infrastructure design summary
+  state_summary?: string;        // State diagram summary
+  page_mode?: string;            // 'auto' | 'manual'
+  page_count?: number;           // Number of pages when manual mode
 }
 
 export interface WireframePagesResponse {
