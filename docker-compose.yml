@@ -4,12 +4,16 @@ services:
     container_name: autoagents-backend
     ports:
       - "8000:8000"
+      # Note: Ports 3000-3010 and 8100-8110 are used by generated apps directly on host
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
       - ./backend:/app  # Hot-reload: code changes reflect instantly
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket for DinD
+      - ./backend/generated_apps:/app/generated_apps  # Persist generated apps
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
+    privileged: true  # Required for Docker operations
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
       interval: 30s

@@ -112,7 +112,6 @@ export class App implements OnInit {
       projectName: MOCK_PROJECT_CONTEXT.projectName,
       projectKey: 'ECOM',
       industry: MOCK_PROJECT_CONTEXT.industry,
-      methodology: MOCK_PROJECT_CONTEXT.methodology,
       teamSize: '5-10',
       executiveSummary: MOCK_PROJECT_SUMMARY,
       promptSummary: MOCK_PROJECT_CONTEXT.promptSummary,

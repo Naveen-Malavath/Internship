@@ -6,7 +6,6 @@ export interface GenerateRequest {
   type: 'summary' | 'epics' | 'acceptance' | 'risks';
   projectName: string;
   industry: string;
-  methodology: string;
   promptSummary: string;
   focusAreas?: string;
 }
@@ -41,6 +40,7 @@ export interface Story {
   title: string;
   description: string;
   featureRef: string;
+  featureContext: string;
   approved?: boolean;
 }
 
@@ -218,9 +218,8 @@ export const DESIGN_TYPES: DesignTypeInfo[] = [
   providedIn: 'root'
 })
 export class ApiService {
-  // Use relative URL for production (Nginx will proxy /api to backend)
-  // Use absolute URL for local development
-  private apiUrl = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
+  // Use relative URL - nginx will proxy /api to backend container
+  private apiUrl = '';
 
   constructor(private http: HttpClient) {}
 
@@ -285,6 +284,43 @@ export class ApiService {
       `${this.apiUrl}/api/designs/wireframe-page/regenerate`, 
       request
     );
+  }
+
+  // Code Generation & Execution
+  generateCode(request: {
+    project_name: string;
+    project_summary: string;
+    hld_summary?: string;
+    dbd_summary?: string;
+    api_summary?: string;
+    wireframes?: any[];
+  }): Observable<{
+    frontend_code: { [key: string]: string };
+    backend_code: { [key: string]: string };
+    docker_compose: string;
+    preview_port: number;
+    status: string;
+  }> {
+    return this.http.post<any>(`${this.apiUrl}/api/generate-code`, request);
+  }
+
+  executeCode(request: {
+    project_name: string;
+    frontend_code: { [key: string]: string };
+    backend_code: { [key: string]: string };
+    docker_compose: string;
+  }): Observable<{
+    preview_url: string;
+    project_path: string;
+    safe_name: string;
+    status: string;
+    message: string;
+  }> {
+    return this.http.post<any>(`${this.apiUrl}/api/execute-code`, request);
+  }
+
+  stopApp(project_path: string, safe_name: string): Observable<{ status: string }> {
+    return this.http.post<{ status: string }>(`${this.apiUrl}/api/stop-app`, { project_path, safe_name });
   }
 
   checkHealth(): Observable<any> {

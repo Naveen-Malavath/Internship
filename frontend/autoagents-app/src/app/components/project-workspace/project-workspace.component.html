@@ -19,10 +19,6 @@
             <span class="meta-value">{{ project.industry || 'Financial Services' }}</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">METHODOLOGY</span>
-            <span class="meta-value">{{ project.methodology || 'Scrum' }}</span>
-          </div>
-          <div class="meta-item">
             <span class="meta-label">TEAM SIZE</span>
             <span class="meta-value">{{ project.teamSize || 'TBD' }}</span>
           </div>
@@ -71,6 +67,16 @@
           </div>
           <p class="story-description">{{ story.description }}</p>
           
+          <!-- Feature Context Section -->
+          @if (story.featureContext) {
+            <div class="feature-context-section">
+              <h4 class="context-title">📌 Derived From Feature</h4>
+              <div class="context-content">
+                <pre class="context-text">{{ story.featureContext }}</pre>
+              </div>
+            </div>
+          }
+          
           <div class="acceptance-criteria">
             <h4 class="criteria-title">Acceptance Criteria</h4>
             <ul class="criteria-list">
@@ -95,10 +101,16 @@
   <div class="design-types-section">
     <div class="section-header">
       <h2 class="section-title">Design Artifacts</h2>
-      <button class="generate-all-btn" (click)="generateAllDesigns()" [disabled]="isGenerating()">
-        <mat-icon>auto_awesome</mat-icon>
-        Generate All
-      </button>
+      <div class="header-actions">
+        <button class="generate-code-btn" (click)="generateAndRunApp()" [disabled]="isGeneratingCode() || completedDesignsCount < 3">
+          <mat-icon>rocket_launch</mat-icon>
+          Generate & Run App
+        </button>
+        <button class="generate-all-btn" (click)="generateAllDesigns()" [disabled]="isGenerating()">
+          <mat-icon>auto_awesome</mat-icon>
+          Generate All
+        </button>
+      </div>
     </div>
     
     <div class="design-types-grid">
@@ -327,6 +339,66 @@
     </div>
     <div class="fullscreen-zoom-indicator">
       {{ (zoomLevel() * 100).toFixed(0) }}%
+    </div>
+  </div>
+}
+
+<!-- Generated App Preview Modal -->
+@if (showAppPreview()) {
+  <div class="app-preview-modal">
+    <div class="preview-container">
+      <div class="preview-header">
+        <h2>🚀 Generated Application</h2>
+        <div class="preview-actions">
+          <button class="action-btn" (click)="downloadCode()">
+            <mat-icon>download</mat-icon>
+            Download
+          </button>
+          <button class="close-btn" (click)="closeAppPreview()">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </div>
+      
+      @if (isGeneratingCode()) {
+        <div class="preview-loading">
+          <div class="loading-content">
+            <div class="loading-icon-wrapper">
+              <mat-icon class="rocket-icon">rocket_launch</mat-icon>
+              <div class="pulse-ring"></div>
+            </div>
+            <h3 class="loading-title">Generating Your Application</h3>
+            <p class="loading-subtitle">{{ codeGenProgress() }}</p>
+            <div class="loading-steps">
+              <div class="step" [class.active]="codeGenProgress().includes('React')">
+                <div class="step-indicator"></div>
+                <span>Frontend Code</span>
+              </div>
+              <div class="step" [class.active]="codeGenProgress().includes('backend') || codeGenProgress().includes('API')">
+                <div class="step-indicator"></div>
+                <span>Backend API</span>
+              </div>
+              <div class="step" [class.active]="codeGenProgress().includes('Docker') || codeGenProgress().includes('Building')">
+                <div class="step-indicator"></div>
+                <span>Building Containers</span>
+              </div>
+              <div class="step" [class.active]="codeGenProgress().includes('Starting') || codeGenProgress().includes('Ready')">
+                <div class="step-indicator"></div>
+                <span>Launching App</span>
+              </div>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill"></div>
+            </div>
+          </div>
+        </div>
+      } @else if (appPreviewUrl()) {
+        <iframe 
+          [src]="sanitizeUrl(appPreviewUrl())" 
+          class="app-iframe"
+          frameborder="0">
+        </iframe>
+      }
     </div>
   </div>
 }

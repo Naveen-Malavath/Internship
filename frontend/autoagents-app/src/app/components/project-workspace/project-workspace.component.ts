@@ -6,18 +6,18 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Feature, Story, ApiService, DesignType, DesignResponse, DESIGN_TYPES, DesignTypeInfo, WireframeData, WireframePage } from '../../services/api.service';
-import { WireframeViewerComponent } from '../wireframe-viewer/wireframe-viewer.component';
 import { DevModeService } from '../../services/dev-mode.service';
+import { MOCK_FEATURES, MOCK_STORIES, MOCK_WIREFRAME_DATA, MOCK_DESIGNS } from '../../services/dev-data';
+import { WireframeViewerComponent } from '../wireframe-viewer/wireframe-viewer.component';
 import { ActivityService } from '../../services/activity.service';
-import { MOCK_WIREFRAME_DATA } from '../../services/dev-data';
 import mermaid from 'mermaid';
 
 export interface ProjectData {
   projectName: string;
   projectKey: string;
   industry: string;
-  methodology: string;
   teamSize: string;
   executiveSummary: string;
   promptSummary: string;
@@ -63,6 +63,7 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
   private apiService = inject(ApiService);
   private devModeService = inject(DevModeService);
   private activityService = inject(ActivityService);
+  private sanitizer = inject(DomSanitizer);
   
   // Design types metadata
   designTypes = DESIGN_TYPES;
@@ -78,6 +79,15 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
   generatingDesignType = signal<DesignType | null>(null);
   generationProgress = signal<string>('');
   isFixingDiagram = signal(false);
+  
+  // Code generation & execution
+  isGeneratingCode = signal(false);
+  codeGenProgress = signal<string>('');
+  showAppPreview = signal(false);
+  appPreviewUrl = signal<string>('');
+  generatedProjectPath = signal<string>('');
+  generatedSafeName = signal<string>('');  // Track safe name for cleanup
+  generatedCode = signal<any>(null);
   isGeneratingAll = signal(false);  // Flag to track "Generate All" mode
   isViewingDuringGeneration = signal(false);  // Flag to track if user is viewing a completed design during "Generate All"
   private generateAllInProgress = false;  // Internal flag to track if generation loop is running
@@ -150,6 +160,8 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
   ngOnInit() {
     console.log('[DEBUG] ProjectWorkspace initializing...');
     console.log('[DEBUG] Project data:', this.project);
+    console.log('[DEBUG] Dev mode status:', this.devModeService.isDevMode());
+    console.log('[DEBUG] Dev mode service:', this.devModeService);
     
     // Initialize mermaid with professional dark theme config
     mermaid.initialize({
@@ -245,9 +257,16 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
   private initializeDesignStates() {
     const states = new Map<DesignType, DesignState>();
     
+    // In dev mode, all designs are available immediately (mock data)
+    // In normal mode, only HLD is available first
+    const isDevMode = this.devModeService.isDevMode();
+    
+    console.log('[INIT] Dev mode check in initializeDesignStates:', isDevMode);
+    console.log('[INIT] All design types:', this.designTypes.map(d => d.value));
+    
     for (const designType of this.designTypes) {
-      // HLD is always available first
-      const status = designType.value === 'hld' ? 'available' : 'locked';
+      const status = (isDevMode || designType.value === 'hld') ? 'available' : 'locked';
+      console.log(`[INIT] ${designType.value} => ${status} (devMode: ${isDevMode})`);
       states.set(designType.value, {
         type: designType.value,
         status
@@ -255,7 +274,7 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
     }
     
     this.designStates.set(states);
-    console.log('[DEBUG] Initialized design states:', states);
+    console.log('[DEBUG] Initialized design states (dev mode: ' + isDevMode + '):', states);
   }
   
   private updateDesignState(type: DesignType, update: Partial<DesignState>) {
@@ -367,15 +386,23 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
         console.log('[DEBUG] No project summary, generating first...');
         this.generationProgress.set('Summarizing project...');
         
-        const summaryResponse = await this.apiService.summarizeProject({
-          project_context: this.project.finalPrompt,
-          features: this.project.features,
-          stories: this.project.stories
-        }).toPromise();
-        
-        if (summaryResponse) {
-          this.projectSummary.set(summaryResponse.summary);
-          console.log('[DEBUG] Project summary generated, length:', summaryResponse.summary.length);
+        // Dev mode: use mock summary instead of API call
+        if (this.devModeService.isDevMode()) {
+          console.log('%c[DEV MODE] Using mock project summary', 'color: #00ff00; font-weight: bold; font-size: 14px');
+          await new Promise(resolve => setTimeout(resolve, 300)); // Quick delay
+          const mockSummary = `Digital Banking Suite: A comprehensive banking platform featuring account management, payment processing, fraud detection, and real-time notifications. Built with modern microservices architecture for scalability and security.`;
+          this.projectSummary.set(mockSummary);
+        } else {
+          const summaryResponse = await this.apiService.summarizeProject({
+            project_context: this.project.finalPrompt,
+            features: this.project.features,
+            stories: this.project.stories
+          }).toPromise();
+          
+          if (summaryResponse) {
+            this.projectSummary.set(summaryResponse.summary);
+            console.log('[DEBUG] Project summary generated, length:', summaryResponse.summary.length);
+          }
         }
       }
       
@@ -401,7 +428,31 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
       
       this.generationProgress.set(`Generating ${this.getDesignTypeInfo(type)?.label}...`);
       
-      const response = await this.apiService.generateDesign(type, request).toPromise();
+      // Dev mode: use mock data instead of API call
+      let response: DesignResponse | undefined;
+      if (this.devModeService.isDevMode()) {
+        console.log(`%c[DEV MODE] Using mock data for: ${type}`, 'color: #00ff00; font-weight: bold; font-size: 14px');
+        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+        const mockDesign = MOCK_DESIGNS[type as keyof typeof MOCK_DESIGNS];
+        if (mockDesign) {
+          response = {
+            design_type: type,
+            diagram: mockDesign.mermaid,
+            summary: mockDesign.summary,
+            status: 'success'
+          };
+          
+          // In dev mode, immediately store the mock summary for dependent designs
+          if (mockDesign.summary) {
+            const newSummaries = new Map(this.designSummaries());
+            newSummaries.set(type, mockDesign.summary);
+            this.designSummaries.set(newSummaries);
+            console.log(`%c[DEV MODE] Stored mock summary for ${type}`, 'color: #00ff00; font-size: 12px');
+          }
+        }
+      } else {
+        response = await this.apiService.generateDesign(type, request).toPromise();
+      }
       
       if (response) {
         const diagramStart = response.diagram?.trim().split('\n')[0].substring(0, 50) || 'EMPTY';
@@ -426,8 +477,8 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
         console.log('[ActivityTracking] Design completed:', type);
         this.activityService.logDesignGenerated(type);
         
-        // Store summary for chaining
-        if (response.summary) {
+        // Store summary for chaining (only if not dev mode, as we already stored it above)
+        if (response.summary && !this.devModeService.isDevMode()) {
           const newSummaries = new Map(this.designSummaries());
           newSummaries.set(type, response.summary);
           this.designSummaries.set(newSummaries);
@@ -511,14 +562,22 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
       this.generationProgress.set(`Summarizing project... (0/${this.totalDesignsToGenerate})`);
       
       try {
-        const summaryResponse = await this.apiService.summarizeProject({
-          project_context: this.project.finalPrompt,
-          features: this.project.features,
-          stories: this.project.stories
-        }).toPromise();
-        
-        if (summaryResponse) {
-          this.projectSummary.set(summaryResponse.summary);
+        // Dev mode: use mock summary instead of API call
+        if (this.devModeService.isDevMode()) {
+          console.log('%c[DEV MODE] Using mock project summary', 'color: #00ff00; font-weight: bold; font-size: 14px');
+          await new Promise(resolve => setTimeout(resolve, 300));
+          const mockSummary = `Digital Banking Suite: A comprehensive banking platform featuring account management, payment processing, fraud detection, and real-time notifications. Built with modern microservices architecture for scalability and security.`;
+          this.projectSummary.set(mockSummary);
+        } else {
+          const summaryResponse = await this.apiService.summarizeProject({
+            project_context: this.project.finalPrompt,
+            features: this.project.features,
+            stories: this.project.stories
+          }).toPromise();
+          
+          if (summaryResponse) {
+            this.projectSummary.set(summaryResponse.summary);
+          }
         }
       } catch (error) {
         console.error('[ERROR] Failed to summarize project:', error);
@@ -683,14 +742,22 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
         // Show summarizing progress with 0/total
         this.generationProgress.set(`Summarizing project... (0/${this.totalDesignsToGenerate})`);
         
-        const summaryResponse = await this.apiService.summarizeProject({
-          project_context: this.project.finalPrompt,
-          features: this.project.features,
-          stories: this.project.stories
-        }).toPromise();
-        
-        if (summaryResponse) {
-          this.projectSummary.set(summaryResponse.summary);
+        // Dev mode: use mock summary instead of API call
+        if (this.devModeService.isDevMode()) {
+          console.log('%c[DEV MODE] Using mock project summary', 'color: #00ff00; font-weight: bold; font-size: 14px');
+          await new Promise(resolve => setTimeout(resolve, 300));
+          const mockSummary = `Digital Banking Suite: A comprehensive banking platform featuring account management, payment processing, fraud detection, and real-time notifications. Built with modern microservices architecture for scalability and security.`;
+          this.projectSummary.set(mockSummary);
+        } else {
+          const summaryResponse = await this.apiService.summarizeProject({
+            project_context: this.project.finalPrompt,
+            features: this.project.features,
+            stories: this.project.stories
+          }).toPromise();
+          
+          if (summaryResponse) {
+            this.projectSummary.set(summaryResponse.summary);
+          }
         }
         
         // After summarizing, restore progress to show current design
@@ -1597,13 +1664,149 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
     } catch (error) {
       console.error('[ERROR] Page regeneration failed:', error);
       this.wireframeProgress.set(`Failed to regenerate ${page.name}`);
+    }
+  }
+  
+  // CODE GENERATION & EXECUTION METHODS
+  // ============================================================================
+  
+  async generateAndRunApp() {
+    if (this.isGeneratingCode()) return;
+    
+    this.isGeneratingCode.set(true);
+    this.codeGenProgress.set('Analyzing architecture diagrams...');
+    this.showAppPreview.set(true);
+    
+    try {
+      // Step 1: Generate code
+      this.codeGenProgress.set('Generating React frontend code...');
       
-    } finally {
-      this.isGeneratingWireframes.set(false);
+      const summaries = this.designSummaries();
+      const codeGenRequest = {
+        project_name: this.project.projectName || 'Generated App',
+        project_summary: this.project.promptSummary || this.project.executiveSummary || '',
+        hld_summary: summaries.get('hld'),
+        dbd_summary: summaries.get('dbd'),
+        api_summary: summaries.get('api'),
+        wireframes: this.wireframeData()?.pages || []
+      };
+      
+      console.log('[CODE GEN] Requesting code generation:', codeGenRequest);
+      
+      const codeResponse = await this.apiService.generateCode(codeGenRequest).toPromise();
+      
+      if (!codeResponse) {
+        throw new Error('Failed to generate code');
+      }
+      
+      this.generatedCode.set(codeResponse);
+      console.log('[CODE GEN] Code generated successfully');
+      
+      // Step 2: Execute code in Docker
+      this.codeGenProgress.set('Building Docker containers...');
+      this.codeGenProgress.set('This may take 2-3 minutes on first build...');
+      
+      const executeRequest = {
+        project_name: codeGenRequest.project_name,
+        frontend_code: codeResponse.frontend_code,
+        backend_code: codeResponse.backend_code,
+        docker_compose: codeResponse.docker_compose
+      };
+      
+      console.log('[CODE GEN] Executing code in Docker...');
+      
+      const executeResponse = await this.apiService.executeCode(executeRequest).toPromise();
+      
+      if (!executeResponse) {
+        throw new Error('Failed to execute code');
+      }
+      
+      this.appPreviewUrl.set(executeResponse.preview_url);
+      this.generatedProjectPath.set(executeResponse.project_path);
+      this.generatedSafeName.set(executeResponse.safe_name);
+      
+      console.log('[CODE GEN] Application running at:', executeResponse.preview_url);
+      console.log('[CODE GEN] Message:', executeResponse.message);
+      
+      this.codeGenProgress.set('Application is running! 🚀');
+      console.log('[CODE GEN] App running at:', executeResponse.preview_url);
+      
+      // Log activity
+      this.activityService.logActivity(
+        `Generated and launched application: ${this.project.projectName}`,
+        'rocket_launch',
+        'success'
+      );
       
       setTimeout(() => {
-        this.wireframeProgress.set('');
-      }, 3000);
+        this.isGeneratingCode.set(false);
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('[ERROR] Code generation/execution failed:', error);
+      this.codeGenProgress.set(`Failed: ${error?.message || 'Unknown error'}`);
+      this.isGeneratingCode.set(false);
+      
+      this.activityService.logError(`Code generation failed: ${error?.message}`);
     }
+  }
+  
+  closeAppPreview() {
+    this.showAppPreview.set(false);
+  }
+  
+  async stopGeneratedApp() {
+    try {
+      const projectPath = this.generatedProjectPath();
+      const safeName = this.generatedSafeName();
+      
+      if (projectPath && safeName) {
+        console.log('[STOP APP] Stopping application:', safeName);
+        await this.apiService.stopApp(projectPath, safeName).toPromise();
+        this.activityService.logActivity('Application stopped', 'stop', 'info');
+      }
+      this.closeAppPreview();
+      this.appPreviewUrl.set('');
+    } catch (error) {
+      console.error('[ERROR] Failed to stop app:', error);
+    }
+  }
+  
+  downloadCode() {
+    const code = this.generatedCode();
+    if (!code) return;
+    
+    // Create a simple text file with instructions
+    const instructions = `
+# Generated Application Code
+
+## Frontend Files:
+${Object.keys(code.frontend_code).map(file => `- ${file}`).join('\n')}
+
+## Backend Files:
+${Object.keys(code.backend_code).map(file => `- ${file}`).join('\n')}
+
+## To run locally:
+1. Extract files to your project directory
+2. Run: docker-compose up --build
+3. Access at: http://localhost:${code.preview_port}
+
+---
+
+Full code available in the generated_apps directory on the server.
+Project: ${this.project.projectName}
+`;
+    
+    const blob = new Blob([instructions], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${this.project.projectName.replace(/\s+/g, '_')}_README.txt`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+  
+  sanitizeUrl(url: string): SafeResourceUrl {
+    return this.sanitizer.bypassSecurityTrustResourceUrl(url);
   }
 }

@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { ProjectWorkspaceComponent, ProjectData } from '../../components/project-workspace/project-workspace.component';
 import { CreateProjectModalComponent } from '../../components/create-project-modal/create-project-modal.component';
 import { DevModeService } from '../../services/dev-mode.service';
+import { ProjectStateService } from '../../services/project-state.service';
 import { MOCK_PROJECT_CONTEXT, MOCK_FEATURES, MOCK_STORIES, MOCK_PROJECT_SUMMARY } from '../../services/dev-data';
 
 @Component({
@@ -315,12 +316,33 @@ import { MOCK_PROJECT_CONTEXT, MOCK_FEATURES, MOCK_STORIES, MOCK_PROJECT_SUMMARY
 export class WorkspacePageComponent implements OnInit {
   devModeService = inject(DevModeService);
   private dialog = inject(MatDialog);
+  private projectStateService = inject(ProjectStateService);
   
   activeProject = signal<ProjectData | null>(null);
 
   ngOnInit(): void {
-    console.log('[WorkspacePage] Initializing workspace page...');
-    console.log('[WorkspacePage] Dev mode:', this.devModeService.isDevMode());
+    console.log('[WorkspacePage] 🚀 Initializing workspace page...');
+    console.log('[WorkspacePage] ⚙️ Dev mode:', this.devModeService.isDevMode());
+    
+    // Check if there's a project from the state service (newly created)
+    console.log('[WorkspacePage] 🔍 Checking for incoming project data...');
+    const incomingProject = this.projectStateService.getCurrentProject();
+    
+    if (incomingProject) {
+      console.log('[WorkspacePage] ✅ Found project data!');
+      console.log('[WorkspacePage] 📦 Project:', incomingProject.projectName);
+      console.log('[WorkspacePage] 📊 Features:', incomingProject.features?.length || 0);
+      console.log('[WorkspacePage] 📊 Stories:', incomingProject.stories?.length || 0);
+      this.activeProject.set(incomingProject);
+      console.log('[WorkspacePage] ✅ Project loaded into activeProject');
+      
+      // Clear the state after loading
+      this.projectStateService.clearCurrentProject();
+      console.log('[WorkspacePage] 🧹 State service cleared');
+    } else {
+      console.log('[WorkspacePage] ⚠️ No incoming project data found');
+      console.log('[WorkspacePage] 💡 User needs to create a project or use dev mode quick start');
+    }
   }
 
   openCreateProjectModal(): void {
@@ -349,7 +371,6 @@ export class WorkspacePageComponent implements OnInit {
       projectName: MOCK_PROJECT_CONTEXT.projectName,
       projectKey: 'ECOM',
       industry: MOCK_PROJECT_CONTEXT.industry,
-      methodology: MOCK_PROJECT_CONTEXT.methodology,
       teamSize: '5-10',
       executiveSummary: MOCK_PROJECT_SUMMARY,
       promptSummary: MOCK_PROJECT_CONTEXT.promptSummary,

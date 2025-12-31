@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
 import { NavigationService } from '../../services/navigation.service';
+import { ProjectStateService } from '../../services/project-state.service';
 import { CreateProjectModalComponent } from '../../components/create-project-modal/create-project-modal.component';
 
 interface Project {
@@ -471,6 +472,7 @@ interface Project {
 export class ProjectsComponent implements OnInit {
   private navService = inject(NavigationService);
   private dialog = inject(MatDialog);
+  private projectStateService = inject(ProjectStateService);
 
   searchQuery = '';
   activeFilter = signal<string>('all');
@@ -574,12 +576,53 @@ export class ProjectsComponent implements OnInit {
 
   openCreateProject(): void {
     console.log('[ProjectsComponent] Opening create project modal');
-    this.dialog.open(CreateProjectModalComponent, {
+    const dialogRef = this.dialog.open(CreateProjectModalComponent, {
       width: '90vw',
       maxWidth: '1400px',
       maxHeight: '85vh',
       panelClass: 'custom-dialog-container',
       disableClose: false
+    });
+
+    dialogRef.afterClosed().subscribe(projectData => {
+      if (projectData) {
+        console.log('[ProjectsComponent] Project created:', projectData);
+        
+        // Create new project from the returned data
+        const newProject: Project = {
+          id: Date.now().toString(),
+          name: projectData.projectName,
+          key: projectData.projectKey,
+          status: 'active',
+          progress: 0,
+          lastUpdated: 'Just now',
+          features: projectData.features?.length || 0,
+          stories: projectData.stories?.length || 0
+        };
+
+        // Add to projects list
+        const updatedProjects = [...this.projects(), newProject];
+        this.projects.set(updatedProjects);
+        
+        // Update filtered list
+        this.updateFilteredProjects();
+        
+        // Update badge count
+        this.navService.updateBadge('projects', updatedProjects.length);
+        
+        console.log('[ProjectsComponent] ✅ Project added to list. Total projects:', updatedProjects.length);
+        
+        // Save full project data to state service
+        console.log('[ProjectsComponent] 💾 Saving project to state service...');
+        this.projectStateService.setCurrentProject(projectData);
+        console.log('[ProjectsComponent] ✅ Project saved to state service');
+        
+        // Navigate to workspace
+        console.log('[ProjectsComponent] 🚀 Navigating to workspace...');
+        console.log('[ProjectsComponent] 📍 Target route: /workspace');
+        this.navService.navigate('/workspace');
+        console.log('[ProjectsComponent] ✅ Navigation triggered');
+      }
     });
   }
 

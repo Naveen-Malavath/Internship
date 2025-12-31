@@ -30,7 +30,6 @@
                 <h3 class="card-title">{{ template.title }}</h3>
                 <div class="card-tags">
                   <span class="tag tag-industry">{{ template.industry }}</span>
-                  <span class="tag tag-methodology">{{ template.methodology }}</span>
                   @if (template.additionalTag) {
                     <span class="tag tag-additional">{{ template.additionalTag }}</span>
                   }
@@ -85,16 +84,6 @@
               class="form-input" 
               [(ngModel)]="projectData.industry"
               placeholder="Select industry">
-          </div>
-          
-          <div class="form-field">
-            <label class="form-label">Methodology</label>
-            <select class="form-select" [(ngModel)]="projectData.methodology">
-              <option value="Scrum">Scrum</option>
-              <option value="Kanban">Kanban</option>
-              <option value="Hybrid">Hybrid</option>
-              <option value="Mixed">Mixed</option>
-            </select>
           </div>
           
           <div class="form-field">

@@ -51,12 +51,6 @@ export class NavigationService {
       icon: 'folder',
       route: '/projects',
       badge: 0
-    },
-    {
-      id: 'agents',
-      label: 'AI Agents',
-      icon: 'smart_toy',
-      route: '/agents'
     }
   ]);
 
@@ -189,11 +183,11 @@ export class NavigationService {
   }
 
   navigate(route: string): void {
-    console.log('[NavigationService] Navigating to:', route);
+    console.log('[NavigationService] 🚀 Navigate called with route:', route);
     
     // Edge case: Check if route is valid
     if (!route || typeof route !== 'string') {
-      console.error('[NavigationService] Invalid route provided:', route);
+      console.error('[NavigationService] ❌ Invalid route provided:', route);
       return;
     }
 
@@ -215,9 +209,10 @@ export class NavigationService {
     this.router.navigate([route]).then(
       (success: boolean) => {
         if (success) {
-          console.log('[NavigationService] Navigation successful to:', route);
+          console.log('[NavigationService] ✅ Navigation successful to:', route);
         } else {
-          console.warn('[NavigationService] Navigation failed to:', route);
+          console.warn('[NavigationService] ⚠️ Navigation failed to:', route);
+          console.warn('[NavigationService] 💡 Check if route exists in app.routes.ts');
           this._isNavigating.set(false);
         }
       },

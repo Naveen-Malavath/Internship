@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { ProjectsComponent } from './pages/projects/projects.component';
+import { WorkspacePageComponent } from './pages/workspace/workspace-page.component';
 import { PlaceholderPageComponent } from './pages/placeholder/placeholder-page.component';
 
 export const routes: Routes = [
@@ -25,16 +26,11 @@ export const routes: Routes = [
     title: 'Projects - AutoAgents'
   },
   
-  // AI Agents management (placeholder)
+  // Workspace - project design and architecture
   {
-    path: 'agents',
-    component: PlaceholderPageComponent,
-    title: 'AI Agents - AutoAgents',
-    data: {
-      title: 'AI Agents',
-      description: 'Manage and configure AI agents for automated project planning, story generation, and design system creation.',
-      icon: 'smart_toy'
-    }
+    path: 'workspace',
+    component: WorkspacePageComponent,
+    title: 'Workspace - AutoAgents'
   },
   
   // Wildcard route - 404 handling

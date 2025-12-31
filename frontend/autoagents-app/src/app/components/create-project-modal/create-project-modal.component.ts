@@ -22,7 +22,6 @@ import { MOCK_FEATURES, MOCK_STORIES, MOCK_PROJECT_CONTEXT } from '../../service
 interface Template {
   title: string;
   industry: string;
-  methodology: string;
   description: string;
   features: string[];
   personas: string;
@@ -41,7 +40,6 @@ interface ProjectData {
   projectName: string;
   projectKey: string;
   industry: string;
-  methodology: string;
   timezone: string;
   teamSize: string;
   kickoffDate: string;
@@ -115,7 +113,7 @@ export class CreateProjectModalComponent {
     projectName: '',
     projectKey: '',
     industry: '',
-    methodology: '',
+
     timezone: 'UTC',
     teamSize: 'Not sure yet',
     kickoffDate: '',
@@ -144,7 +142,6 @@ export class CreateProjectModalComponent {
     {
       title: 'Digital Banking Suite',
       industry: 'FINANCIAL SERVICES',
-      methodology: 'SCRUM',
       description: 'Deliver a secure, personalised banking experience with account management, payments, and analytics.',
       features: [
         'security',
@@ -156,7 +153,6 @@ export class CreateProjectModalComponent {
     {
       title: 'Composable Commerce',
       industry: 'RETAIL & ECOMMERCE',
-      methodology: 'HYBRID',
       description: 'Create a modular e-commerce platform with headless storefronts, inventory orchestration, and loyalty.',
       features: [
         'performance',
@@ -168,7 +164,6 @@ export class CreateProjectModalComponent {
     {
       title: 'AI-powered Support Desk',
       industry: 'SAAS / CUSTOMER SUCCESS',
-      methodology: 'KANBAN',
       description: 'Roll out an AI-assisted support desk with conversational automation and proactive insights.',
       features: [
         'self-service automation',
@@ -211,7 +206,6 @@ export class CreateProjectModalComponent {
     this.projectData.projectName = template.title;
     this.projectData.projectKey = this.generateProjectKey(template.title);
     this.projectData.industry = template.industry;
-    this.projectData.methodology = template.methodology;
     this.projectData.promptSummary = template.description;
     this.nextStep();
   }
@@ -260,7 +254,6 @@ export class CreateProjectModalComponent {
       type,
       projectName: this.projectData.projectName,
       industry: this.projectData.industry,
-      methodology: this.projectData.methodology,
       promptSummary: this.projectData.promptSummary,
       focusAreas: this.selectedTemplate()?.features.join(', ') || ''
     };
@@ -382,7 +375,6 @@ export class CreateProjectModalComponent {
     prompt += `Project Name: ${this.projectData.projectName}\n`;
     prompt += `Project Key: ${this.projectData.projectKey}\n`;
     prompt += `Industry: ${this.projectData.industry}\n`;
-    prompt += `Methodology: ${this.projectData.methodology}\n`;
     prompt += `Team Size: ${this.projectData.teamSize}\n`;
     prompt += `Timezone: ${this.projectData.timezone}\n`;
     if (this.projectData.kickoffDate) {
@@ -505,9 +497,9 @@ export class CreateProjectModalComponent {
     this.loadingFeatures.set(true);
     this.generatedFeatures.set([]);
 
-    // PROD MODE (Dev Mode OFF): Use mock data to bypass API calls
-    if (!this.devModeService.isDevMode()) {
-      console.log('[PROD MODE] Using mock features - bypassing API call');
+    // DEV MODE (Dev Mode ON): Use mock data to bypass API calls
+    if (this.devModeService.isDevMode()) {
+      console.log('[DEV MODE] Using mock features - bypassing API call');
       setTimeout(() => {
         this.generatedFeatures.set([...MOCK_FEATURES]);
         this.loadingFeatures.set(false);
@@ -655,9 +647,9 @@ export class CreateProjectModalComponent {
       return;
     }
 
-    // PROD MODE (Dev Mode OFF): Use mock data to bypass API calls
-    if (!this.devModeService.isDevMode()) {
-      console.log('[PROD MODE] Using mock stories - bypassing API call');
+    // DEV MODE (Dev Mode ON): Use mock data to bypass API calls
+    if (this.devModeService.isDevMode()) {
+      console.log('[DEV MODE] Using mock stories - bypassing API call');
       this.loadingStories.set(true);
       this.generatedStories.set([]);
       setTimeout(() => {
@@ -671,7 +663,6 @@ export class CreateProjectModalComponent {
     // Build project context from form data
     const projectContext = `Project: ${this.projectData.projectName}
 Industry: ${this.projectData.industry}
-Methodology: ${this.projectData.methodology}
 Description: ${this.projectData.promptSummary}
 Focus Areas: ${this.projectData.executiveSummary || 'N/A'}`;
 
@@ -845,7 +836,6 @@ Focus Areas: ${this.projectData.executiveSummary || 'N/A'}`;
       projectName: this.projectData.projectName,
       projectKey: this.projectData.projectKey,
       industry: this.projectData.industry,
-      methodology: this.projectData.methodology,
       teamSize: this.projectData.teamSize,
       executiveSummary: this.projectData.executiveSummary,
       promptSummary: this.projectData.promptSummary,

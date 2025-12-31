@@ -1,22 +1,33 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
+from pathlib import Path
 import os
 import json
 import traceback
 from dotenv import load_dotenv
 from anthropic import Anthropic
+from code_executor import CodeExecutor
 
 # Load environment variables
 load_dotenv()
 
 app = FastAPI(title="AutoAgents API")
 
+# Initialize Code Executor
+code_executor = CodeExecutor()
+
+# Mount static directory for generated HTML files (fallback)
+static_dir = Path("./static")
+static_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4201", "http://localhost:4200"],  # Added port 4200
+    allow_origins=["http://localhost", "http://localhost:80", "http://localhost:4201", "http://localhost:4200"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +40,7 @@ anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 # Model configurations
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 SONNET_MODEL = "claude-sonnet-4-20250514"
+SONNET_45_MODEL = "claude-sonnet-4-5-20250929"  # Sonnet 4.5 (most powerful)
 
 # Self-healing retry mechanism
 async def call_claude_with_retry(model: str, system_prompt: str, user_prompt: str, max_tokens: int = 1024, max_retries: int = 5, fallback_model: str = None):
@@ -339,7 +351,6 @@ class GenerateRequest(BaseModel):
     type: str
     projectName: str
     industry: str
-    methodology: str
     promptSummary: str
     focusAreas: Optional[str] = ""
 
@@ -370,6 +381,7 @@ class Story(BaseModel):
     title: str
     description: str
     featureRef: str
+    featureContext: str  # NEW: Explains what from the feature was used to create this story
 
 class StoriesResponse(BaseModel):
     stories: list[Story]
@@ -396,7 +408,6 @@ Create a concise executive summary for a {request.industry} initiative called "{
 
 Project Context:
 - Industry: {request.industry}
-- Methodology: {request.methodology}
 - Project Overview: {request.promptSummary}
 - Focus Areas: {request.focusAreas or "customer experience, innovation, operational excellence"}
 
@@ -412,12 +423,11 @@ Generate only the executive summary text, no additional formatting or preamble."
         elif request.type == "epics":
             prompt = f"""You are an expert agile product owner and technical architect.
 
-Generate 4-6 epic-level initiatives for a {request.methodology} team launching "{request.projectName}" in the {request.industry} sector.
+Generate 4-6 epic-level initiatives for launching "{request.projectName}" in the {request.industry} sector.
 
 Project Context:
 - Project: {request.projectName}
 - Industry: {request.industry}
-- Methodology: {request.methodology}
 - Description: {request.promptSummary}
 
 Requirements:
@@ -425,7 +435,6 @@ Requirements:
 - Include one sentence justification for business value
 - Format: "Epic Title: Brief description explaining customer/business value"
 - Focus on deliverable outcomes, not tasks
-- Align with {request.methodology} best practices
 - Consider technical feasibility and dependencies
 
 Generate 4-6 epic ideas, one per line."""
@@ -454,12 +463,11 @@ Generate only the bullet-pointed acceptance criteria."""
         elif request.type == "risks":
             prompt = f"""You are a seasoned project risk manager and delivery expert.
 
-Identify the top delivery risks for a {request.methodology} implementation of "{request.projectName}" in {request.industry}.
+Identify the top delivery risks for implementing "{request.projectName}" in {request.industry}.
 
 Project Context:
 - Project: {request.projectName}
 - Industry: {request.industry}
-- Methodology: {request.methodology}
 - Description: {request.promptSummary}
 
 Requirements:
@@ -670,6 +678,16 @@ async def generate_stories(request: StoriesRequest):
         # System prompt for Claude
         system_prompt = """You are a senior agile product owner and user story expert with deep expertise in writing clear, actionable user stories that drive development success.
 
+🎯 CRITICAL NEW REQUIREMENT - Feature Context Tracking:
+For EACH story you generate, you MUST explain EXACTLY what information from the parent feature you used to create it.
+This is MANDATORY for traceability and quality assurance.
+
+⚠️ IMPORTANT RULES:
+- NEVER use "N/A", "Not specified", or "Not applicable" for featureContext
+- NEVER leave featureContext empty or blank
+- ALWAYS provide 2-4 specific bullet points showing feature-to-story mapping
+- If you cannot determine the context, you MUST still explain your reasoning based on the feature details provided
+
 Guidelines:
 - Generate EXACTLY 2 user stories per feature provided
 - Each story MUST have a UNIQUE and SPECIFIC title that describes the exact functionality
@@ -687,6 +705,11 @@ Story Structure:
   Examples: "View Real-Time Account Balance", "Set Up Transaction Alerts", "Generate Monthly Spending Report"
 - Description: Full user story in "As a [user], I want to [action] so that [benefit]" format with acceptance criteria (2-3 bullet points)
 - featureRef: The parent feature/epic name this story belongs to
+- featureContext: **REQUIRED** - Explain what from the feature you used (2-4 bullet points):
+  * Which acceptance criteria influenced this story
+  * Which part of the detailed description was considered
+  * How the user persona shaped this story
+  * Which business objective or success metric guided this story
 
 Output Format (strict JSON):
 {
@@ -694,7 +717,8 @@ Output Format (strict JSON):
     {
       "title": "Specific Action-Oriented Title (5-8 words)",
       "description": "As a [SPECIFIC user type], I want to [SPECIFIC action] so that [SPECIFIC benefit]\\n\\nAcceptance Criteria:\\n- Given...\\n- When...\\n- Then...",
-      "featureRef": "Parent Feature Name"
+      "featureRef": "Parent Feature Name",
+      "featureContext": "• Derived from feature's acceptance criteria: 'Users can register'\\n• Based on user persona: 'Online shoppers who value security'\\n• Aligned with business objective: 'Increase user retention'\\n• Considered detailed description aspect: 'OAuth2-based authentication'"
     }
   ]
 }
@@ -708,7 +732,8 @@ Quality Standards:
 ✓ User-centric language
 ✓ Testable outcomes
 ✓ Business value explicit
-✓ NO duplicate titles or scenarios"""
+✓ NO duplicate titles or scenarios
+✓ **MUST include featureContext explaining the feature-to-story mapping**"""
 
         # Build features list
         features_text = "\n".join([f"{i+1}. {feat}" for i, feat in enumerate(request.features)])
@@ -735,7 +760,16 @@ Quality Standards:
 
 Total stories to generate: {len(request.features) * 2}
 
-Return the stories in strict JSON format with title, description, and featureRef for each story."""
+🎯 CRITICAL REMINDER: Each story MUST include a detailed "featureContext" field explaining:
+- Which specific acceptance criteria from the feature influenced this story
+- Which part of the detailed description was considered  
+- How the user persona/problem statement shaped this story
+- Which business objective or success metric guided this story
+
+❌ DO NOT use "N/A", "Not specified", or leave featureContext empty
+✅ ALWAYS provide 2-4 specific bullet points showing the feature-to-story mapping
+
+Return the stories in strict JSON format with title, description, featureRef, AND featureContext for EVERY story."""
 
         # Call Claude Haiku 4.5 with retry mechanism
         print("[DEBUG] Calling Claude API for story generation...")
@@ -783,13 +817,21 @@ Return the stories in strict JSON format with title, description, and featureRef
         
         # Validate and format stories
         formatted_stories = []
-        for story in stories:
+        for idx, story in enumerate(stories):
+            feature_context = safe_string(story.get('featureContext', ''))
+            
+            # Log context tracking for debugging
+            print(f"[DEBUG] Story {idx + 1}: {story.get('title', 'N/A')}")
+            print(f"[DEBUG] Feature Context: {feature_context[:100]}...")
+            
             formatted_stories.append(Story(
                 title=safe_string(story.get('title', '')),
                 description=safe_string(story.get('description', '')),
-                featureRef=safe_string(story.get('featureRef', ''))
+                featureRef=safe_string(story.get('featureRef', '')),
+                featureContext=feature_context
             ))
         
+        print(f"[DEBUG] ✅ Generated {len(formatted_stories)} stories with feature context")
         return StoriesResponse(stories=formatted_stories)
 
     except json.JSONDecodeError as e:
@@ -3160,6 +3202,492 @@ async def regenerate_wireframe_page(request: RegeneratePageRequest):
         print(f"[ERROR] Page regeneration failed: {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Page regeneration failed: {str(e)}")
+
+
+# ============================================================================
+# CODE GENERATION & EXECUTION ENDPOINT
+# ============================================================================
+
+class GenerateCodeRequest(BaseModel):
+    project_name: str
+    project_summary: str
+    hld_summary: Optional[str] = None
+    dbd_summary: Optional[str] = None
+    api_summary: Optional[str] = None
+    wireframes: Optional[list] = None
+
+class GenerateCodeResponse(BaseModel):
+    frontend_code: dict  # filename -> code
+    backend_code: dict   # filename -> code
+    docker_compose: str
+    preview_port: int
+    status: str
+
+@app.post("/api/generate-code", response_model=GenerateCodeResponse)
+async def generate_application_code(request: GenerateCodeRequest):
+    """Generate executable frontend and backend code from architecture diagrams"""
+    try:
+        print(f"[CODE GEN] Starting code generation for project: {request.project_name}")
+        
+        # Generate Frontend Code (React App.jsx)
+        frontend_prompt = f"""Generate a COMPLETE React application based on these specifications:
+
+PROJECT: {request.project_name}
+SUMMARY: {request.project_summary}
+
+ARCHITECTURE:
+{request.hld_summary or 'Simple web application'}
+
+API ENDPOINTS:
+{request.api_summary or 'Basic CRUD operations'}
+
+CRITICAL REQUIREMENTS:
+1. Generate React code as an ES6 module (NO imports needed - React is available)
+2. Create ONE single App component as the default export
+3. Use Tailwind CSS classes for styling (dark theme: bg-slate-900, text-white)
+4. Create 2-3 simple pages/sections based on the project (DO NOT OVER-COMPLICATE)
+5. Include a simple navigation (buttons or tabs)
+6. Use mock data (simple arrays/objects) - NO API calls
+7. ENSURE ALL JSX TAGS ARE PROPERLY CLOSED - check every opening tag has closing tag
+8. Keep the code under 300 lines to avoid truncation
+9. MUST end with: export default App;
+
+EXAMPLE STRUCTURE (follow this pattern):
+```javascript
+const App = () => {{
+  const [currentPage, setCurrentPage] = React.useState('home');
+  
+  return (
+    <div className="min-h-screen bg-slate-900 text-white">
+      <nav className="bg-slate-800 p-4 mb-4">
+        <button 
+          onClick={{() => setCurrentPage('home')}}
+          className="px-4 py-2 bg-blue-600 rounded mr-2"
+        >
+          Home
+        </button>
+        <button 
+          onClick={{() => setCurrentPage('dashboard')}}
+          className="px-4 py-2 bg-blue-600 rounded"
+        >
+          Dashboard
+        </button>
+      </nav>
+      
+      {{currentPage === 'home' && (
+        <div className="p-8">
+          <h1 className="text-3xl font-bold">Home</h1>
+          <p>Welcome to the application</p>
+        </div>
+      )}}
+      
+      {{currentPage === 'dashboard' && (
+        <div className="p-8">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="bg-slate-800 p-4 rounded">Card 1</div>
+            <div className="bg-slate-800 p-4 rounded">Card 2</div>
+            <div className="bg-slate-800 p-4 rounded">Card 3</div>
+          </div>
+        </div>
+      )}}
+    </div>
+  );
+}};
+
+export default App;
+```
+
+IMPORTANT: 
+- Keep it SIMPLE and COMPLETE
+- Every JSX tag that opens MUST close (check < and > pairs)
+- End with: export default App;
+- No markdown code blocks
+- Total code should be under 300 lines
+
+Return ONLY the complete JavaScript code:"""
+
+        frontend_code = await call_claude_with_retry(
+            model=SONNET_MODEL,  # Use Sonnet 4 for code generation
+            system_prompt="You are an expert React developer. Generate production-ready, COMPLETE React code with all JSX tags properly closed.",
+            user_prompt=frontend_prompt,
+            max_tokens=16000,  # Increased to ensure complete code
+            fallback_model=None
+        )
+        
+        # Generate Backend Code (FastAPI main.py)
+        backend_prompt = f"""Generate a complete FastAPI backend based on these specifications:
+
+PROJECT: {request.project_name}
+SUMMARY: {request.project_summary}
+
+API DESIGN:
+{request.api_summary or 'Basic REST API with CRUD operations'}
+
+Requirements:
+1. Create FastAPI app with CORS enabled
+2. Create 5-8 RESTful endpoints
+3. Use in-memory data storage (list/dict, NO database)
+4. Include health check endpoint
+5. Add proper request/response models with Pydantic
+6. Make it fully functional and ready to run
+
+Return ONLY the Python code for main.py. No explanations."""
+
+        backend_code = await call_claude_with_retry(
+            model=SONNET_MODEL,  # Use Sonnet 4 for code generation
+            system_prompt="You are an expert FastAPI developer. Generate production-ready Python code.",
+            user_prompt=backend_prompt,
+            max_tokens=16000,  # Increased for complete code
+            fallback_model=None
+        )
+        
+        # Clean up code
+        frontend_code = frontend_code.replace("```jsx", "").replace("```javascript", "").replace("```js", "").replace("```", "").strip()
+        
+        # Ensure proper export - remove any existing exports and add default export at the end
+        lines = frontend_code.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Keep React import, remove other imports
+            if line.strip().startswith('import ') and 'React' not in line:
+                continue
+            # Remove export default if it exists in middle of code
+            elif line.strip().startswith('export default'):
+                cleaned_lines.append(line.replace('export default ', ''))
+            else:
+                cleaned_lines.append(line)
+        
+        frontend_code = '\n'.join(cleaned_lines)
+        
+        # Add React import at the beginning if not present
+        if 'import React' not in frontend_code:
+            frontend_code = "import React from 'react';\n\n" + frontend_code
+        
+        # Validate JSX is complete - check for common truncation issues
+        open_braces = frontend_code.count('{')
+        close_braces = frontend_code.count('}')
+        open_parens = frontend_code.count('(')
+        close_parens = frontend_code.count(')')
+        
+        print(f"[JSX VALIDATION] Braces: {{ {open_braces} / }} {close_braces}")
+        print(f"[JSX VALIDATION] Parens: ( {open_parens} / ) {close_parens}")
+        
+        # If severely unbalanced, use fallback
+        if abs(open_braces - close_braces) > 5 or abs(open_parens - close_parens) > 5:
+            print(f"[JSX VALIDATION] Code appears truncated or malformed, using fallback")
+            frontend_code = f"""const App = () => {{
+  const [activePage, setActivePage] = React.useState('home');
+  
+  return (
+    <div className="min-h-screen bg-slate-900 text-white">
+      <header className="bg-slate-800 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <h1 className="text-3xl font-bold text-blue-400">{request.project_name}</h1>
+          <p className="text-gray-400 mt-2">{request.project_summary}</p>
+        </div>
+      </header>
+      
+      <nav className="bg-slate-800 border-b border-slate-700">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex gap-2">
+          <button 
+            onClick={{() => setActivePage('home')}}
+            className={{`px-4 py-2 rounded ${{activePage === 'home' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}}`}}
+          >
+            Home
+          </button>
+          <button 
+            onClick={{() => setActivePage('features')}}
+            className={{`px-4 py-2 rounded ${{activePage === 'features' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}}`}}
+          >
+            Features
+          </button>
+          <button 
+            onClick={{() => setActivePage('about')}}
+            className={{`px-4 py-2 rounded ${{activePage === 'about' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}}`}}
+          >
+            About
+          </button>
+        </div>
+      </nav>
+      
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {{activePage === 'home' && (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Welcome</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
+                <h3 className="text-xl font-semibold mb-2 text-blue-400">Feature 1</h3>
+                <p className="text-gray-400">Core functionality and main features</p>
+              </div>
+              <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
+                <h3 className="text-xl font-semibold mb-2 text-blue-400">Feature 2</h3>
+                <p className="text-gray-400">Advanced capabilities and tools</p>
+              </div>
+              <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
+                <h3 className="text-xl font-semibold mb-2 text-blue-400">Feature 3</h3>
+                <p className="text-gray-400">Analytics and reporting</p>
+              </div>
+            </div>
+          </div>
+        )}}
+        
+        {{activePage === 'features' && (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Features</h2>
+            <div className="space-y-4">
+              <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
+                <h3 className="text-lg font-semibold text-blue-400">Comprehensive Dashboard</h3>
+                <p className="text-gray-400 mt-2">Monitor all key metrics in one place</p>
+              </div>
+              <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
+                <h3 className="text-lg font-semibold text-blue-400">Real-time Updates</h3>
+                <p className="text-gray-400 mt-2">Stay informed with live data</p>
+              </div>
+            </div>
+          </div>
+        )}}
+        
+        {{activePage === 'about' && (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">About</h2>
+            <div className="bg-slate-800 p-6 rounded-lg border border-slate-700">
+              <p className="text-gray-300 leading-relaxed">
+                This application was automatically generated based on the project specifications.
+                It provides a foundation for {request.project_name.lower()} with essential features and functionality.
+              </p>
+            </div>
+          </div>
+        )}}
+      </main>
+    </div>
+  );
+}};"""
+        
+        # Ensure there's a default export at the end
+        if 'export default App' not in frontend_code:
+            frontend_code += '\n\nexport default App;'
+        
+        backend_code = backend_code.replace("```python", "").replace("```", "").strip()
+        
+        # Validate frontend code has App component
+        if 'const App' not in frontend_code and 'function App' not in frontend_code:
+            frontend_code = """
+const App = () => {
+  return (
+    <div className="min-h-screen bg-slate-900 text-white p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-4xl font-bold mb-4">""" + request.project_name + """</h1>
+        <p className="text-xl text-gray-300">""" + request.project_summary + """</p>
+        <div className="mt-8 grid grid-cols-3 gap-4">
+          <div className="bg-slate-800 p-6 rounded-lg">
+            <h3 className="text-xl font-bold mb-2">Feature 1</h3>
+            <p className="text-gray-400">Dashboard overview</p>
+          </div>
+          <div className="bg-slate-800 p-6 rounded-lg">
+            <h3 className="text-xl font-bold mb-2">Feature 2</h3>
+            <p className="text-gray-400">Data management</p>
+          </div>
+          <div className="bg-slate-800 p-6 rounded-lg">
+            <h3 className="text-xl font-bold mb-2">Feature 3</h3>
+            <p className="text-gray-400">Analytics</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+"""
+        
+        # Generate package.json for frontend
+        package_json = {
+            "name": request.project_name.lower().replace(" ", "-"),
+            "version": "1.0.0",
+            "scripts": {
+                "dev": "vite",
+                "build": "vite build"
+            },
+            "dependencies": {
+                "react": "^18.2.0",
+                "react-dom": "^18.2.0",
+                "react-router-dom": "^6.20.0"
+            },
+            "devDependencies": {
+                "@vitejs/plugin-react": "^4.2.1",
+                "vite": "^5.0.8",
+                "tailwindcss": "^3.4.0",
+                "autoprefixer": "^10.4.16",
+                "postcss": "^8.4.32"
+            }
+        }
+        
+        # Generate requirements.txt for backend
+        requirements_txt = """fastapi==0.108.0
+uvicorn[standard]==0.25.0
+pydantic==2.5.3
+python-multipart==0.0.6"""
+        
+        # Generate Docker Compose
+        docker_compose = f"""version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8001:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3001:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    depends_on:
+      - backend
+"""
+        
+        return GenerateCodeResponse(
+            frontend_code={
+                "App.jsx": frontend_code,
+                "package.json": json.dumps(package_json, indent=2),
+                "vite.config.js": """import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://backend:8000',
+        changeOrigin: true
+      }
+    }
+  }
+})""",
+                "index.html": """<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generated App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>""",
+                "main.jsx": """import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)"""
+            },
+            backend_code={
+                "main.py": backend_code,
+                "requirements.txt": requirements_txt
+            },
+            docker_compose=docker_compose,
+            preview_port=3001,
+            status="success"
+        )
+        
+    except Exception as e:
+        print(f"[ERROR] Code generation failed: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Code generation failed: {str(e)}")
+
+
+class ExecuteCodeRequest(BaseModel):
+    project_name: str
+    frontend_code: dict
+    backend_code: dict
+    docker_compose: str  # Keep for compatibility but won't use
+
+class ExecuteCodeResponse(BaseModel):
+    preview_url: str
+    project_path: str
+    safe_name: str  # Add safe name for cleanup
+    status: str
+    message: str
+
+@app.post("/api/execute-code", response_model=ExecuteCodeResponse)
+async def execute_generated_code(request: ExecuteCodeRequest):
+    """Execute generated code in Docker containers with full logging"""
+    try:
+        print(f"\n{'#'*100}")
+        print(f"# CODE EXECUTION REQUEST")
+        print(f"# Project: {request.project_name}")
+        print(f"# Timestamp: {__import__('datetime').datetime.now()}")
+        print(f"{'#'*100}\n")
+        
+        # Allocate ports
+        ports = code_executor._allocate_ports(request.project_name)
+        print(f"[BACKEND] Allocated ports: {ports}")
+        
+        # Create project files
+        print(f"[BACKEND] Creating project files...")
+        project_path, safe_name = code_executor.create_project(
+            project_name=request.project_name,
+            frontend_code=request.frontend_code,
+            backend_code=request.backend_code,
+            ports=ports
+        )
+        print(f"[BACKEND] Project created at: {project_path}")
+        print(f"[BACKEND] Safe name: {safe_name}")
+        
+        # Start application
+        print(f"[BACKEND] Starting Docker containers...")
+        success, result = code_executor.start_application(project_path, safe_name)
+        
+        if not success:
+            print(f"[BACKEND ERROR] Failed to start: {result}")
+            code_executor._release_ports(safe_name)
+            raise HTTPException(status_code=500, detail=result)
+        
+        print(f"[BACKEND SUCCESS] Application running at: {result}")
+        
+        return ExecuteCodeResponse(
+            preview_url=result,
+            project_path=project_path,
+            safe_name=safe_name,
+            status="running",
+            message=f"Application is running on ports {ports['frontend']} (frontend) and {ports['backend']} (backend)"
+        )
+        
+    except Exception as e:
+        print(f"[BACKEND ERROR] Code execution failed: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Code execution failed: {str(e)}")
+
+
+class StopAppRequest(BaseModel):
+    project_path: str
+    safe_name: str  # Add safe name for proper cleanup
+
+@app.post("/api/stop-app")
+async def stop_application(request: StopAppRequest):
+    """Stop and cleanup running Docker containers"""
+    try:
+        print(f"[BACKEND] Stopping application: {request.safe_name}")
+        success = code_executor.stop_application(request.project_path, request.safe_name)
+        return {"status": "stopped" if success else "failed"}
+    except Exception as e:
+        print(f"[BACKEND ERROR] Stop failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
