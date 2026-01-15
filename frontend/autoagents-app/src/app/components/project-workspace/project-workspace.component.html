@@ -102,10 +102,6 @@
     <div class="section-header">
       <h2 class="section-title">Design Artifacts</h2>
       <div class="header-actions">
-        <button class="generate-code-btn" (click)="generateAndRunApp()" [disabled]="isGeneratingCode() || completedDesignsCount < 3">
-          <mat-icon>rocket_launch</mat-icon>
-          Generate & Run App
-        </button>
         <button class="generate-all-btn" (click)="generateAllDesigns()" [disabled]="isGenerating()">
           <mat-icon>auto_awesome</mat-icon>
           Generate All
@@ -303,6 +299,45 @@
       (pageCountChange)="onPageCountChange($event)">
     </app-wireframe-viewer>
   </div>
+
+  <!-- App Generation Section - Below Wireframes -->
+  <div class="app-generation-section">
+    <div class="section-header">
+      <div class="header-content">
+        <mat-icon class="section-icon">rocket_launch</mat-icon>
+        <div class="header-text">
+          <h2 class="section-title">Application Generation</h2>
+          <p class="section-description">Generate a full-stack running application from your designs</p>
+        </div>
+      </div>
+      <button class="generate-code-btn" (click)="generateAndRunApp()" [disabled]="isGeneratingCode() || !canGenerateApp">
+        <mat-icon>rocket_launch</mat-icon>
+        Generate & Run App
+      </button>
+    </div>
+    
+    @if (!canGenerateApp) {
+      <div class="generation-requirements">
+        <mat-icon class="requirements-icon">info</mat-icon>
+        <div class="requirements-text">
+          <p class="requirements-title">Prerequisites Required</p>
+          <p class="requirements-description">Complete at least 3 design artifacts (HLD, LLD, or DBD) and generate UI wireframes before generating your application.</p>
+          <div class="requirements-status">
+            <div class="requirements-progress">
+              <mat-icon [class.completed]="completedDesignsCount >= 3">{{ completedDesignsCount >= 3 ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+              <span class="progress-label">Design Artifacts:</span>
+              <span class="progress-value" [class.completed]="completedDesignsCount >= 3">{{ completedDesignsCount }} / 3</span>
+            </div>
+            <div class="requirements-progress">
+              <mat-icon [class.completed]="hasWireframes">{{ hasWireframes ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+              <span class="progress-label">UI Wireframes:</span>
+              <span class="progress-value" [class.completed]="hasWireframes">{{ hasWireframes ? 'Generated' : 'Not Generated' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
 </div>
 
 <!-- Fullscreen Overlay -->
@@ -393,11 +428,39 @@
           </div>
         </div>
       } @else if (appPreviewUrl()) {
-        <iframe 
-          [src]="sanitizeUrl(appPreviewUrl())" 
-          class="app-iframe"
-          frameborder="0">
-        </iframe>
+        <!-- DEBUG: Preview URL is set -->
+        <div class="app-preview-container">
+          <div class="preview-header">
+            <h3 class="preview-title">🚀 Application Running</h3>
+            <div class="preview-actions">
+              <button 
+                mat-raised-button 
+                color="primary"
+                (click)="openAppInNewTab()"
+                class="open-new-tab-btn">
+                <mat-icon>open_in_new</mat-icon>
+                Open in New Tab
+              </button>
+              <p class="preview-url">{{ appPreviewUrl() }}</p>
+            </div>
+          </div>
+          <div class="iframe-container">
+            <iframe 
+              [src]="sanitizeUrl(appPreviewUrl())" 
+              class="app-iframe"
+              frameborder="0"
+              (load)="onIframeLoad()"
+              (error)="onIframeError($event)"
+              allow="cross-origin-isolated">
+            </iframe>
+          </div>
+        </div>
+      } @else {
+        <!-- DEBUG: No preview URL -->
+        <div class="debug-info" style="padding: 2rem; color: #94a3b8;">
+          <p>Debug: appPreviewUrl = {{ appPreviewUrl() || 'null' }}</p>
+          <p>Debug: isGenerating = {{ isGenerating() }}</p>
+        </div>
       }
     </div>
   </div>

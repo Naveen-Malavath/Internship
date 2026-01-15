@@ -13,7 +13,7 @@ import json
 class BaseAgent(ABC):
     """Base class for all agents in the wireframe system"""
     
-    # Model configurations - use Claude Haiku 4.5 for fast, quality output
+    # Model configurations - use Claude Haiku 4.5 for fast wireframe generation
     MODELS = {
         "fast": "claude-haiku-4-5-20251001",      # For simple tasks (planning)
         "balanced": "claude-haiku-4-5-20251001",  # For complex tasks (HTML generation)

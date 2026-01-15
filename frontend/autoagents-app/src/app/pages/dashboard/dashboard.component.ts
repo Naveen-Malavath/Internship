@@ -66,14 +66,14 @@ import { ActivityService } from '../../services/activity.service';
         font-size: 2rem;
         font-weight: 700;
         margin: 0 0 0.5rem 0;
-        background: linear-gradient(90deg, #ffffff 0%, #94a3b8 100%);
+        background: linear-gradient(90deg, var(--color-text-primary) 0%, var(--color-text-secondary) 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
       }
 
       .subtitle {
-        color: #94a3b8;
+        color: var(--color-text-secondary);
         margin: 0;
         font-size: 1rem;
       }
@@ -93,8 +93,8 @@ import { ActivityService } from '../../services/activity.service';
       justify-content: center;
       gap: 0.75rem;
       padding: 1.5rem;
-      background: rgba(30, 41, 59, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--color-secondary-bg);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
       transition: all 0.2s ease;
       min-height: 120px;
@@ -114,13 +114,13 @@ import { ActivityService } from '../../services/activity.service';
 
     .action-card {
       cursor: pointer;
-      color: #f1f5f9;
+      color: var(--color-text-primary);
 
       &:hover {
         background: rgba(59, 130, 246, 0.15);
 
         .card-icon mat-icon {
-          color: #60a5fa;
+          color: var(--color-accent-primary);
         }
       }
     }
@@ -138,7 +138,7 @@ import { ActivityService } from '../../services/activity.service';
         font-size: 28px;
         width: 28px;
         height: 28px;
-        color: #3b82f6;
+        color: var(--color-accent-primary);
         transition: color 0.2s ease;
       }
     }
@@ -147,7 +147,7 @@ import { ActivityService } from '../../services/activity.service';
       background: rgba(148, 163, 184, 0.1);
 
       mat-icon {
-        color: #94a3b8;
+        color: var(--color-text-secondary);
       }
     }
 
@@ -160,12 +160,12 @@ import { ActivityService } from '../../services/activity.service';
     .card-value {
       font-size: 1.75rem;
       font-weight: 700;
-      color: #f1f5f9;
+      color: var(--color-text-primary);
     }
 
     .card-label {
       font-size: 0.875rem;
-      color: #94a3b8;
+      color: var(--color-text-secondary);
       font-weight: 500;
     }
 
@@ -175,7 +175,7 @@ import { ActivityService } from '../../services/activity.service';
       h2 {
         font-size: 1.25rem;
         font-weight: 600;
-        color: #f1f5f9;
+        color: var(--color-text-primary);
         margin: 0 0 1rem 0;
       }
     }
@@ -191,12 +191,12 @@ import { ActivityService } from '../../services/activity.service';
       align-items: center;
       gap: 1rem;
       padding: 1rem;
-      background: rgba(30, 41, 59, 0.3);
+      background: var(--color-tertiary-bg);
       border-radius: 8px;
       transition: background 0.2s ease;
 
       &:hover {
-        background: rgba(30, 41, 59, 0.5);
+        background: color-mix(in srgb, var(--color-tertiary-bg) 80%, white);
       }
     }
 
@@ -213,13 +213,13 @@ import { ActivityService } from '../../services/activity.service';
         font-size: 20px;
         width: 20px;
         height: 20px;
-        color: #3b82f6;
+        color: var(--color-accent-primary);
       }
 
-      &.success mat-icon { color: #10b981; }
+      &.success mat-icon { color: var(--color-accent-success); }
       &.success { background: rgba(16, 185, 129, 0.15); }
       
-      &.warning mat-icon { color: #f59e0b; }
+      &.warning mat-icon { color: var(--color-accent-warning); }
       &.warning { background: rgba(245, 158, 11, 0.15); }
     }
 
@@ -231,12 +231,12 @@ import { ActivityService } from '../../services/activity.service';
 
     .activity-title {
       font-size: 0.9375rem;
-      color: #f1f5f9;
+      color: var(--color-text-primary);
     }
 
     .activity-time {
       font-size: 0.8125rem;
-      color: #64748b;
+      color: var(--color-text-muted);
     }
 
     @media (max-width: 1024px) {

@@ -78,6 +78,34 @@ class CodeExecutor:
         base_frontend = 3000
         base_backend = 8100
         
+        # CRITICAL: Stop old containers using the same project name's ports FIRST
+        if project_name in self.used_ports:
+            old_ports = self.used_ports[project_name]
+            print(f"[PORT ALLOCATION] Found existing allocation for {project_name}: {old_ports}")
+            print(f"[PORT ALLOCATION] Stopping old containers on these ports...")
+            
+            # Stop containers on these ports
+            for port_type, port_num in old_ports.items():
+                try:
+                    find_result = subprocess.run(
+                        ["docker", "ps", "-q", "-f", f"publish={port_num}"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if find_result.stdout.strip():
+                        container_ids = find_result.stdout.strip().split('\n')
+                        for container_id in container_ids:
+                            print(f"[PORT ALLOCATION] Stopping container {container_id} on port {port_num}")
+                            subprocess.run(["docker", "stop", container_id], timeout=10)
+                            subprocess.run(["docker", "rm", "-f", container_id], timeout=10)
+                except Exception as e:
+                    print(f"[PORT ALLOCATION] Warning: Could not clean up port {port_num}: {e}")
+            
+            # Clear the old port allocation
+            del self.used_ports[project_name]
+            self._save_used_ports()
+        
         # Find available ports
         frontend_port = base_frontend
         backend_port = base_backend
@@ -232,7 +260,7 @@ networks:
         
         return str(project_path), safe_name
     
-    def start_application(self, project_path: str, safe_name: str):
+    def start_application(self, project_path: str, safe_name: str, allocated_ports: dict = None):
         """Start the application using docker compose"""
         try:
             print(f"\n{'='*80}")
@@ -257,15 +285,39 @@ networks:
             
             print(f"[APP START] Docker is available ✓")
             
-            # Stop any existing containers with same name
-            print(f"[APP START] Stopping existing containers...")
+            # Stop any existing containers with same name FIRST
+            print(f"[APP START] Stopping existing containers for this project...")
             subprocess.run(
-                ["docker", "compose", "down"],
+                ["docker", "compose", "down", "--remove-orphans"],
                 cwd=project_path,
                 capture_output=True,
                 timeout=30
             )
-            print(f"[APP START] Existing containers stopped")
+            
+            # ALSO stop any containers using our ports (force cleanup)
+            project_ports = self.used_ports.get(safe_name.rsplit('_', 2)[0], {})
+            if project_ports:
+                print(f"[APP START] Cleaning up containers on ports {project_ports}")
+                # Stop containers by port (find and kill)
+                for port_type, port_num in project_ports.items():
+                    try:
+                        # Find container using this port
+                        find_result = subprocess.run(
+                            ["docker", "ps", "-q", "-f", f"publish={port_num}"],
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        if find_result.stdout.strip():
+                            container_ids = find_result.stdout.strip().split('\n')
+                            for container_id in container_ids:
+                                print(f"[APP START] Stopping container {container_id} on port {port_num}")
+                                subprocess.run(["docker", "stop", container_id], timeout=10)
+                                subprocess.run(["docker", "rm", "-f", container_id], timeout=10)
+                    except Exception as e:
+                        print(f"[APP START] Warning: Could not clean up port {port_num}: {e}")
+            
+            print(f"[APP START] Cleanup completed")
             
             # Build and start containers
             print(f"[APP START] Building Docker images...")
@@ -305,10 +357,16 @@ networks:
             print(f"[APP START] Containers started successfully ✓")
             print(f"[APP START] Waiting for services to be ready...")
             
-            # Get allocated ports
-            ports = self.used_ports.get(safe_name, {})
-            frontend_port = ports.get('frontend', 3000)
-            backend_port = ports.get('backend', 8100)
+            # Get allocated ports - use passed ports if available, otherwise lookup
+            if allocated_ports:
+                frontend_port = allocated_ports.get('frontend', 3000)
+                backend_port = allocated_ports.get('backend', 8100)
+            else:
+                # Fallback: try to find by project name (without timestamp)
+                project_name = safe_name.rsplit('_', 2)[0]  # Remove timestamp
+                ports = self.used_ports.get(project_name, {})
+                frontend_port = ports.get('frontend', 3000)
+                backend_port = ports.get('backend', 8100)
             
             print(f"[APP START] Frontend port: {frontend_port}")
             print(f"[APP START] Backend port: {backend_port}")

@@ -9,6 +9,7 @@ import { ProjectData } from './components/project-workspace/project-workspace.co
 import { SidebarNavComponent } from './components/sidebar-nav/sidebar-nav.component';
 import { NavigationService } from './services/navigation.service';
 import { DevModeService } from './services/dev-mode.service';
+import { ThemeService } from './services/theme.service';
 import { MOCK_PROJECT_CONTEXT, MOCK_FEATURES, MOCK_STORIES, MOCK_PROJECT_SUMMARY } from './services/dev-data';
 import { filter } from 'rxjs/operators';
 
@@ -26,6 +27,7 @@ export class App implements OnInit {
   // Services
   navService = inject(NavigationService);
   devModeService = inject(DevModeService);
+  themeService = inject(ThemeService);
   private location = inject(Location);
   private router = inject(Router);
   
@@ -42,6 +44,7 @@ export class App implements OnInit {
     console.log('[App] Application initializing...');
     console.log('[App] Navigation service initialized');
     console.log('[App] Dev mode:', this.devModeService.isDevMode());
+    console.log('[App] Theme service initialized - colors applied');
     
     // Track navigation history for back/forward functionality
     this.router.events.pipe(

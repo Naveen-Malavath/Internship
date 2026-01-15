@@ -34,7 +34,7 @@ export interface LoadingDialogData {
     .loading-container {
       padding: 3rem;
       text-align: center;
-      background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+      background: linear-gradient(135deg, var(--color-primary-bg) 0%, var(--color-secondary-bg) 100%);
       border-radius: 1rem;
       min-width: 400px;
       position: relative;
@@ -102,7 +102,7 @@ export interface LoadingDialogData {
       transform: translate(-50%, -50%);
       width: 48px;
       height: 48px;
-      color: #3b82f6;
+      color: var(--color-accent-primary);
       animation: float 3s ease-in-out infinite;
     }
 
@@ -134,7 +134,7 @@ export interface LoadingDialogData {
     .loading-title {
       font-size: 1.5rem;
       font-weight: 600;
-      color: #ffffff;
+      color: var(--color-text-primary);
       margin: 0 0 0.5rem 0;
       position: relative;
       z-index: 1;
@@ -142,7 +142,7 @@ export interface LoadingDialogData {
 
     .loading-subtitle {
       font-size: 1rem;
-      color: #94a3b8;
+      color: var(--color-text-secondary);
       margin: 0 0 2rem 0;
       position: relative;
       z-index: 1;
@@ -160,7 +160,7 @@ export interface LoadingDialogData {
 
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #3b82f6 0%, #2563eb 50%, #3b82f6 100%);
+      background: linear-gradient(90deg, var(--color-accent-primary) 0%, var(--color-accent-secondary) 50%, var(--color-accent-primary) 100%);
       background-size: 200% 100%;
       animation: progress 2s linear infinite;
       border-radius: 2px;

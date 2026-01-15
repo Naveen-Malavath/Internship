@@ -1,0 +1,167 @@
+<div class="settings-container">
+  <!-- Settings Header -->
+  <div class="settings-header">
+    <div class="header-content">
+      <mat-icon class="header-icon">settings</mat-icon>
+      <div class="header-text">
+        <h1>Settings</h1>
+        <p class="subtitle">Customize your AutoAgents experience</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Tabs -->
+  <div class="settings-tabs">
+    <button 
+      class="tab-button"
+      [class.active]="activeTab === 'appearance'"
+      (click)="setActiveTab('appearance')"
+      matRipple>
+      <mat-icon>palette</mat-icon>
+      <span>Appearance</span>
+    </button>
+    <button 
+      class="tab-button"
+      [class.active]="activeTab === 'general'"
+      (click)="setActiveTab('general')"
+      matRipple>
+      <mat-icon>tune</mat-icon>
+      <span>General</span>
+    </button>
+  </div>
+
+  <!-- Settings Content -->
+  <div class="settings-content">
+    
+    <!-- Appearance Tab -->
+    @if (activeTab === 'appearance') {
+      <div class="tab-content">
+        
+        <!-- Theme Presets Section -->
+        <section class="settings-section">
+          <div class="section-header">
+            <h2>Theme Presets</h2>
+            <p class="section-description">Quick apply pre-designed color schemes</p>
+          </div>
+          
+          <div class="presets-grid">
+            @for (preset of themeService.themePresets; track preset.name) {
+              <div 
+                class="preset-card"
+                (click)="applyPreset(preset)"
+                matRipple>
+                <div class="preset-colors">
+                  <div class="color-sample" [style.background]="preset.colors.primaryBg"></div>
+                  <div class="color-sample" [style.background]="preset.colors.accentPrimary"></div>
+                  <div class="color-sample" [style.background]="preset.colors.accentSecondary"></div>
+                  <div class="color-sample" [style.background]="preset.colors.tertiaryBg"></div>
+                </div>
+                <div class="preset-info">
+                  <h3>{{ preset.name }}</h3>
+                  <p>{{ preset.description }}</p>
+                </div>
+              </div>
+            }
+          </div>
+        </section>
+
+        <!-- Custom Colors Section -->
+        <section class="settings-section">
+          <div class="section-header">
+            <h2>Custom Colors</h2>
+            <p class="section-description">Fine-tune colors to your preference</p>
+          </div>
+
+          @for (category of colorCategories; track category.name) {
+            <div class="color-category">
+              <h3 class="category-title">{{ category.name }}</h3>
+              
+              <div class="color-inputs">
+                @for (colorConfig of category.colors; track colorConfig.key) {
+                  <div class="color-input-group">
+                    <div class="color-input-header">
+                      <label [for]="colorConfig.key">{{ colorConfig.label }}</label>
+                      <span class="color-description">{{ colorConfig.description }}</span>
+                    </div>
+                    
+                    <div class="color-picker-wrapper">
+                      <input 
+                        type="color"
+                        [id]="colorConfig.key"
+                        [value]="getCurrentColor(colorConfig.key)"
+                        (change)="onColorChange(colorConfig.key, $event)"
+                        class="color-picker">
+                      <input 
+                        type="text"
+                        [value]="getCurrentColor(colorConfig.key)"
+                        (change)="onColorChange(colorConfig.key, $event)"
+                        class="color-text-input"
+                        pattern="^#[0-9A-Fa-f]{6}$"
+                        placeholder="#000000">
+                      <div 
+                        class="color-preview"
+                        [style.background]="getCurrentColor(colorConfig.key)">
+                      </div>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </section>
+
+        <!-- Actions Section -->
+        <section class="settings-section">
+          <div class="section-header">
+            <h2>Theme Management</h2>
+            <p class="section-description">Import, export, or reset your theme</p>
+          </div>
+          
+          <div class="action-buttons">
+            <button 
+              class="action-button primary"
+              (click)="exportTheme()"
+              matRipple>
+              <mat-icon>download</mat-icon>
+              <span>Export Theme</span>
+            </button>
+            
+            <button 
+              class="action-button secondary"
+              (click)="importTheme()"
+              matRipple>
+              <mat-icon>upload</mat-icon>
+              <span>Import Theme</span>
+            </button>
+            
+            <button 
+              class="action-button danger"
+              (click)="resetToDefaults()"
+              matRipple>
+              <mat-icon>restart_alt</mat-icon>
+              <span>Reset to Default</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    }
+
+    <!-- General Tab -->
+    @if (activeTab === 'general') {
+      <div class="tab-content">
+        <section class="settings-section">
+          <div class="section-header">
+            <h2>General Settings</h2>
+            <p class="section-description">Coming soon - Configure general application preferences</p>
+          </div>
+          
+          <div class="empty-state">
+            <mat-icon>construction</mat-icon>
+            <p>More settings will be available here in future updates</p>
+          </div>
+        </section>
+      </div>
+    }
+
+  </div>
+</div>

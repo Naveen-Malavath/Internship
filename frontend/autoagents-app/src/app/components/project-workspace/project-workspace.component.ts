@@ -1369,6 +1369,15 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
     return count;
   }
   
+  get hasWireframes(): boolean {
+    const data = this.wireframeData();
+    return !!data && !!data.pages && data.pages.length > 0;
+  }
+  
+  get canGenerateApp(): boolean {
+    return this.completedDesignsCount >= 3 && this.hasWireframes;
+  }
+  
   get epicsList(): string[] {
     const epics = [];
     if (this.project?.epicIdeas) {
@@ -1721,12 +1730,17 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
         throw new Error('Failed to execute code');
       }
       
+      console.log('[CODE GEN - CRITICAL] Execute Response:', executeResponse);
+      console.log('[CODE GEN - CRITICAL] Preview URL:', executeResponse.preview_url);
+      console.log('[CODE GEN - CRITICAL] Project Path:', executeResponse.project_path);
+      
       this.appPreviewUrl.set(executeResponse.preview_url);
       this.generatedProjectPath.set(executeResponse.project_path);
       this.generatedSafeName.set(executeResponse.safe_name);
       
-      console.log('[CODE GEN] Application running at:', executeResponse.preview_url);
-      console.log('[CODE GEN] Message:', executeResponse.message);
+      console.log('[CODE GEN - CRITICAL] appPreviewUrl signal set to:', this.appPreviewUrl());
+      console.log('[APPLICATION RUNNING] URL:', executeResponse.preview_url);
+      console.log('[APPLICATION RUNNING] Message:', executeResponse.message);
       
       this.codeGenProgress.set('Application is running! 🚀');
       console.log('[CODE GEN] App running at:', executeResponse.preview_url);
@@ -1808,5 +1822,22 @@ Project: ${this.project.projectName}
   
   sanitizeUrl(url: string): SafeResourceUrl {
     return this.sanitizer.bypassSecurityTrustResourceUrl(url);
+  }
+
+  openAppInNewTab(): void {
+    const url = this.appPreviewUrl();
+    console.log('[OPEN NEW TAB] Opening URL:', url);
+    if (url) {
+      window.open(url, '_blank');
+    }
+  }
+
+  onIframeLoad(): void {
+    console.log('[IFRAME] Successfully loaded:', this.appPreviewUrl());
+  }
+
+  onIframeError(event: any): void {
+    console.error('[IFRAME ERROR] Failed to load:', event);
+    console.error('[IFRAME ERROR] URL was:', this.appPreviewUrl());
   }
 }

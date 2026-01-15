@@ -60,14 +60,14 @@ export interface PromptReviewDialogData {
   `,
   styles: [`
     .prompt-review-container {
-      background: linear-gradient(135deg, #0f1429 0%, #1a2137 50%, #0f1429 100%);
+      background: linear-gradient(135deg, var(--color-primary-bg) 0%, var(--color-secondary-bg) 50%, var(--color-primary-bg) 100%);
       border-radius: 1rem;
       width: 800px;
       max-width: 90vw;
       max-height: 85vh;
       display: flex;
       flex-direction: column;
-      color: #ffffff;
+      color: var(--color-text-primary);
     }
 
     .dialog-header {
@@ -82,21 +82,21 @@ export interface PromptReviewDialogData {
       font-size: 1.75rem;
       font-weight: 700;
       margin: 0 0 0.5rem 0;
-      color: #ffffff;
+      color: var(--color-text-primary);
     }
 
     .dialog-subtitle {
       font-size: 0.9375rem;
-      color: #94a3b8;
+      color: var(--color-text-secondary);
       margin: 0;
     }
 
     .close-button {
-      color: #94a3b8;
+      color: var(--color-text-secondary);
       margin-top: -0.5rem;
       
       &:hover {
-        color: #ffffff;
+        color: var(--color-text-primary);
       }
     }
 
@@ -138,7 +138,7 @@ export interface PromptReviewDialogData {
       border: 1px solid rgba(71, 85, 105, 0.5);
       border-radius: 0.75rem;
       padding: 1.25rem;
-      color: #e2e8f0;
+      color: var(--color-text-primary);
       font-family: 'Courier New', monospace;
       font-size: 0.875rem;
       line-height: 1.7;
@@ -154,7 +154,7 @@ export interface PromptReviewDialogData {
       }
       
       &::placeholder {
-        color: #64748b;
+        color: var(--color-text-muted);
       }
       
       /* Custom scrollbar for textarea */
@@ -184,7 +184,7 @@ export interface PromptReviewDialogData {
 
     .char-count {
       font-size: 0.875rem;
-      color: #64748b;
+      color: var(--color-text-muted);
       font-weight: 500;
     }
 
@@ -197,10 +197,10 @@ export interface PromptReviewDialogData {
     }
 
     .cancel-button {
-      color: #94a3b8;
+      color: var(--color-text-secondary);
       
       &:hover {
-        color: #ffffff;
+        color: var(--color-text-primary);
         background: rgba(71, 85, 105, 0.2);
       }
     }
@@ -210,8 +210,8 @@ export interface PromptReviewDialogData {
       align-items: center;
       gap: 0.625rem;
       padding: 0.75rem 2rem;
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-      color: #ffffff;
+      background: linear-gradient(135deg, var(--color-accent-primary) 0%, var(--color-accent-secondary) 100%);
+      color: var(--color-text-primary);
       font-size: 1rem;
       font-weight: 600;
       border-radius: 0.5rem;
@@ -219,7 +219,7 @@ export interface PromptReviewDialogData {
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
       
       &:hover:not(:disabled) {
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        background: linear-gradient(135deg, var(--color-accent-secondary) 0%, #1d4ed8 100%);
         box-shadow: 0 8px 20px rgba(59, 130, 246, 0.5);
         transform: translateY(-2px);
       }

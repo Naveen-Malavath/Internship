@@ -31,17 +31,20 @@ class DesignSystemAgent(BaseAgent):
         theme = plan.get('theme', {})
         sidebar_items = navigation.get('sidebar_items', [])
         
-        system_prompt = """You are a senior UI developer creating reusable HTML/Tailwind CSS components.
+        system_prompt = """You are a wireframe component generator. Create SIMPLE wireframe components with inline CSS only.
 
-Create professional, modern, dark-themed components that will be reused across all wireframe pages.
+CRITICAL RULES:
+1. DO NOT use Tailwind CSS - use ONLY inline styles and wireframe classes (wf-nav-item, wf-btn, wf-avatar)
+2. Grayscale colors only: #fff, #f5f5f5, #e5e5e5, #ddd, #ccc, #999, #666, #333
+3. For icons: Use text placeholders [icon], [menu], [bell], [search], [user] - NO SVG
+4. All navigation links MUST use: <a href="#" class="wf-nav-item">
+5. Header must have: style="display: flex; align-items: center; justify-content: space-between;"
+6. Keep it SIMPLE - low-fidelity wireframe style
 
-Requirements:
-1. Use Tailwind CSS classes only (no custom CSS)
-2. Dark theme with the provided colors
-3. Responsive design
-4. Include hover/active states
-5. Modern, clean aesthetic
-6. Include placeholder icons using text or simple SVG
+STRUCTURE:
+- Sidebar: <aside class="wireframe-sidebar"> with wf-nav-item links
+- Header: <header class="wireframe-header" style="display:flex..."> with left/right sections
+- Use semantic HTML
 
 Return a JSON object with these keys:
 - sidebar: Complete sidebar HTML
@@ -50,22 +53,24 @@ Return a JSON object with these keys:
 
 Do not include ```json markers. Return pure JSON."""
 
-        user_prompt = f"""Create shared UI components with:
+        user_prompt = f"""Create shared wireframe UI components with:
 
 NAVIGATION ITEMS:
 {sidebar_items}
 
-THEME COLORS:
-- Background: {theme.get('background', '#0f172a')}
-- Primary: {theme.get('primary_color', '#3b82f6')}
-- Secondary: {theme.get('secondary_color', '#1e293b')}
-- Text: {theme.get('text_color', '#e2e8f0')}
-- Accent: {theme.get('accent_color', '#60a5fa')}
+WIREFRAME RULES - PURE GRAYSCALE ONLY:
+- White backgrounds: #fff, #f5f5f5
+- Light grays: #e5e5e5, #ddd, #ccc
+- Dark grays: #999, #666, #333
+- NO COLORS - only black, white, and gray shades
+- NO brand colors, NO blues, NO theme colors
 
-Create:
-1. SIDEBAR: Vertical navigation with icons and labels, collapsible, active states
-2. HEADER: Top bar with logo, search, notifications, user menu
-3. PAGE_WRAPPER: Container for main content with proper spacing
+Create SIMPLE wireframe components:
+1. SIDEBAR: White background (#fff), gray borders (#ddd), simple nav items
+2. HEADER: White background (#fff), gray border bottom (#ddd), basic layout
+3. PAGE_WRAPPER: Light gray background (#f5f5f5)
+
+Keep it MINIMAL - low-fidelity sketch style, black and white only.
 
 Return JSON with sidebar, header, page_wrapper keys containing HTML strings."""
 

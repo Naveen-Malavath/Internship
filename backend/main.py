@@ -1976,27 +1976,31 @@ Keep it simple and ensure valid syntax. Use simple branch names without special 
     },
 
     "wireframe": {
-        "system": """You are a UI/UX designer creating wireframes. Generate professional, responsive HTML/CSS wireframes using Tailwind CSS classes.
+        "system": """You are a UI/UX designer creating LOW-FIDELITY wireframes. Generate simple, black and white wireframes with inline CSS.
+
+CRITICAL: PURE GRAYSCALE ONLY - NO COLORS
+- Wireframes must be BLACK AND WHITE only
+- Use ONLY these colors: #fff, #f5f5f5, #e5e5e5, #ddd, #ccc, #999, #666, #333
+- NO blues, NO brand colors, NO theme colors
+- Simple sketch-like appearance showing structure and layout
 
 STYLE REQUIREMENTS:
-- Use a dark theme matching the application design (#0f172a, #1e293b, #3b82f6)
 - Create responsive layouts (mobile-first)
 - Include navigation, headers, and footers
-- Show form elements, buttons, cards
-- Use modern UI patterns
-- Include placeholder content
+- Show form elements, buttons, cards as simple boxes
+- Use placeholder content: [icon], [image], "Label Text"
+- Simple borders: 1px solid #ddd
+- White backgrounds: #fff
+- Light gray areas: #f5f5f5
 
-CRITICAL SVG/ICON RULES:
-- ALL SVG icons MUST have explicit width and height attributes: width="24" height="24" (or smaller)
-- NEVER use viewBox without explicit width/height
-- For icons in navigation/buttons, use: class="w-5 h-5" or class="w-6 h-6"
-- Maximum icon size: 48x48 pixels
-- Example: <svg width="24" height="24" viewBox="0 0 24 24" class="w-6 h-6">
+ICON RULES:
+- Use text placeholders: [icon], [menu], [bell], [search], [user]
+- NO SVG icons - only text placeholders
 
 OUTPUT FORMAT:
-Return valid HTML with inline Tailwind CSS classes. Include a complete page layout.
+Return valid HTML with inline CSS styles only. NO Tailwind CSS.
 Return ONLY the HTML code starting with <!DOCTYPE html> or <div>.""",
-        "user_template": """Create UI wireframes for this project:
+        "user_template": """Create a LOW-FIDELITY wireframe for this project:
 
 PROJECT SUMMARY:
 {summary}
@@ -2008,15 +2012,15 @@ API CONTEXT:
 {api_summary}
 
 Requirements:
-1. Create wireframe for the main dashboard
+1. Create simple wireframe for the main dashboard
 2. Include navigation (sidebar or top nav)
 3. Show key data displays (cards, tables, charts placeholders)
 4. Include form examples for main entities
-5. Use the dark theme (#0f172a background, #3b82f6 accent)
+5. PURE GRAYSCALE - black and white only (#fff, #f5f5f5, #ddd, #999, #666, #333)
 6. Make it responsive
-7. Include common UI elements (buttons, inputs, modals)
+7. Include common UI elements (buttons, inputs, modals) as simple boxes
 
-Generate a professional HTML wireframe with Tailwind CSS."""
+Generate a simple BLACK AND WHITE wireframe with inline CSS only."""
     }
 }
 
@@ -3230,6 +3234,23 @@ async def generate_application_code(request: GenerateCodeRequest):
         print(f"[CODE GEN] Starting code generation for project: {request.project_name}")
         
         # Generate Frontend Code (React App.jsx)
+        wireframes_context = ""
+        if request.wireframes and len(request.wireframes) > 0:
+            wireframes_context = "\n\nUI WIREFRAMES (use these as visual guides for layout and components):\n"
+            for idx, page in enumerate(request.wireframes[:5], 1):  # Limit to first 5 pages
+                wireframes_context += f"\nPage {idx}: {page.get('name', 'Untitled')}\n"
+                wireframes_context += f"Description: {page.get('description', 'No description')}\n"
+                # Extract key UI elements from HTML (don't include full HTML to save tokens)
+                html = page.get('html', '')
+                if 'grid-4' in html:
+                    wireframes_context += "- Has 4-column grid layout for cards/metrics\n"
+                if 'table' in html.lower():
+                    wireframes_context += "- Includes data table\n"
+                if 'form' in html.lower():
+                    wireframes_context += "- Contains form inputs\n"
+                if 'chart' in html.lower() or 'placeholder' in html.lower():
+                    wireframes_context += "- Has chart/visualization areas\n"
+        
         frontend_prompt = f"""Generate a COMPLETE React application based on these specifications:
 
 PROJECT: {request.project_name}
@@ -3239,7 +3260,7 @@ ARCHITECTURE:
 {request.hld_summary or 'Simple web application'}
 
 API ENDPOINTS:
-{request.api_summary or 'Basic CRUD operations'}
+{request.api_summary or 'Basic CRUD operations'}{wireframes_context}
 
 CRITICAL REQUIREMENTS:
 1. Generate React code as an ES6 module (NO imports needed - React is available)
@@ -3308,7 +3329,7 @@ IMPORTANT:
 Return ONLY the complete JavaScript code:"""
 
         frontend_code = await call_claude_with_retry(
-            model=SONNET_MODEL,  # Use Sonnet 4 for code generation
+            model=SONNET_45_MODEL,  # Use Sonnet 4.5 for highest quality code generation
             system_prompt="You are an expert React developer. Generate production-ready, COMPLETE React code with all JSX tags properly closed.",
             user_prompt=frontend_prompt,
             max_tokens=16000,  # Increased to ensure complete code
@@ -3316,26 +3337,81 @@ Return ONLY the complete JavaScript code:"""
         )
         
         # Generate Backend Code (FastAPI main.py)
-        backend_prompt = f"""Generate a complete FastAPI backend based on these specifications:
+        backend_prompt = f"""Generate a COMPLETE, FULLY FUNCTIONAL FastAPI backend application.
 
 PROJECT: {request.project_name}
 SUMMARY: {request.project_summary}
 
-API DESIGN:
-{request.api_summary or 'Basic REST API with CRUD operations'}
+ARCHITECTURE:
+{request.hld_summary or 'RESTful API architecture with in-memory storage'}
 
-Requirements:
-1. Create FastAPI app with CORS enabled
-2. Create 5-8 RESTful endpoints
-3. Use in-memory data storage (list/dict, NO database)
-4. Include health check endpoint
-5. Add proper request/response models with Pydantic
-6. Make it fully functional and ready to run
+DATABASE DESIGN:
+{request.dbd_summary or 'In-memory data structures (lists/dicts)'}
 
-Return ONLY the Python code for main.py. No explanations."""
+API ENDPOINTS:
+{request.api_summary or 'Standard CRUD operations for main entities'}
+
+CRITICAL REQUIREMENTS:
+1. Complete FastAPI app with CORS middleware configured for all origins
+2. Create 5-10 fully working RESTful endpoints with proper HTTP methods (GET, POST, PUT, DELETE)
+3. Use in-memory storage (Python lists/dicts - NO external database)
+4. Implement ALL Pydantic models for request/response validation (use str for emails, NOT EmailStr)
+5. Include sample seed data (3-5 items) for immediate testing
+6. Add error handling and proper HTTP status codes
+7. Include health check endpoint: GET /health
+8. Make it production-ready with proper typing and documentation
+9. ENSURE ALL CODE IS COMPLETE - no truncation, no "... rest of code" comments
+10. DO NOT use EmailStr or complex Pydantic types - use simple types (str, int, float, bool, list, dict)
+
+EXAMPLE STRUCTURE (adapt to project needs):
+```python
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+
+app = FastAPI(title="{request.project_name}")
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Models
+class Item(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: str
+
+# In-memory storage
+items_db = []
+
+# Endpoints
+@app.get("/health")
+def health_check():
+    return {{"status": "healthy"}}
+
+@app.get("/api/items", response_model=List[Item])
+def get_items():
+    return items_db
+
+@app.post("/api/items", response_model=Item)
+def create_item(item: Item):
+    items_db.append(item)
+    return item
+```
+
+Generate COMPLETE Python code for main.py. Include ALL endpoints, models, and logic.
+NO markdown code blocks, NO explanations - ONLY executable Python code."""
 
         backend_code = await call_claude_with_retry(
-            model=SONNET_MODEL,  # Use Sonnet 4 for code generation
+            model=SONNET_45_MODEL,  # Use Sonnet 4.5 for highest quality code generation
             system_prompt="You are an expert FastAPI developer. Generate production-ready Python code.",
             user_prompt=backend_prompt,
             max_tokens=16000,  # Increased for complete code
@@ -3525,7 +3601,9 @@ const App = () => {
         requirements_txt = """fastapi==0.108.0
 uvicorn[standard]==0.25.0
 pydantic==2.5.3
-python-multipart==0.0.6"""
+pydantic[email]==2.5.3
+python-multipart==0.0.6
+email-validator==2.1.0"""
         
         # Generate Docker Compose
         docker_compose = f"""version: '3.8'
@@ -3651,7 +3729,7 @@ async def execute_generated_code(request: ExecuteCodeRequest):
         
         # Start application
         print(f"[BACKEND] Starting Docker containers...")
-        success, result = code_executor.start_application(project_path, safe_name)
+        success, result = code_executor.start_application(project_path, safe_name, ports)
         
         if not success:
             print(f"[BACKEND ERROR] Failed to start: {result}")

@@ -131,14 +131,14 @@ interface Project {
         font-size: 2rem;
         font-weight: 700;
         margin: 0 0 0.5rem 0;
-        background: linear-gradient(90deg, #ffffff 0%, #94a3b8 100%);
+        background: linear-gradient(90deg, var(--color-text-primary) 0%, var(--color-text-secondary) 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
       }
 
       .subtitle {
-        color: #94a3b8;
+        color: var(--color-text-secondary);
         margin: 0;
         font-size: 1rem;
       }
@@ -149,7 +149,7 @@ interface Project {
       align-items: center;
       gap: 0.5rem;
       padding: 0.75rem 1.5rem;
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      background: linear-gradient(135deg, var(--color-accent-primary), var(--color-accent-secondary));
       border: none;
       border-radius: 10px;
       color: white;
@@ -191,7 +191,7 @@ interface Project {
       max-width: 400px;
 
       mat-icon {
-        color: #64748b;
+        color: var(--color-text-muted);
         font-size: 20px;
         width: 20px;
         height: 20px;
@@ -201,12 +201,12 @@ interface Project {
         flex: 1;
         background: transparent;
         border: none;
-        color: #f1f5f9;
+        color: var(--color-text-primary);
         font-size: 0.9375rem;
         outline: none;
 
         &::placeholder {
-          color: #64748b;
+          color: var(--color-text-muted);
         }
       }
     }
@@ -219,22 +219,22 @@ interface Project {
     .filter-btn {
       padding: 0.5rem 1rem;
       background: transparent;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
-      color: #94a3b8;
+      color: var(--color-text-secondary);
       font-size: 0.875rem;
       cursor: pointer;
       transition: all 0.2s ease;
 
       &:hover {
         background: rgba(255, 255, 255, 0.05);
-        color: #f1f5f9;
+        color: var(--color-text-primary);
       }
 
       &.active {
         background: rgba(59, 130, 246, 0.15);
         border-color: rgba(59, 130, 246, 0.3);
-        color: #60a5fa;
+        color: var(--color-accent-primary);
       }
     }
 
@@ -245,8 +245,8 @@ interface Project {
     }
 
     .project-card {
-      background: rgba(30, 41, 59, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--color-secondary-bg);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
       padding: 1.5rem;
       cursor: pointer;
@@ -270,13 +270,13 @@ interface Project {
       h3 {
         font-size: 1.125rem;
         font-weight: 600;
-        color: #f1f5f9;
+        color: var(--color-text-primary);
         margin: 0 0 0.25rem 0;
       }
 
       .project-key {
         font-size: 0.8125rem;
-        color: #64748b;
+        color: var(--color-text-muted);
         font-family: 'Fira Code', monospace;
       }
     }
@@ -290,17 +290,17 @@ interface Project {
 
       &.active {
         background: rgba(16, 185, 129, 0.15);
-        color: #10b981;
+        color: var(--color-accent-success);
       }
 
       &.paused {
         background: rgba(245, 158, 11, 0.15);
-        color: #f59e0b;
+        color: var(--color-accent-warning);
       }
 
       &.completed {
         background: rgba(59, 130, 246, 0.15);
-        color: #3b82f6;
+        color: var(--color-accent-primary);
       }
     }
 
@@ -318,14 +318,14 @@ interface Project {
 
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      background: linear-gradient(90deg, var(--color-accent-primary), var(--color-accent-secondary));
       border-radius: 3px;
       transition: width 0.3s ease;
     }
 
     .progress-text {
       font-size: 0.8125rem;
-      color: #94a3b8;
+      color: var(--color-text-secondary);
     }
 
     .card-stats {
@@ -338,7 +338,7 @@ interface Project {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      color: #94a3b8;
+      color: var(--color-text-secondary);
       font-size: 0.875rem;
 
       mat-icon {
@@ -358,7 +358,7 @@ interface Project {
 
     .last-updated {
       font-size: 0.8125rem;
-      color: #64748b;
+      color: var(--color-text-muted);
     }
 
     .btn-icon {
@@ -367,7 +367,7 @@ interface Project {
       border: none;
       border-radius: 6px;
       background: transparent;
-      color: #94a3b8;
+      color: var(--color-text-secondary);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -376,7 +376,7 @@ interface Project {
 
       &:hover {
         background: rgba(255, 255, 255, 0.1);
-        color: #f1f5f9;
+        color: var(--color-text-primary);
       }
 
       mat-icon {
@@ -399,18 +399,18 @@ interface Project {
         font-size: 64px;
         width: 64px;
         height: 64px;
-        color: #475569;
+        color: var(--color-text-muted);
         margin-bottom: 1rem;
       }
 
       h3 {
         font-size: 1.25rem;
-        color: #f1f5f9;
+        color: var(--color-text-primary);
         margin: 0 0 0.5rem 0;
       }
 
       p {
-        color: #94a3b8;
+        color: var(--color-text-secondary);
         margin: 0 0 1.5rem 0;
       }
     }
@@ -423,7 +423,7 @@ interface Project {
       background: rgba(59, 130, 246, 0.15);
       border: 1px solid rgba(59, 130, 246, 0.3);
       border-radius: 10px;
-      color: #60a5fa;
+      color: var(--color-accent-primary);
       font-size: 0.9375rem;
       font-weight: 600;
       cursor: pointer;

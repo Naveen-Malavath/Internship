@@ -7,22 +7,23 @@ $nav-item-height: 48px;
 $transition-speed: 0.25s;
 $transition-easing: cubic-bezier(0.4, 0, 0.2, 1);
 
-// Colors - Dark theme matching app design
-$bg-primary: #0f172a;
-$bg-secondary: #1e293b;
-$bg-tertiary: #334155;
+// Use CSS custom properties from global theme
+// These fallback to sensible defaults if CSS vars aren't set
+$bg-primary: var(--color-secondary-bg);
+$bg-secondary: var(--color-secondary-bg);
+$bg-tertiary: var(--color-tertiary-bg);
 $bg-hover: rgba(59, 130, 246, 0.1);
 $bg-active: rgba(59, 130, 246, 0.15);
 
-$text-primary: #f1f5f9;
-$text-secondary: #94a3b8;
-$text-muted: #64748b;
+$text-primary: var(--color-text-primary);
+$text-secondary: var(--color-text-secondary);
+$text-muted: var(--color-text-muted);
 
-$accent-primary: #3b82f6;
-$accent-secondary: #60a5fa;
+$accent-primary: var(--color-accent-primary);
+$accent-secondary: var(--color-accent-secondary);
 $accent-glow: rgba(59, 130, 246, 0.4);
 
-$border-color: rgba(255, 255, 255, 0.08);
+$border-color: var(--color-border);
 $border-active: rgba(59, 130, 246, 0.5);
 
 // Mobile Menu Toggle

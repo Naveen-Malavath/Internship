@@ -51,6 +51,12 @@ export class NavigationService {
       icon: 'folder',
       route: '/projects',
       badge: 0
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: 'settings',
+      route: '/settings'
     }
   ]);
 

@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: digital_banking_suite_20251231_014149_backend
+    ports:
+      - "8100:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - digital_banking_suite_20251231_014149_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    container_name: digital_banking_suite_20251231_014149_frontend
+    ports:
+      - "3000:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8100
+    depends_on:
+      - backend
+    networks:
+      - digital_banking_suite_20251231_014149_network
+
+networks:
+  digital_banking_suite_20251231_014149_network:
+    driver: bridge

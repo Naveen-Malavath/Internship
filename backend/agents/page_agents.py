@@ -158,11 +158,12 @@ CRITICAL RULES:
 - Start directly with HTML tags
 - End with closing HTML tags
 
-WIREFRAME STYLE:
-1. GRAYSCALE ONLY:
-   - Backgrounds: #f5f5f5, #ffffff, #e5e5e5
-   - Borders: #ddd, #ccc, #999
-   - Text: #333 (headings), #666 (body), #999 (muted)
+WIREFRAME STYLE - PURE BLACK & WHITE:
+1. GRAYSCALE ONLY - NO COLORS:
+   - Backgrounds: #ffffff (white), #f5f5f5 (light gray), #e5e5e5 (lighter gray)
+   - Borders: #ddd, #ccc, #999 (various gray shades)
+   - Text: #333 (dark gray headings), #666 (medium gray body), #999 (light gray muted)
+   - NO blues, NO theme colors, NO brand colors - ONLY black, white, and gray shades
    
 2. SIMPLE INLINE CSS ONLY (no Tailwind, no external CSS):
    - border: 1px solid #ddd
@@ -184,8 +185,9 @@ WIREFRAME STYLE:
 
 4. PLACEHOLDER CONTENT:
    - Images: <div style="background:#e5e5e5;border:2px dashed #ccc;height:100px;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
-   - Icons: [icon] or ■ □ ● ○
+   - Icons: Use text placeholders like [icon], [menu], [bell], [search], [user] - DO NOT create SVG icons
    - Text: "Heading Text", "Description here", "Label"
+   - For icon placeholders, wrap in spans: <span style="font-size:16px;color:#999;">[icon]</span>
 
 4. STRUCTURE:
    - Use <main>, <section>, <div> for layout
@@ -205,8 +207,12 @@ PAGE INFO:
 PROJECT CONTEXT:
 {project_context}
 
-Generate a BEAUTIFUL, COMPLETE UI with:
+CRITICAL: Create a LOW-FIDELITY WIREFRAME with:
+- PURE GRAYSCALE ONLY - NO colors (no blues, no greens, no brand colors)
+- Simple black and white layout showing structure
 - Professional layout with proper visual hierarchy
+- All wireframe CSS classes (wf-card, wf-btn, wf-heading, grid-4, etc.)
+- ONLY use: #fff, #f5f5f5, #e5e5e5, #ddd, #ccc, #999, #666, #333
 - All Tailwind classes included (no missing styles)
 - Realistic placeholder data
 - Proper spacing, colors, and typography"""
@@ -219,12 +225,32 @@ Generate a BEAUTIFUL, COMPLETE UI with:
         # Simple wireframe CSS - no external dependencies, RESPONSIVE design
         wireframe_css = '''
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #f0f0f0; color: #333; line-height: 1.5; }
-        .wireframe-container { display: flex; min-height: 100vh; }
-        .wireframe-sidebar { width: 220px; min-width: 220px; background: #fff; border-right: 2px solid #ddd; padding: 20px; }
-        .wireframe-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-        .wireframe-header { background: #fff; border-bottom: 2px solid #ddd; padding: 15px 20px; }
-        .wireframe-content { flex: 1; padding: 20px; background: #f5f5f5; overflow-x: auto; }
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow-x: hidden;
+            font-family: Arial, sans-serif; 
+            background: #f0f0f0; 
+            color: #333; 
+            line-height: 1.5; 
+        }
+        
+        /* CRITICAL: Reset all link styles to prevent blue underlines */
+        a { color: inherit; text-decoration: none; }
+        a:hover { text-decoration: none; }
+        
+        .wireframe-container { display: flex; min-height: 100vh; width: 100%; position: relative; }
+        .wireframe-sidebar { width: 220px; min-width: 220px; background: #fff; border-right: 2px solid #ddd; padding: 20px; height: 100vh; overflow-y: auto; position: sticky; top: 0; }
+        .wireframe-main { flex: 1; display: flex; flex-direction: column; min-width: 0; width: 100%; }
+        .wireframe-header { background: #fff; border-bottom: 2px solid #ddd; padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+        .wireframe-content { flex: 1; padding: 20px; background: #f5f5f5; overflow-x: auto; width: 100%; }
+        
+        /* FIX: Constrain all SVG icons to reasonable sizes */
+        svg { max-width: 24px; max-height: 24px; width: auto; height: auto; display: inline-block; vertical-align: middle; }
+        .wireframe-sidebar svg, .wireframe-header svg { max-width: 20px; max-height: 20px; }
+        .wf-nav-item svg { max-width: 18px; max-height: 18px; }
         
         /* Wireframe UI Elements */
         .wf-card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 15px; margin-bottom: 15px; }
@@ -267,10 +293,10 @@ Generate a BEAUTIFUL, COMPLETE UI with:
         th { text-align: left; padding: 10px; background: #f5f5f5; border: 1px solid #ddd; font-size: 11px; text-transform: uppercase; color: #666; white-space: nowrap; }
         td { padding: 10px; border: 1px solid #ddd; }
         
-        /* Nav items */
-        .wf-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 4px; color: #555; margin-bottom: 5px; }
-        .wf-nav-item:hover { background: #f0f0f0; }
-        .wf-nav-item.active { background: #e8e8e8; color: #333; }
+        /* Nav items - explicit link styling to override browser defaults */
+        .wf-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 4px; color: #555 !important; margin-bottom: 5px; text-decoration: none !important; }
+        .wf-nav-item:hover { background: #f0f0f0; text-decoration: none !important; }
+        .wf-nav-item.active { background: #e8e8e8; color: #333 !important; font-weight: 600; }
         
         /* RESPONSIVE: Hide sidebar on small screens */
         @media (max-width: 768px) {
@@ -336,7 +362,9 @@ Include these wireframe sections:
    - Simple table with columns: Item, Status, Date, Action
    - 4-5 placeholder rows
 
-Keep it SIMPLE - grayscale, no colors, RESPONSIVE, sketch-like appearance."""
+Keep it SIMPLE - pure grayscale (black & white only), NO colors, RESPONSIVE, sketch-like appearance.
+
+CRITICAL: Use ONLY these colors: #fff, #f5f5f5, #e5e5e5, #ddd, #ccc, #999, #666, #333"""
 
 
 class ListPageAgent(BasePageAgent):

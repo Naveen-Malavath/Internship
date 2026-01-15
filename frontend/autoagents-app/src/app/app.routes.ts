@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { ProjectsComponent } from './pages/projects/projects.component';
 import { WorkspacePageComponent } from './pages/workspace/workspace-page.component';
+import { SettingsComponent } from './pages/settings/settings.component';
 import { PlaceholderPageComponent } from './pages/placeholder/placeholder-page.component';
 
 export const routes: Routes = [
@@ -31,6 +32,13 @@ export const routes: Routes = [
     path: 'workspace',
     component: WorkspacePageComponent,
     title: 'Workspace - AutoAgents'
+  },
+  
+  // Settings - app configuration and theming
+  {
+    path: 'settings',
+    component: SettingsComponent,
+    title: 'Settings - AutoAgents'
   },
   
   // Wildcard route - 404 handling
