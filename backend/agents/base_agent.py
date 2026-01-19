@@ -35,7 +35,7 @@ class BaseAgent(ABC):
         self, 
         system_prompt: str, 
         user_prompt: str, 
-        max_tokens: int = 4096,
+        max_tokens: int = 16384,  # FIXED: Increased from 4096 for production-quality code
         temperature: float = 0.7
     ) -> str:
         """Call the LLM with given prompts and retry logic"""

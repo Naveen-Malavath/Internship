@@ -356,6 +356,206 @@
   }
 }
 
+// Info Banner
+.info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: rgba(45, 159, 245, 0.1);
+  border: 1px solid rgba(45, 159, 245, 0.3);
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  
+  mat-icon {
+    color: var(--color-accent-primary);
+    flex-shrink: 0;
+  }
+  
+  p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    
+    strong {
+      color: var(--color-text-primary);
+    }
+  }
+}
+
+// Setting Row
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--color-border);
+  
+  &:last-child {
+    border-bottom: none;
+  }
+  
+  .setting-info {
+    flex: 1;
+    margin-right: 2rem;
+    
+    .setting-label {
+      font-weight: 500;
+      color: var(--color-text-primary);
+      font-size: 1rem;
+      margin-bottom: 0.25rem;
+    }
+    
+    .setting-description {
+      color: var(--color-text-secondary);
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+  }
+  
+  &.slider-row {
+    .slider-control {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      min-width: 200px;
+      
+      .slider-value {
+        font-weight: 600;
+        color: var(--color-accent-primary);
+        font-size: 1.25rem;
+        min-width: 2rem;
+        text-align: center;
+      }
+      
+      .custom-slider {
+        flex: 1;
+        height: 6px;
+        -webkit-appearance: none;
+        appearance: none;
+        background: var(--color-tertiary-bg);
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+        
+        &::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          background: var(--color-accent-primary);
+          border-radius: 50%;
+          cursor: pointer;
+          transition: transform 0.2s, box-shadow 0.2s;
+          
+          &:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 0 4px rgba(45, 159, 245, 0.2);
+          }
+        }
+        
+        &::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          background: var(--color-accent-primary);
+          border-radius: 50%;
+          cursor: pointer;
+          border: none;
+        }
+        
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          
+          &::-webkit-slider-thumb {
+            cursor: not-allowed;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Disabled Section
+.disabled-section {
+  opacity: 0.6;
+  
+  .section-header {
+    position: relative;
+    
+    .disabled-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: var(--color-tertiary-bg);
+      color: var(--color-text-muted);
+      font-size: 0.75rem;
+      border-radius: 4px;
+      margin-left: 1rem;
+      vertical-align: middle;
+    }
+  }
+}
+
+// Fields Configuration
+.fields-config {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  
+  .fields-title {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  
+  .fields-description {
+    margin: 0 0 1rem;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+  }
+  
+  .fields-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    
+    .field-toggle {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0.75rem 1rem;
+      background: var(--color-tertiary-bg);
+      border-radius: 8px;
+      border: 1px solid var(--color-border);
+      transition: all 0.2s;
+      
+      &:hover {
+        border-color: var(--color-accent-primary);
+      }
+      
+      .field-label {
+        font-weight: 500;
+        color: var(--color-text-primary);
+      }
+      
+      .field-description {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        margin-left: 3rem;
+      }
+      
+      mat-slide-toggle {
+        ::ng-deep .mdc-switch {
+          --mdc-switch-selected-track-color: var(--color-accent-primary);
+          --mdc-switch-selected-handle-color: var(--color-accent-primary);
+        }
+      }
+    }
+  }
+}
+
 // Responsive
 @media (max-width: 768px) {
   .settings-header {

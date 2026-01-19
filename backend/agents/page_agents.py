@@ -114,88 +114,99 @@ RULES:
 Return ONLY the HTML content."""
 
     def _get_fallback_content(self, page: Dict) -> str:
-        """Return a basic fallback wireframe when generation fails"""
+        """Return a beautiful fallback page when generation fails"""
         page_name = page.get('name', 'Page')
-        return f'''<main style="padding: 24px;">
-    <div style="margin-bottom: 24px;">
-        <h1 style="font-size: 24px; color: #333; margin: 0;">{page_name}</h1>
-        <p style="color: #666; margin-top: 8px;">Wireframe content area</p>
-    </div>
-    
-    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
-        <div style="background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 16px;">
-            <div style="background: #e5e5e5; height: 40px; width: 40px; border-radius: 4px; margin-bottom: 12px;"></div>
-            <div style="font-size: 14px; color: #666;">Metric Label</div>
-            <div style="font-size: 24px; color: #333; font-weight: bold;">--</div>
+        return f'''<main style="padding: 32px; background: #0a0a0f; min-height: 100vh; font-family: 'Inter', -apple-system, sans-serif;">
+    <div style="max-width: 1200px; margin: 0 auto;">
+        <header style="margin-bottom: 32px;">
+            <h1 style="font-size: 32px; color: #f8fafc; margin: 0; font-weight: 700;">{page_name}</h1>
+            <p style="color: #64748b; margin-top: 8px; font-size: 16px;">Production-ready content area</p>
+        </header>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-bottom: 32px;">
+            <div style="background: #16161f; border: 1px solid #2d2d3a; border-radius: 12px; padding: 24px; transition: all 0.15s;">
+                <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); height: 48px; width: 48px; border-radius: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px;">📊</div>
+                <div style="font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Metric Label</div>
+                <div style="font-size: 32px; color: #f8fafc; font-weight: 700; margin-top: 4px;">1,234</div>
+                <div style="font-size: 14px; color: #10b981; margin-top: 8px;">↑ 12% from last month</div>
+            </div>
+            <div style="background: #16161f; border: 1px solid #2d2d3a; border-radius: 12px; padding: 24px; transition: all 0.15s;">
+                <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); height: 48px; width: 48px; border-radius: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px;">👤</div>
+                <div style="font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Users</div>
+                <div style="font-size: 32px; color: #f8fafc; font-weight: 700; margin-top: 4px;">5,678</div>
+                <div style="font-size: 14px; color: #10b981; margin-top: 8px;">↑ 8% from last week</div>
+            </div>
+            <div style="background: #16161f; border: 1px solid #2d2d3a; border-radius: 12px; padding: 24px; transition: all 0.15s;">
+                <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); height: 48px; width: 48px; border-radius: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px;">⚡</div>
+                <div style="font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Performance</div>
+                <div style="font-size: 32px; color: #f8fafc; font-weight: 700; margin-top: 4px;">99.9%</div>
+                <div style="font-size: 14px; color: #10b981; margin-top: 8px;">Optimal status</div>
+            </div>
         </div>
-        <div style="background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 16px;">
-            <div style="background: #e5e5e5; height: 40px; width: 40px; border-radius: 4px; margin-bottom: 12px;"></div>
-            <div style="font-size: 14px; color: #666;">Metric Label</div>
-            <div style="font-size: 24px; color: #333; font-weight: bold;">--</div>
-        </div>
-        <div style="background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 16px;">
-            <div style="background: #e5e5e5; height: 40px; width: 40px; border-radius: 4px; margin-bottom: 12px;"></div>
-            <div style="font-size: 14px; color: #666;">Metric Label</div>
-            <div style="font-size: 24px; color: #333; font-weight: bold;">--</div>
-        </div>
-    </div>
-    
-    <div style="background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 16px;">
-        <h2 style="font-size: 18px; color: #333; margin: 0 0 16px 0;">Content Section</h2>
-        <div style="background: #f5f5f5; border: 2px dashed #ccc; height: 200px; display: flex; align-items: center; justify-content: center; color: #999;">
-            Content Placeholder
+        
+        <div style="background: #16161f; border: 1px solid #2d2d3a; border-radius: 12px; padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="font-size: 20px; color: #f8fafc; margin: 0; font-weight: 600;">Content Section</h2>
+                <button style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 0 20px rgba(99,102,241,0.3);">Action</button>
+            </div>
+            <div style="background: linear-gradient(135deg, #12121a, #1a1a24); border: 2px dashed #3d3d4a; height: 200px; display: flex; align-items: center; justify-content: center; color: #64748b; border-radius: 8px; font-size: 16px;">
+                Content Placeholder
+            </div>
         </div>
     </div>
 </main>'''
     
     def _get_system_prompt(self) -> str:
-        return """You are a wireframe generator. You output ONLY raw HTML code - nothing else.
+        return """You are a PRODUCTION-READY web page generator. Output ONLY raw HTML code - nothing else.
 
 CRITICAL RULES:
 - Output ONLY HTML - no explanations, no descriptions, no markdown
 - Do NOT describe what you're creating
-- Do NOT add text like "This wireframe includes..." 
 - Start directly with HTML tags
 - End with closing HTML tags
 
-WIREFRAME STYLE - PURE BLACK & WHITE:
-1. GRAYSCALE ONLY - NO COLORS:
-   - Backgrounds: #ffffff (white), #f5f5f5 (light gray), #e5e5e5 (lighter gray)
-   - Borders: #ddd, #ccc, #999 (various gray shades)
-   - Text: #333 (dark gray headings), #666 (medium gray body), #999 (light gray muted)
-   - NO blues, NO theme colors, NO brand colors - ONLY black, white, and gray shades
+DESIGN STYLE - MODERN DARK THEME:
+1. COLOR PALETTE (Use these exact colors):
+   - Background: #0a0a0f (primary), #12121a (secondary), #16161f (cards)
+   - Primary accent: #6366f1 (buttons, links, active states)
+   - Secondary: #8b5cf6 (gradients)
+   - Text: #f8fafc (primary), #94a3b8 (secondary), #64748b (muted)
+   - Borders: #2d2d3a (default), #3d3d4a (hover)
+   - Success: #10b981, Warning: #f59e0b, Error: #ef4444
    
-2. SIMPLE INLINE CSS ONLY (no Tailwind, no external CSS):
-   - border: 1px solid #ddd
-   - background: #fff
-   - padding: 16px
-   - margin: 0
-   - display: flex/grid
-   - border-radius: 4px
-   - font-family: Arial, sans-serif
+2. INLINE STYLES WITH MODERN CSS:
+   - Use CSS variables in style attribute where possible
+   - border-radius: 12px for cards, 8px for buttons/inputs
+   - box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4)
+   - transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1)
+   - font-family: 'Inter', -apple-system, sans-serif
+   - Linear gradients: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)
 
 3. RESPONSIVE DESIGN (CRITICAL):
    - Use percentage widths: width: 100%, max-width: 1200px
-   - Use flexbox with wrap: display: flex; flex-wrap: wrap
-   - Use CSS Grid with auto-fit: grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))
-   - Avoid fixed pixel widths for containers
-   - Cards should be min-width: 280px with flex: 1
-   - Tables should have: width: 100%; overflow-x: auto on wrapper
-   - Use relative units where possible
+   - Use flexbox: display: flex; flex-wrap: wrap; gap: 24px
+   - Use CSS Grid: grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))
+   - Mobile-first approach with flexible layouts
+   - Cards: min-width: 280px with flex: 1
 
-4. PLACEHOLDER CONTENT:
-   - Images: <div style="background:#e5e5e5;border:2px dashed #ccc;height:100px;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
-   - Icons: Use text placeholders like [icon], [menu], [bell], [search], [user] - DO NOT create SVG icons
-   - Text: "Heading Text", "Description here", "Label"
-   - For icon placeholders, wrap in spans: <span style="font-size:16px;color:#999;">[icon]</span>
+4. COMPONENT STYLES:
+   - Cards: background: #16161f; border: 1px solid #2d2d3a; border-radius: 12px; padding: 24px;
+   - Buttons: background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600;
+   - Inputs: background: #12121a; border: 1px solid #2d2d3a; border-radius: 8px; padding: 12px 16px; color: #f8fafc;
+   - Tables: width: 100%; border-collapse: collapse; with alternating row backgrounds
+   - Badges: padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600;
 
-4. STRUCTURE:
-   - Use <main>, <section>, <div> for layout
-   - Simple cards with white background and borders
-   - Basic tables with border styling
-   - Form inputs with borders
+5. PLACEHOLDER CONTENT:
+   - Images: <div style="background:linear-gradient(135deg,#1e1e28,#2d2d3a);border:2px dashed #3d3d4a;height:150px;display:flex;align-items:center;justify-content:center;color:#64748b;border-radius:8px;">[Image]</div>
+   - Icons: Use emoji or text like ⚡ 📊 👤 🔔 ⚙️ 📁 ✓ ✕
+   - Text: Use realistic placeholder content
 
-OUTPUT: Raw HTML only. No markdown. No explanations."""
+6. ANIMATIONS (Add to interactive elements):
+   - Hover states with transform: translateY(-2px)
+   - Button shadows: box-shadow: 0 0 20px rgba(99,102,241,0.3)
+   - Smooth transitions on all state changes
+
+OUTPUT: Raw HTML only. No markdown. No explanations. MAKE IT BEAUTIFUL."""
 
     def _get_user_prompt(self, page: Dict, components: Dict, theme: Dict, project_context: str) -> str:
         return f"""Create the main content for a {self.page_type} page.

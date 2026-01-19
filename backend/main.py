@@ -3251,86 +3251,134 @@ async def generate_application_code(request: GenerateCodeRequest):
                 if 'chart' in html.lower() or 'placeholder' in html.lower():
                     wireframes_context += "- Has chart/visualization areas\n"
         
-        frontend_prompt = f"""Generate a COMPLETE React application based on these specifications:
+        frontend_prompt = f"""Generate a COMPLETE, FULLY FUNCTIONAL React application that CALLS THE BACKEND API.
 
 PROJECT: {request.project_name}
 SUMMARY: {request.project_summary}
 
 ARCHITECTURE:
-{request.hld_summary or 'Simple web application'}
+{request.hld_summary or 'Full-stack web application'}
 
-API ENDPOINTS:
+API ENDPOINTS (you MUST call these):
 {request.api_summary or 'Basic CRUD operations'}{wireframes_context}
 
-CRITICAL REQUIREMENTS:
-1. Generate React code as an ES6 module (NO imports needed - React is available)
+## CRITICAL REQUIREMENTS - PRODUCTION READY CODE:
+
+1. Generate React code as an ES6 module (NO imports needed - React is available globally)
 2. Create ONE single App component as the default export
 3. Use Tailwind CSS classes for styling (dark theme: bg-slate-900, text-white)
-4. Create 2-3 simple pages/sections based on the project (DO NOT OVER-COMPLICATE)
-5. Include a simple navigation (buttons or tabs)
-6. Use mock data (simple arrays/objects) - NO API calls
-7. ENSURE ALL JSX TAGS ARE PROPERLY CLOSED - check every opening tag has closing tag
-8. Keep the code under 300 lines to avoid truncation
-9. MUST end with: export default App;
+4. Create 2-3 pages/sections with REAL WORKING functionality
+5. Include navigation (buttons or tabs)
 
-EXAMPLE STRUCTURE (follow this pattern):
+## MUST DO - API INTEGRATION (CRITICAL):
+
+6. CALL THE BACKEND API using fetch() with RELATIVE URLs (like '/api/products')
+7. NEVER use absolute URLs like 'http://localhost:8000/api/...' - this causes CORS errors!
+8. Use useState for state, useEffect for initial data loading
+9. Show loading states while fetching (loading spinner or "Loading...")
+10. Handle errors gracefully (try/catch, error messages)
+11. All CRUD operations must actually work (add, edit, delete)
+
+## CORRECT API PATTERN (MUST FOLLOW - USE RELATIVE URLS):
+
 ```javascript
 const App = () => {{
-  const [currentPage, setCurrentPage] = React.useState('home');
+  const [items, setItems] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  
+  // Load data on mount - USE RELATIVE URL
+  React.useEffect(() => {{
+    fetch('/api/items')  // RELATIVE URL - NO localhost!
+      .then(res => {{
+        if (!res.ok) throw new Error('Failed to fetch');
+        return res.json();
+      }})
+      .then(data => setItems(data))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }}, []);
+  
+  // Add new item - USE RELATIVE URL
+  const addItem = async (newItem) => {{
+    try {{
+      const res = await fetch('/api/items', {{  // RELATIVE URL
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(newItem)
+      }});
+      if (res.ok) {{
+        const created = await res.json();
+        setItems([...items, created]);
+      }}
+    }} catch (err) {{
+      setError(err.message);
+    }}
+  }};
+  
+  // Delete item - USE RELATIVE URL
+  const deleteItem = async (id) => {{
+    try {{
+      await fetch(`/api/items/${{id}}`, {{ method: 'DELETE' }});  // RELATIVE URL
+      setItems(items.filter(item => item.id !== id));
+    }} catch (err) {{
+      setError(err.message);
+    }}
+  }};
+  
+  // ALWAYS handle all states - loading, error, empty, and data
+  if (loading) return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="text-white text-xl">Loading...</div>
+    </div>
+  );
+  
+  if (error) return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="text-red-500 text-xl">Error: {{error}}</div>
+    </div>
+  );
   
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <nav className="bg-slate-800 p-4 mb-4">
-        <button 
-          onClick={{() => setCurrentPage('home')}}
-          className="px-4 py-2 bg-blue-600 rounded mr-2"
-        >
-          Home
-        </button>
-        <button 
-          onClick={{() => setCurrentPage('dashboard')}}
-          className="px-4 py-2 bg-blue-600 rounded"
-        >
-          Dashboard
-        </button>
-      </nav>
-      
-      {{currentPage === 'home' && (
-        <div className="p-8">
-          <h1 className="text-3xl font-bold">Home</h1>
-          <p>Welcome to the application</p>
-        </div>
-      )}}
-      
-      {{currentPage === 'dashboard' && (
-        <div className="p-8">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <div className="grid grid-cols-3 gap-4 mt-4">
-            <div className="bg-slate-800 p-4 rounded">Card 1</div>
-            <div className="bg-slate-800 p-4 rounded">Card 2</div>
-            <div className="bg-slate-800 p-4 rounded">Card 3</div>
+    <div className="min-h-screen bg-slate-900 text-white flex flex-col">
+      <nav className="bg-slate-800 p-4">...</nav>
+      <main className="flex-1 p-6">
+        {{items.length === 0 ? (
+          <div className="text-center text-slate-400 py-12">No items found</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {{items.map(item => <Card key={{item.id}} item={{item}} />)}}
           </div>
-        </div>
-      )}}
+        )}}
+      </main>
     </div>
   );
 }};
-
-export default App;
 ```
 
-IMPORTANT: 
-- Keep it SIMPLE and COMPLETE
-- Every JSX tag that opens MUST close (check < and > pairs)
-- End with: export default App;
+## DO NOT DO THIS (WRONG - CAUSES CORS ERRORS):
+```javascript
+// WRONG - absolute URL causes CORS errors!
+fetch('http://localhost:8000/api/items')  // NEVER DO THIS!
+
+// WRONG - hardcoded mock data
+const items = [
+  {{ id: 1, name: 'Item 1' }},
+  {{ id: 2, name: 'Item 2' }}
+];
+```
+
+## JSX REQUIREMENTS:
+- ENSURE ALL JSX TAGS ARE PROPERLY CLOSED
+- Keep code under 400 lines
+- MUST end with: export default App;
 - No markdown code blocks
-- Total code should be under 300 lines
 
 Return ONLY the complete JavaScript code:"""
 
         frontend_code = await call_claude_with_retry(
             model=SONNET_45_MODEL,  # Use Sonnet 4.5 for highest quality code generation
-            system_prompt="You are an expert React developer. Generate production-ready, COMPLETE React code with all JSX tags properly closed.",
+            system_prompt="You are an expert React developer. Generate PRODUCTION-READY, FULLY FUNCTIONAL React code that calls backend APIs using fetch(). All buttons and forms must work. Include loading states and error handling. Never use hardcoded mock data.",
             user_prompt=frontend_prompt,
             max_tokens=16000,  # Increased to ensure complete code
             fallback_model=None
@@ -3356,12 +3404,14 @@ CRITICAL REQUIREMENTS:
 2. Create 5-10 fully working RESTful endpoints with proper HTTP methods (GET, POST, PUT, DELETE)
 3. Use in-memory storage (Python lists/dicts - NO external database)
 4. Implement ALL Pydantic models for request/response validation (use str for emails, NOT EmailStr)
-5. Include sample seed data (3-5 items) for immediate testing
+5. Include sample seed data (5-10 items) for immediate testing - app must show data on first load!
 6. Add error handling and proper HTTP status codes
 7. Include health check endpoint: GET /health
 8. Make it production-ready with proper typing and documentation
 9. ENSURE ALL CODE IS COMPLETE - no truncation, no "... rest of code" comments
 10. DO NOT use EmailStr or complex Pydantic types - use simple types (str, int, float, bool, list, dict)
+11. NO AUTHENTICATION REQUIRED - all endpoints must be public and accessible without tokens
+12. DO NOT return 401 Unauthorized - this is a demo app, not production auth
 
 EXAMPLE STRUCTURE (adapt to project needs):
 ```python
@@ -3658,8 +3708,19 @@ export default defineConfig({
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Generated App</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      html, body, #root {
+        height: 100%;
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background-color: #0f172a;
+      }
+    </style>
   </head>
-  <body>
+  <body class="bg-slate-900">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
@@ -3766,6 +3827,178 @@ async def stop_application(request: StopAppRequest):
     except Exception as e:
         print(f"[BACKEND ERROR] Stop failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# MULTI-AGENT CODE GENERATION (v2)
+# ============================================================================
+from fastapi import WebSocket, WebSocketDisconnect
+from typing import List
+import asyncio
+import logging
+
+# Configure logging for multi-agent system
+logging.basicConfig(level=logging.INFO)
+multi_agent_logger = logging.getLogger("multi_agent")
+
+# WebSocket connection manager for real-time events
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        print(f"[WS] Client connected. Total: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+        print(f"[WS] Client disconnected. Total: {len(self.active_connections)}")
+
+    async def broadcast(self, message: dict):
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                print(f"[WS] Error sending to client: {e}")
+                disconnected.append(connection)
+        for conn in disconnected:
+            self.disconnect(conn)
+
+ws_manager = ConnectionManager()
+
+
+class GenerateAppV2Request(BaseModel):
+    """Request model for multi-agent app generation"""
+    prompt: str
+    project_name: Optional[str] = None
+    max_iterations: Optional[int] = 50
+
+
+class GenerateAppV2Response(BaseModel):
+    """Response model for multi-agent app generation"""
+    success: bool
+    completed: bool = False
+    completion_report: Optional[dict] = None
+    iterations: int = 0
+    files_created: List[str] = []
+    commands_run: List[str] = []
+    error: Optional[str] = None
+
+
+@app.websocket("/ws/agent-events")
+async def websocket_agent_events(websocket: WebSocket):
+    """WebSocket endpoint for real-time agent events"""
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive, receive any client messages
+            data = await websocket.receive_text()
+            print(f"[WS] Received from client: {data}")
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+    except Exception as e:
+        print(f"[WS] WebSocket error: {e}")
+        ws_manager.disconnect(websocket)
+
+
+@app.post("/api/generate-app-v2", response_model=GenerateAppV2Response)
+async def generate_app_v2(request: GenerateAppV2Request):
+    """
+    Generate a full application using multi-agent architecture.
+    
+    This endpoint uses:
+    - LLM-powered orchestrator
+    - File operations tool
+    - Terminal execution tool
+    - Self-healing error detection and fixing
+    """
+    print(f"\n{'='*80}")
+    print(f"[MULTI-AGENT] Starting app generation v2")
+    print(f"[MULTI-AGENT] Prompt: {request.prompt[:100]}...")
+    print(f"{'='*80}\n")
+
+    try:
+        # Import the multi-agent system
+        from multi_agent.orchestrator import CodingAgent
+        
+        # Determine workspace path
+        workspace_path = Path("./generated_apps")
+        if request.project_name:
+            workspace_path = workspace_path / request.project_name
+        workspace_path.mkdir(parents=True, exist_ok=True)
+        
+        print(f"[MULTI-AGENT] Workspace: {workspace_path}")
+
+        # Event callback to broadcast to WebSocket clients
+        async def event_callback(event: dict):
+            print(f"[MULTI-AGENT EVENT] {event.get('type')}: {str(event.get('data', ''))[:100]}")
+            await ws_manager.broadcast(event)
+
+        # Initialize the coding agent
+        agent = CodingAgent(
+            workspace_path=workspace_path,
+            event_callback=event_callback,
+        )
+
+        # Run the agent
+        result = await agent.run(
+            user_prompt=request.prompt,
+            max_iterations=request.max_iterations or 50,
+        )
+
+        print(f"\n{'='*80}")
+        print(f"[MULTI-AGENT] Generation complete")
+        print(f"[MULTI-AGENT] Success: {result.get('success')}")
+        print(f"[MULTI-AGENT] Completed: {result.get('completed')}")
+        print(f"[MULTI-AGENT] Iterations: {result.get('iterations')}")
+        print(f"[MULTI-AGENT] Files created: {len(result.get('files_created', []))}")
+        print(f"{'='*80}\n")
+
+        return GenerateAppV2Response(
+            success=result.get("success", False),
+            completed=result.get("completed", False),
+            completion_report=result.get("completion_report"),
+            iterations=result.get("iterations", 0),
+            files_created=result.get("files_created", []),
+            commands_run=result.get("commands_run", []),
+            error=result.get("error"),
+        )
+
+    except ImportError as e:
+        error_msg = f"Multi-agent module not found: {str(e)}"
+        print(f"[MULTI-AGENT ERROR] {error_msg}")
+        return GenerateAppV2Response(
+            success=False,
+            error=error_msg,
+        )
+    except Exception as e:
+        error_msg = f"Multi-agent generation failed: {str(e)}"
+        print(f"[MULTI-AGENT ERROR] {error_msg}")
+        traceback.print_exc()
+        return GenerateAppV2Response(
+            success=False,
+            error=error_msg,
+        )
+
+
+@app.get("/api/multi-agent/status")
+async def multi_agent_status():
+    """Check if multi-agent system is available"""
+    try:
+        from multi_agent.orchestrator import CodingAgent
+        return {
+            "available": True,
+            "message": "Multi-agent system is ready",
+            "websocket_url": "/ws/agent-events",
+        }
+    except ImportError as e:
+        return {
+            "available": False,
+            "message": f"Multi-agent system not available: {str(e)}",
+        }
 
 
 if __name__ == "__main__":

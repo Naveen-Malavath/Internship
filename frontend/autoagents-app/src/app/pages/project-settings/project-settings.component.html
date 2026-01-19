@@ -1,0 +1,467 @@
+<div class="project-settings-page">
+  <!-- Header -->
+  <header class="page-header">
+    <div class="header-left">
+      <button class="back-button" (click)="goBack()">
+        <mat-icon>arrow_back</mat-icon>
+      </button>
+      <div class="header-info">
+        <div class="breadcrumb">
+          <span>Projects</span>
+          <mat-icon>chevron_right</mat-icon>
+          <span>{{ project()?.projectName || 'New Project' }}</span>
+          <mat-icon>chevron_right</mat-icon>
+          <span class="current">Settings</span>
+        </div>
+        <h1>Project Configuration</h1>
+        <p class="subtitle">Configure fields, workflow, and generation settings for this project</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-secondary" (click)="saveSettings()">
+        <mat-icon>save</mat-icon>
+        Save
+      </button>
+      <button class="btn-primary" (click)="saveAndContinue()">
+        <mat-icon>arrow_forward</mat-icon>
+        Save & Continue to Workspace
+      </button>
+    </div>
+  </header>
+
+  <!-- Tab Navigation -->
+  <nav class="tab-nav">
+    <button 
+      class="tab-btn" 
+      [class.active]="activeTab() === 'workflow'"
+      (click)="setActiveTab('workflow')">
+      <mat-icon>route</mat-icon>
+      <span>Workflow</span>
+    </button>
+    <button 
+      class="tab-btn" 
+      [class.active]="activeTab() === 'features'"
+      (click)="setActiveTab('features')">
+      <mat-icon>flag</mat-icon>
+      <span>Feature Fields</span>
+      <span class="badge">{{ enabledFeatureFields() }}</span>
+    </button>
+    <button 
+      class="tab-btn" 
+      [class.active]="activeTab() === 'stories'"
+      (click)="setActiveTab('stories')"
+      [disabled]="!settings().workflow.enableStories">
+      <mat-icon>auto_stories</mat-icon>
+      <span>Story Fields</span>
+      <span class="badge">{{ enabledStoryFields() }}</span>
+    </button>
+  </nav>
+
+  <!-- Content Area -->
+  <main class="settings-content">
+    
+    <!-- Workflow Tab -->
+    @if (activeTab() === 'workflow') {
+      <div class="tab-panel workflow-panel">
+        <section class="settings-section">
+          <h2>Generation Workflow</h2>
+          <p class="section-description">Control what gets generated for this project</p>
+          
+          <div class="settings-grid">
+            <div class="setting-card">
+              <div class="setting-header">
+                <mat-icon class="setting-icon">flag</mat-icon>
+                <div class="setting-info">
+                  <h3>Generate Features</h3>
+                  <p>AI will generate features based on your project requirements</p>
+                </div>
+              </div>
+              <div class="setting-control">
+                <mat-slide-toggle 
+                  [checked]="true" 
+                  [disabled]="true"
+                  color="primary">
+                </mat-slide-toggle>
+                <span class="control-label">Always enabled</span>
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-header">
+                <mat-icon class="setting-icon">auto_stories</mat-icon>
+                <div class="setting-info">
+                  <h3>Generate User Stories</h3>
+                  <p>Break down features into detailed user stories</p>
+                </div>
+              </div>
+              <div class="setting-control">
+                <mat-slide-toggle 
+                  [checked]="settings().workflow.enableStories"
+                  (change)="onStoriesEnabledChange($event.checked)"
+                  color="primary">
+                </mat-slide-toggle>
+                <span class="control-label">{{ settings().workflow.enableStories ? 'Enabled' : 'Disabled' }}</span>
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-header">
+                <mat-icon class="setting-icon">web</mat-icon>
+                <div class="setting-info">
+                  <h3>Generate Wireframes</h3>
+                  <p>Create visual wireframe previews for features</p>
+                </div>
+              </div>
+              <div class="setting-control">
+                <mat-slide-toggle 
+                  [checked]="settings().workflow.enableWireframes"
+                  (change)="onWireframesEnabledChange($event.checked)"
+                  color="primary">
+                </mat-slide-toggle>
+                <span class="control-label">{{ settings().workflow.enableWireframes ? 'Enabled' : 'Disabled' }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Generation Counts</h2>
+          <p class="section-description">Configure how many items to generate</p>
+          
+          <div class="count-settings">
+            <div class="count-setting">
+              <div class="count-info">
+                <mat-icon>flag</mat-icon>
+                <div>
+                  <h4>Features per Batch</h4>
+                  <p>Number of features to generate initially</p>
+                </div>
+              </div>
+              <div class="count-control">
+                <span class="count-value">{{ settings().features.defaultCount }}</span>
+                <mat-slider
+                  [min]="settings().features.minCount"
+                  [max]="settings().features.maxCount"
+                  [step]="1"
+                  discrete>
+                  <input matSliderThumb 
+                         [value]="settings().features.defaultCount"
+                         (valueChange)="onFeatureCountChange($event)">
+                </mat-slider>
+              </div>
+            </div>
+
+            @if (settings().workflow.enableStories) {
+              <div class="count-setting">
+                <div class="count-info">
+                  <mat-icon>auto_stories</mat-icon>
+                  <div>
+                    <h4>Stories per Feature</h4>
+                    <p>User stories to generate for each feature</p>
+                  </div>
+                </div>
+                <div class="count-control">
+                  <span class="count-value">{{ settings().stories.perFeature }}</span>
+                  <mat-slider
+                    [min]="settings().stories.minPerFeature"
+                    [max]="settings().stories.maxPerFeature"
+                    [step]="1"
+                    discrete>
+                    <input matSliderThumb 
+                           [value]="settings().stories.perFeature"
+                           (valueChange)="onStoriesPerFeatureChange($event)">
+                  </mat-slider>
+                </div>
+              </div>
+            }
+          </div>
+        </section>
+      </div>
+    }
+
+    <!-- Features Tab -->
+    @if (activeTab() === 'features') {
+      <div class="tab-panel fields-panel">
+        <section class="fields-section">
+          <div class="section-header">
+            <div>
+              <h2>Feature Fields</h2>
+              <p class="section-description">Configure the fields that will be generated for each feature</p>
+            </div>
+            <button class="btn-add" (click)="showAddField('features')">
+              <mat-icon>add</mat-icon>
+              Add Custom Field
+            </button>
+          </div>
+
+          <!-- Add Field Form -->
+          @if (showAddFieldForm() === 'features') {
+            <div class="add-field-form">
+              <h3>Add Custom Field</h3>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Field Name *</label>
+                  <input type="text" [(ngModel)]="newFieldName" placeholder="Enter field name">
+                </div>
+                <div class="form-group">
+                  <label>Field Type</label>
+                  <select [(ngModel)]="newFieldType">
+                    @for (type of fieldTypeConfig; track type.type) {
+                      <option [value]="type.type">{{ type.label }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="form-group full-width">
+                  <label>Description</label>
+                  <input type="text" [(ngModel)]="newFieldDescription" placeholder="Enter field description">
+                </div>
+                @if (newFieldType === 'select' || newFieldType === 'multiselect') {
+                  <div class="form-group full-width">
+                    <label>Options</label>
+                    <div class="options-list">
+                      @for (option of newFieldOptions; track trackByIndex($index); let i = $index) {
+                        <div class="option-row">
+                          <input type="text" [(ngModel)]="newFieldOptions[i]" placeholder="Option {{ i + 1 }}">
+                          <button class="btn-icon-small" (click)="removeOption(i)">
+                            <mat-icon>close</mat-icon>
+                          </button>
+                        </div>
+                      }
+                      <button class="btn-add-option" (click)="addOption()">
+                        <mat-icon>add</mat-icon>
+                        Add Option
+                      </button>
+                    </div>
+                  </div>
+                }
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" [(ngModel)]="newFieldRequired">
+                    <span>Required field</span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn-cancel" (click)="cancelAddField()">Cancel</button>
+                <button class="btn-save" (click)="addNewField()" [disabled]="!newFieldName.trim()">
+                  <mat-icon>add</mat-icon>
+                  Add Field
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- Fields List -->
+          <div class="fields-list" cdkDropList (cdkDropListDropped)="dropField($event, 'features')">
+            @for (field of settings().features.fields; track field.id) {
+              <div class="field-card" cdkDrag [cdkDragDisabled]="editingField()?.id === field.id">
+                <div class="drag-handle" cdkDragHandle>
+                  <mat-icon>drag_indicator</mat-icon>
+                </div>
+                
+                @if (editingField()?.id === field.id) {
+                  <!-- Edit Mode -->
+                  <div class="field-edit">
+                    <div class="edit-form">
+                      <input type="text" [(ngModel)]="editingField()!.name" placeholder="Field name">
+                      <input type="text" [(ngModel)]="editingField()!.description" placeholder="Description">
+                    </div>
+                    <div class="edit-actions">
+                      <button class="btn-icon-small" (click)="cancelEditField()">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                      <button class="btn-icon-small save" (click)="saveEditField('features')">
+                        <mat-icon>check</mat-icon>
+                      </button>
+                    </div>
+                  </div>
+                } @else {
+                  <!-- View Mode -->
+                  <div class="field-content">
+                    <div class="field-info">
+                      <div class="field-header">
+                        <mat-icon class="type-icon">{{ getFieldTypeIcon(field.type) }}</mat-icon>
+                        <span class="field-name">{{ field.name }}</span>
+                        @if (field.isBuiltIn) {
+                          <span class="badge-builtin">Built-in</span>
+                        } @else {
+                          <span class="badge-custom">Custom</span>
+                        }
+                        @if (field.required) {
+                          <span class="badge-required">Required</span>
+                        }
+                      </div>
+                      <p class="field-description">{{ field.description }}</p>
+                    </div>
+                    <div class="field-actions">
+                      <mat-slide-toggle
+                        [checked]="field.enabled"
+                        (change)="toggleFieldEnabled('features', field.id)"
+                        color="primary"
+                        matTooltip="Enable/disable this field">
+                      </mat-slide-toggle>
+                      @if (!field.isBuiltIn) {
+                        <button class="btn-icon-small" (click)="startEditField(field)" matTooltip="Edit field">
+                          <mat-icon>edit</mat-icon>
+                        </button>
+                        <button class="btn-icon-small delete" (click)="deleteField('features', field.id)" matTooltip="Delete field">
+                          <mat-icon>delete</mat-icon>
+                        </button>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </section>
+      </div>
+    }
+
+    <!-- Stories Tab -->
+    @if (activeTab() === 'stories') {
+      <div class="tab-panel fields-panel">
+        @if (!settings().workflow.enableStories) {
+          <div class="disabled-notice">
+            <mat-icon>info</mat-icon>
+            <p>User stories are disabled for this project. Enable them in the Workflow tab to configure story fields.</p>
+          </div>
+        } @else {
+          <section class="fields-section">
+            <div class="section-header">
+              <div>
+                <h2>Story Fields</h2>
+                <p class="section-description">Configure the fields that will be generated for each user story</p>
+              </div>
+              <button class="btn-add" (click)="showAddField('stories')">
+                <mat-icon>add</mat-icon>
+                Add Custom Field
+              </button>
+            </div>
+
+            <!-- Add Field Form -->
+            @if (showAddFieldForm() === 'stories') {
+              <div class="add-field-form">
+                <h3>Add Custom Field</h3>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label>Field Name *</label>
+                    <input type="text" [(ngModel)]="newFieldName" placeholder="Enter field name">
+                  </div>
+                  <div class="form-group">
+                    <label>Field Type</label>
+                    <select [(ngModel)]="newFieldType">
+                      @for (type of fieldTypeConfig; track type.type) {
+                        <option [value]="type.type">{{ type.label }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="form-group full-width">
+                    <label>Description</label>
+                    <input type="text" [(ngModel)]="newFieldDescription" placeholder="Enter field description">
+                  </div>
+                  @if (newFieldType === 'select' || newFieldType === 'multiselect') {
+                    <div class="form-group full-width">
+                      <label>Options</label>
+                      <div class="options-list">
+                        @for (option of newFieldOptions; track trackByIndex($index); let i = $index) {
+                          <div class="option-row">
+                            <input type="text" [(ngModel)]="newFieldOptions[i]" placeholder="Option {{ i + 1 }}">
+                            <button class="btn-icon-small" (click)="removeOption(i)">
+                              <mat-icon>close</mat-icon>
+                            </button>
+                          </div>
+                        }
+                        <button class="btn-add-option" (click)="addOption()">
+                          <mat-icon>add</mat-icon>
+                          Add Option
+                        </button>
+                      </div>
+                    </div>
+                  }
+                  <div class="form-group">
+                    <label class="checkbox-label">
+                      <input type="checkbox" [(ngModel)]="newFieldRequired">
+                      <span>Required field</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button class="btn-cancel" (click)="cancelAddField()">Cancel</button>
+                  <button class="btn-save" (click)="addNewField()" [disabled]="!newFieldName.trim()">
+                    <mat-icon>add</mat-icon>
+                    Add Field
+                  </button>
+                </div>
+              </div>
+            }
+
+            <!-- Fields List -->
+            <div class="fields-list" cdkDropList (cdkDropListDropped)="dropField($event, 'stories')">
+              @for (field of settings().stories.fields; track field.id) {
+                <div class="field-card" cdkDrag [cdkDragDisabled]="editingField()?.id === field.id">
+                  <div class="drag-handle" cdkDragHandle>
+                    <mat-icon>drag_indicator</mat-icon>
+                  </div>
+                  
+                  @if (editingField()?.id === field.id) {
+                    <!-- Edit Mode -->
+                    <div class="field-edit">
+                      <div class="edit-form">
+                        <input type="text" [(ngModel)]="editingField()!.name" placeholder="Field name">
+                        <input type="text" [(ngModel)]="editingField()!.description" placeholder="Description">
+                      </div>
+                      <div class="edit-actions">
+                        <button class="btn-icon-small" (click)="cancelEditField()">
+                          <mat-icon>close</mat-icon>
+                        </button>
+                        <button class="btn-icon-small save" (click)="saveEditField('stories')">
+                          <mat-icon>check</mat-icon>
+                        </button>
+                      </div>
+                    </div>
+                  } @else {
+                    <!-- View Mode -->
+                    <div class="field-content">
+                      <div class="field-info">
+                        <div class="field-header">
+                          <mat-icon class="type-icon">{{ getFieldTypeIcon(field.type) }}</mat-icon>
+                          <span class="field-name">{{ field.name }}</span>
+                          @if (field.isBuiltIn) {
+                            <span class="badge-builtin">Built-in</span>
+                          } @else {
+                            <span class="badge-custom">Custom</span>
+                          }
+                          @if (field.required) {
+                            <span class="badge-required">Required</span>
+                          }
+                        </div>
+                        <p class="field-description">{{ field.description }}</p>
+                      </div>
+                      <div class="field-actions">
+                        <mat-slide-toggle
+                          [checked]="field.enabled"
+                          (change)="toggleFieldEnabled('stories', field.id)"
+                          color="primary"
+                          matTooltip="Enable/disable this field">
+                        </mat-slide-toggle>
+                        @if (!field.isBuiltIn) {
+                          <button class="btn-icon-small" (click)="startEditField(field)" matTooltip="Edit field">
+                            <mat-icon>edit</mat-icon>
+                          </button>
+                          <button class="btn-icon-small delete" (click)="deleteField('stories', field.id)" matTooltip="Delete field">
+                            <mat-icon>delete</mat-icon>
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </section>
+        }
+      </div>
+    }
+  </main>
+</div>

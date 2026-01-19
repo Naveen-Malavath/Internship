@@ -85,6 +85,11 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
   codeGenProgress = signal<string>('');
   showAppPreview = signal(false);
   appPreviewUrl = signal<string>('');
+  // Cached sanitized URL to prevent iframe reload loop
+  appPreviewSafeUrl = computed(() => {
+    const url = this.appPreviewUrl();
+    return url ? this.sanitizer.bypassSecurityTrustResourceUrl(url) : null;
+  });
   generatedProjectPath = signal<string>('');
   generatedSafeName = signal<string>('');  // Track safe name for cleanup
   generatedCode = signal<any>(null);
@@ -265,16 +270,35 @@ export class ProjectWorkspaceComponent implements OnInit, AfterViewInit, OnDestr
     console.log('[INIT] All design types:', this.designTypes.map(d => d.value));
     
     for (const designType of this.designTypes) {
-      const status = (isDevMode || designType.value === 'hld') ? 'available' : 'locked';
-      console.log(`[INIT] ${designType.value} => ${status} (devMode: ${isDevMode})`);
-      states.set(designType.value, {
-        type: designType.value,
-        status
-      });
+      // In dev mode, populate with mock design data
+      if (isDevMode && MOCK_DESIGNS[designType.value as keyof typeof MOCK_DESIGNS]) {
+        const mockDesign = MOCK_DESIGNS[designType.value as keyof typeof MOCK_DESIGNS];
+        console.log(`[INIT] ${designType.value} => COMPLETED with mock data (devMode)`);
+        states.set(designType.value, {
+          type: designType.value,
+          status: 'completed',
+          mermaidCode: mockDesign.mermaid,
+          summary: mockDesign.summary,
+          timestamp: new Date().toLocaleString()
+        });
+      } else {
+        const status = (isDevMode || designType.value === 'hld') ? 'available' : 'locked';
+        console.log(`[INIT] ${designType.value} => ${status} (devMode: ${isDevMode})`);
+        states.set(designType.value, {
+          type: designType.value,
+          status
+        });
+      }
     }
     
     this.designStates.set(states);
     console.log('[DEBUG] Initialized design states (dev mode: ' + isDevMode + '):', states);
+    
+    // In dev mode, also auto-populate wireframe data
+    if (isDevMode) {
+      console.log('[INIT] Auto-populating wireframe data for dev mode');
+      this.wireframeData.set(MOCK_WIREFRAME_DATA as WireframeData);
+    }
   }
   
   private updateDesignState(type: DesignType, update: Partial<DesignState>) {

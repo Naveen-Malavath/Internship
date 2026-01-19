@@ -10,6 +10,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ApiService } from '../../services/api.service';
 import { LoadingDialogComponent } from '../loading-dialog/loading-dialog.component';
 import { PromptReviewDialogComponent } from '../prompt-review-dialog/prompt-review-dialog.component';
@@ -17,7 +18,16 @@ import { FeatureDetailModalComponent } from '../feature-detail-modal/feature-det
 import { Feature, Story } from '../../services/api.service';
 import { DevModeService } from '../../services/dev-mode.service';
 import { ActivityService } from '../../services/activity.service';
+import { SettingsService } from '../../services/settings.service';
 import { MOCK_FEATURES, MOCK_STORIES, MOCK_PROJECT_CONTEXT } from '../../services/dev-data';
+import { 
+  ProjectSettings, 
+  getDefaultSettings,
+  CustomField,
+  CustomFieldType,
+  createCustomField,
+  FIELD_TYPE_CONFIG
+} from '../../models/settings.model';
 
 interface Template {
   title: string;
@@ -71,7 +81,8 @@ interface ProjectData {
     MatSelectModule,
     MatDatepickerModule,
     MatNativeDateModule,
-    MatTooltipModule
+    MatTooltipModule,
+    MatSlideToggleModule
   ],
   templateUrl: './create-project-modal.component.html',
   styleUrls: ['./create-project-modal.component.scss']
@@ -101,6 +112,31 @@ export class CreateProjectModalComponent {
   // Dev mode service
   devModeService = inject(DevModeService);
   activityService = inject(ActivityService);
+  settingsService = inject(SettingsService);
+  
+  // Project settings for this project
+  projectSettings = signal<ProjectSettings>(this.settingsService.getSettingsForNewProject());
+  
+  // Settings UI expansion state
+  showAdvancedSettings = signal(false);
+  
+  // Custom field form state
+  showAddStoryFieldForm = signal(false);
+  showAddFeatureFieldForm = signal(false);
+  
+  // Field types for dropdown
+  fieldTypeConfig = FIELD_TYPE_CONFIG;
+  
+  // New custom field data
+  newStoryFieldName = signal('');
+  newStoryFieldType = signal<CustomFieldType>('text');
+  newStoryFieldDescription = signal('');
+  newStoryFieldRequired = signal(false);
+  
+  newFeatureFieldName = signal('');
+  newFeatureFieldType = signal<CustomFieldType>('text');
+  newFeatureFieldDescription = signal('');
+  newFeatureFieldRequired = signal(false);
   
   constructor(
     private apiService: ApiService,
@@ -130,13 +166,28 @@ export class CreateProjectModalComponent {
     finalPrompt: ''
   };
   
-  steps = [
-    { number: 1, label: 'TEMPLATE' },
-    { number: 2, label: 'PROJECT DETAILS' },
-    { number: 3, label: 'AI ASSIST' },
-    { number: 4, label: 'FEATURES' },
-    { number: 5, label: 'STORIES' }
-  ];
+  // Dynamic steps based on settings
+  get steps() {
+    const settings = this.projectSettings();
+    const baseSteps = [
+      { number: 1, label: 'TEMPLATE' },
+      { number: 2, label: 'PROJECT DETAILS' },
+      { number: 3, label: 'SETTINGS' },
+      { number: 4, label: 'AI ASSIST' },
+      { number: 5, label: 'FEATURES' }
+    ];
+    
+    if (settings.workflow.enableStories) {
+      baseSteps.push({ number: 6, label: 'STORIES' });
+    }
+    
+    return baseSteps;
+  }
+  
+  // Get the last step number
+  get lastStepNumber(): number {
+    return this.steps[this.steps.length - 1].number;
+  }
 
   templates: Template[] = [
     {
@@ -212,6 +263,201 @@ export class CreateProjectModalComponent {
 
   selectWorkflow(workflow: Workflow) {
     this.projectData.selectedWorkflow = workflow;
+  }
+  
+  // Project Settings Methods
+  onStoriesEnabledChange(enabled: boolean): void {
+    const current = this.projectSettings();
+    this.projectSettings.set({
+      ...current,
+      workflow: { ...current.workflow, enableStories: enabled }
+    });
+  }
+  
+  onWireframesEnabledChange(enabled: boolean): void {
+    const current = this.projectSettings();
+    this.projectSettings.set({
+      ...current,
+      workflow: { ...current.workflow, enableWireframes: enabled }
+    });
+  }
+  
+  onStoriesPerFeatureChange(value: number): void {
+    const current = this.projectSettings();
+    this.projectSettings.set({
+      ...current,
+      stories: { ...current.stories, perFeature: value }
+    });
+  }
+  
+  onFeatureCountChange(value: number): void {
+    const current = this.projectSettings();
+    this.projectSettings.set({
+      ...current,
+      features: { ...current.features, defaultCount: value }
+    });
+  }
+  
+  onStoryFieldChange(fieldKey: string, enabled: boolean): void {
+    const current = this.projectSettings();
+    const updatedFields = current.stories.fields.map(f =>
+      f.key === fieldKey ? { ...f, enabled } : f
+    );
+    this.projectSettings.set({
+      ...current,
+      stories: {
+        ...current.stories,
+        fields: updatedFields
+      }
+    });
+  }
+  
+  onFeatureFieldChange(fieldKey: string, enabled: boolean): void {
+    const current = this.projectSettings();
+    const updatedFields = current.features.fields.map(f =>
+      f.key === fieldKey ? { ...f, enabled } : f
+    );
+    this.projectSettings.set({
+      ...current,
+      features: {
+        ...current.features,
+        fields: updatedFields
+      }
+    });
+  }
+  
+  isStoryFieldEnabled(fieldKey: string): boolean {
+    const fields = this.projectSettings().stories.fields;
+    const field = fields.find(f => f.key === fieldKey);
+    return field?.enabled ?? false;
+  }
+  
+  isFeatureFieldEnabled(fieldKey: string): boolean {
+    const fields = this.projectSettings().features.fields;
+    const field = fields.find(f => f.key === fieldKey);
+    return field?.enabled ?? false;
+  }
+  
+  // Get story fields as array
+  get storyFields() {
+    return this.projectSettings().stories.fields;
+  }
+  
+  // Get feature fields as array
+  get featureFields() {
+    return this.projectSettings().features.fields;
+  }
+  
+  useDefaultSettings(): void {
+    this.projectSettings.set(this.settingsService.getSettingsForNewProject());
+  }
+  
+  toggleAdvancedSettings(): void {
+    this.showAdvancedSettings.set(!this.showAdvancedSettings());
+  }
+  
+  // Custom field methods
+  toggleAddStoryFieldForm(): void {
+    this.showAddStoryFieldForm.set(!this.showAddStoryFieldForm());
+    if (!this.showAddStoryFieldForm()) {
+      this.resetStoryFieldForm();
+    }
+  }
+  
+  toggleAddFeatureFieldForm(): void {
+    this.showAddFeatureFieldForm.set(!this.showAddFeatureFieldForm());
+    if (!this.showAddFeatureFieldForm()) {
+      this.resetFeatureFieldForm();
+    }
+  }
+  
+  resetStoryFieldForm(): void {
+    this.newStoryFieldName.set('');
+    this.newStoryFieldType.set('text');
+    this.newStoryFieldDescription.set('');
+    this.newStoryFieldRequired.set(false);
+  }
+  
+  resetFeatureFieldForm(): void {
+    this.newFeatureFieldName.set('');
+    this.newFeatureFieldType.set('text');
+    this.newFeatureFieldDescription.set('');
+    this.newFeatureFieldRequired.set(false);
+  }
+  
+  // Get custom fields only (non-built-in)
+  get customStoryFields(): CustomField[] {
+    return this.projectSettings().stories.fields.filter(f => !f.isBuiltIn);
+  }
+  
+  get customFeatureFields(): CustomField[] {
+    return this.projectSettings().features.fields.filter(f => !f.isBuiltIn);
+  }
+  
+  addCustomStoryField(): void {
+    const name = this.newStoryFieldName().trim();
+    if (!name) return;
+    
+    const current = this.projectSettings();
+    const maxOrder = Math.max(...current.stories.fields.map(f => f.order), 0);
+    const newField = createCustomField(name, this.newStoryFieldType(), 'story', maxOrder + 1);
+    newField.description = this.newStoryFieldDescription();
+    newField.required = this.newStoryFieldRequired();
+    
+    this.projectSettings.set({
+      ...current,
+      stories: {
+        ...current.stories,
+        fields: [...current.stories.fields, newField]
+      }
+    });
+    
+    this.resetStoryFieldForm();
+    this.showAddStoryFieldForm.set(false);
+  }
+  
+  addCustomFeatureField(): void {
+    const name = this.newFeatureFieldName().trim();
+    if (!name) return;
+    
+    const current = this.projectSettings();
+    const maxOrder = Math.max(...current.features.fields.map(f => f.order), 0);
+    const newField = createCustomField(name, this.newFeatureFieldType(), 'feature', maxOrder + 1);
+    newField.description = this.newFeatureFieldDescription();
+    newField.required = this.newFeatureFieldRequired();
+    
+    this.projectSettings.set({
+      ...current,
+      features: {
+        ...current.features,
+        fields: [...current.features.fields, newField]
+      }
+    });
+    
+    this.resetFeatureFieldForm();
+    this.showAddFeatureFieldForm.set(false);
+  }
+  
+  removeCustomStoryField(fieldId: string): void {
+    const current = this.projectSettings();
+    this.projectSettings.set({
+      ...current,
+      stories: {
+        ...current.stories,
+        fields: current.stories.fields.filter(f => f.id !== fieldId)
+      }
+    });
+  }
+  
+  removeCustomFeatureField(fieldId: string): void {
+    const current = this.projectSettings();
+    this.projectSettings.set({
+      ...current,
+      features: {
+        ...current.features,
+        fields: current.features.fields.filter(f => f.id !== fieldId)
+      }
+    });
   }
 
   generateProjectKey(name: string): string {
@@ -482,14 +728,14 @@ export class CreateProjectModalComponent {
         this.projectData.finalPrompt = result.prompt;
         console.log('Proceeding with prompt:', this.projectData.finalPrompt);
         
-        // Now move to step 4 (Features) and generate features
-        this.currentStep.set(4);
+        // Now move to step 5 (Features) and generate features
+        this.currentStep.set(5);
         this.scrollToTop();
         
         // Generate features automatically
         this.generateFeatures();
       }
-      // If cancelled, stay on step 3
+      // If cancelled, stay on step 4 (AI ASSIST)
     });
   }
 
@@ -787,49 +1033,73 @@ Focus Areas: ${this.projectData.executiveSummary || 'N/A'}`;
   }
 
   nextStep() {
-    if (this.currentStep() < 5) {
-      // Show prompt review dialog when moving from step 3
-      if (this.currentStep() === 3) {
-        this.showPromptReviewDialog();
+    const settings = this.projectSettings();
+    const storiesEnabled = settings.workflow.enableStories;
+    
+    // Step 4 is AI ASSIST - show prompt review dialog
+    if (this.currentStep() === 4) {
+      this.showPromptReviewDialog();
+      return;
+    }
+    
+    // Step 5 is FEATURES - validate before moving to stories or finishing
+    if (this.currentStep() === 5) {
+      const approvedFeatures = this.generatedFeatures().filter(f => f.approved);
+      const hasManualFeatures = this.manualFeatures().filter(f => f.trim()).length > 0;
+      
+      if (approvedFeatures.length === 0 && !hasManualFeatures) {
+        alert('Please approve at least one feature or add a manual feature before proceeding.');
         return;
       }
       
-      // Validate at least one feature is approved when moving from step 4 to 5
-      if (this.currentStep() === 4) {
-        const approvedFeatures = this.generatedFeatures().filter(f => f.approved);
-        const hasManualFeatures = this.manualFeatures().length > 0;
-        
-        if (approvedFeatures.length === 0 && !hasManualFeatures) {
-          alert('Please approve at least one feature or add a manual feature before proceeding.');
-          return;
-        }
-        
-        this.currentStep.set(5);
+      if (storiesEnabled) {
+        // Move to stories step
+        this.currentStep.set(6);
         this.scrollToTop();
         // Only generate if we don't have stories yet
         if (this.generatedStories().length === 0 && this.manualStories().length === 0) {
           this.generateStories();
         }
-        return;
       }
-      
+      // If stories disabled, finishProject() will be called from the button
+      return;
+    }
+    
+    // Normal progression for other steps
+    if (this.currentStep() < this.lastStepNumber) {
       this.currentStep.set(this.currentStep() + 1);
       this.scrollToTop();
     }
   }
 
   finishProject() {
-    // Validate at least one story is approved
-    const approvedStories = this.generatedStories().filter(s => s.approved);
-    const hasManualStories = this.manualStories().filter(s => s.trim()).length > 0;
+    const settings = this.projectSettings();
+    const storiesEnabled = settings.workflow.enableStories;
     
-    if (approvedStories.length === 0 && !hasManualStories) {
-      alert('Please approve at least one story or add a manual story before creating the project.');
-      return;
+    // If stories are enabled, validate stories
+    if (storiesEnabled) {
+      const approvedStories = this.generatedStories().filter(s => s.approved);
+      const hasManualStories = this.manualStories().filter(s => s.trim()).length > 0;
+      
+      if (approvedStories.length === 0 && !hasManualStories) {
+        alert('Please approve at least one story or add a manual story before creating the project.');
+        return;
+      }
+    } else {
+      // If stories are disabled, validate features
+      const approvedFeatures = this.generatedFeatures().filter(f => f.approved);
+      const hasManualFeatures = this.manualFeatures().filter(f => f.trim()).length > 0;
+      
+      if (approvedFeatures.length === 0 && !hasManualFeatures) {
+        alert('Please approve at least one feature or add a manual feature before creating the project.');
+        return;
+      }
     }
     
     // Generate final prompt for review
     this.projectData.finalPrompt = this.generateFinalPrompt();
+    
+    const approvedStories = this.generatedStories().filter(s => s.approved);
     
     // Create the result object to pass back
     const projectResult = {
@@ -841,13 +1111,15 @@ Focus Areas: ${this.projectData.executiveSummary || 'N/A'}`;
       promptSummary: this.projectData.promptSummary,
       finalPrompt: this.projectData.finalPrompt,
       features: this.generatedFeatures().filter(f => f.approved),
-      stories: approvedStories,
+      stories: storiesEnabled ? approvedStories : [],
       epicIdeas: this.projectData.epicIdeas.filter(e => e.trim()),
       riskHighlights: this.projectData.riskHighlights.filter(r => r.trim()),
-      generatedRisks: this.projectData.generatedRisks
+      generatedRisks: this.projectData.generatedRisks,
+      settings: this.projectSettings()  // Include project settings
     };
     
     console.log('Creating project with data:', projectResult);
+    console.log('Project settings:', projectResult.settings);
     
     // Track activity - project created
     console.log('[ActivityTracking] Project created:', this.projectData.projectName);
@@ -860,7 +1132,7 @@ Focus Areas: ${this.projectData.executiveSummary || 'N/A'}`;
     }
     
     // Track stories generated
-    if (this.generatedStories().length > 0) {
+    if (storiesEnabled && this.generatedStories().length > 0) {
       console.log('[ActivityTracking] Stories generated:', this.generatedStories().length);
       this.activityService.logStoriesGenerated(this.generatedStories().length);
     }

@@ -1,0 +1,172 @@
+<div class="settings-modal">
+  <div class="modal-header">
+    <div class="header-content">
+      <h1>Project Settings</h1>
+      <p class="project-identifier">
+        <span class="project-name">{{ projectName }}</span>
+        <span class="project-key">{{ projectKey }}</span>
+      </p>
+    </div>
+    <button class="close-button" (click)="cancel()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <div class="modal-body">
+    <!-- Workflow Settings -->
+    <div class="settings-card">
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">
+            <mat-icon class="setting-icon">auto_stories</mat-icon>
+            Enable User Stories
+          </div>
+          <div class="setting-description">Generate user stories for each feature. Disable to work with features only.</div>
+        </div>
+        <mat-slide-toggle
+          [checked]="settings.workflow.enableStories"
+          (change)="onStoriesEnabledChange($event.checked)"
+          color="primary">
+        </mat-slide-toggle>
+      </div>
+      
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">
+            <mat-icon class="setting-icon">web</mat-icon>
+            Enable Wireframes
+          </div>
+          <div class="setting-description">Generate wireframe previews for project pages.</div>
+        </div>
+        <mat-slide-toggle
+          [checked]="settings.workflow.enableWireframes"
+          (change)="onWireframesEnabledChange($event.checked)"
+          color="primary">
+        </mat-slide-toggle>
+      </div>
+    </div>
+
+    <!-- Story Settings -->
+    @if (settings.workflow.enableStories) {
+      <div class="settings-card">
+        <h3 class="card-title">Story Settings</h3>
+        <div class="slider-setting">
+          <div class="slider-info">
+            <div class="slider-label">Stories per Feature</div>
+            <div class="slider-description">Number of user stories to generate for each feature</div>
+          </div>
+          <div class="slider-control">
+            <span class="slider-value">{{ settings.stories.perFeature }}</span>
+            <mat-slider
+              [min]="settings.stories.minPerFeature"
+              [max]="settings.stories.maxPerFeature"
+              [step]="1"
+              discrete>
+              <input matSliderThumb 
+                     [value]="settings.stories.perFeature"
+                     (valueChange)="onStoriesPerFeatureChange($event)">
+            </mat-slider>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Feature Settings -->
+    <div class="settings-card">
+      <h3 class="card-title">Feature Settings</h3>
+      <div class="slider-setting">
+        <div class="slider-info">
+          <div class="slider-label">Features per Batch</div>
+          <div class="slider-description">Number of features to generate per batch</div>
+        </div>
+        <div class="slider-control">
+          <span class="slider-value">{{ settings.features.defaultCount }}</span>
+          <mat-slider
+            [min]="settings.features.minCount"
+            [max]="settings.features.maxCount"
+            [step]="1"
+            discrete>
+            <input matSliderThumb 
+                   [value]="settings.features.defaultCount"
+                   (valueChange)="onFeatureCountChange($event)">
+          </mat-slider>
+        </div>
+      </div>
+    </div>
+
+    <!-- Advanced Field Settings Toggle -->
+    <button class="advanced-toggle" (click)="toggleAdvancedSettings()">
+      <mat-icon>{{ showAdvancedSettings() ? 'expand_less' : 'expand_more' }}</mat-icon>
+      {{ showAdvancedSettings() ? 'Hide' : 'Show' }} Advanced Field Settings
+    </button>
+
+    <!-- Advanced Field Settings -->
+    @if (showAdvancedSettings()) {
+      <div class="advanced-settings">
+        <!-- Story Fields -->
+        @if (settings.workflow.enableStories) {
+          <div class="field-settings-card">
+            <h3 class="card-title">Story Fields</h3>
+            <p class="card-description">Select which fields to include when generating stories</p>
+            <div class="fields-grid">
+              @for (field of storyFieldConfig; track field.key) {
+                <div class="field-toggle">
+                  <div class="field-toggle-control">
+                    <mat-slide-toggle
+                      [checked]="isStoryFieldEnabled(field.key)"
+                      (change)="onStoryFieldChange(field.key, $event.checked)"
+                      color="primary"
+                      [attr.aria-label]="field.label">
+                    </mat-slide-toggle>
+                    <span class="field-label" (click)="onStoryFieldChange(field.key, !isStoryFieldEnabled(field.key))">
+                      {{ field.label }}
+                    </span>
+                  </div>
+                  <span class="field-description">{{ field.description }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Feature Fields -->
+        <div class="field-settings-card">
+          <h3 class="card-title">Feature Fields</h3>
+          <p class="card-description">Select which fields to include when generating features</p>
+          <div class="fields-grid">
+            @for (field of featureFieldConfig; track field.key) {
+              <div class="field-toggle">
+                <div class="field-toggle-control">
+                  <mat-slide-toggle
+                    [checked]="isFeatureFieldEnabled(field.key)"
+                    (change)="onFeatureFieldChange(field.key, $event.checked)"
+                    color="primary"
+                    [attr.aria-label]="field.label">
+                  </mat-slide-toggle>
+                  <span class="field-label" (click)="onFeatureFieldChange(field.key, !isFeatureFieldEnabled(field.key))">
+                    {{ field.label }}
+                  </span>
+                </div>
+                <span class="field-description">{{ field.description }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Reset Button -->
+    <button class="reset-button" (click)="resetToDefaults()">
+      <mat-icon>restore</mat-icon>
+      Reset to Defaults
+    </button>
+  </div>
+
+  <div class="modal-footer">
+    <button class="btn-cancel" (click)="cancel()">Cancel</button>
+    <button class="btn-save" (click)="save()">
+      <mat-icon>check</mat-icon>
+      Save Settings
+    </button>
+  </div>
+</div>

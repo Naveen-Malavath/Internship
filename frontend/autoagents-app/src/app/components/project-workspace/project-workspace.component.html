@@ -445,14 +445,16 @@
             </div>
           </div>
           <div class="iframe-container">
-            <iframe 
-              [src]="sanitizeUrl(appPreviewUrl())" 
-              class="app-iframe"
-              frameborder="0"
-              (load)="onIframeLoad()"
-              (error)="onIframeError($event)"
-              allow="cross-origin-isolated">
-            </iframe>
+            @if (appPreviewSafeUrl()) {
+              <iframe 
+                [src]="appPreviewSafeUrl()" 
+                class="app-iframe"
+                frameborder="0"
+                (load)="onIframeLoad()"
+                (error)="onIframeError($event)"
+                allow="cross-origin-isolated">
+              </iframe>
+            }
           </div>
         </div>
       } @else {

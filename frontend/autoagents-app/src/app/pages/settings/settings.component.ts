@@ -5,7 +5,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatRippleModule } from '@angular/material/core';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatSliderModule } from '@angular/material/slider';
 import { ThemeService, ThemeColors, ThemePreset } from '../../services/theme.service';
+import { SettingsService } from '../../services/settings.service';
+import { CustomField } from '../../models/settings.model';
 
 @Component({
   selector: 'app-settings',
@@ -16,16 +20,19 @@ import { ThemeService, ThemeColors, ThemePreset } from '../../services/theme.ser
     MatIconModule,
     MatButtonModule,
     MatTooltipModule,
-    MatRippleModule
+    MatRippleModule,
+    MatSlideToggleModule,
+    MatSliderModule
   ],
   templateUrl: './settings.component.html',
   styleUrls: ['./settings.component.scss']
 })
 export class SettingsComponent {
   themeService = inject(ThemeService);
+  settingsService = inject(SettingsService);
   
   // Active tab
-  activeTab: 'appearance' | 'general' = 'appearance';
+  activeTab: 'appearance' | 'general' | 'project' = 'appearance';
   
   // Color categories for organized display
   colorCategories = [
@@ -64,8 +71,48 @@ export class SettingsComponent {
     }
   ];
 
-  setActiveTab(tab: 'appearance' | 'general'): void {
+  setActiveTab(tab: 'appearance' | 'general' | 'project'): void {
     this.activeTab = tab;
+  }
+  
+  // Get fields for display
+  get storyFields(): CustomField[] {
+    return this.settingsService.storySettings().fields;
+  }
+  
+  get featureFields(): CustomField[] {
+    return this.settingsService.featureSettings().fields;
+  }
+  
+  // Project Settings Methods
+  onStoriesEnabledChange(enabled: boolean): void {
+    this.settingsService.toggleStoriesEnabled(enabled);
+  }
+  
+  onWireframesEnabledChange(enabled: boolean): void {
+    this.settingsService.toggleWireframesEnabled(enabled);
+  }
+  
+  onStoriesPerFeatureChange(value: number): void {
+    this.settingsService.updateStoriesPerFeature(value);
+  }
+  
+  onFeatureCountChange(value: number): void {
+    this.settingsService.updateDefaultFeatureCount(value);
+  }
+  
+  onStoryFieldChange(fieldKey: string, enabled: boolean): void {
+    this.settingsService.toggleStoryField(fieldKey, enabled);
+  }
+  
+  onFeatureFieldChange(fieldKey: string, enabled: boolean): void {
+    this.settingsService.toggleFeatureField(fieldKey, enabled);
+  }
+  
+  resetProjectSettingsToDefaults(): void {
+    if (confirm('Are you sure you want to reset all project settings to defaults?')) {
+      this.settingsService.resetToDefaults();
+    }
   }
 
   onColorChange(property: keyof ThemeColors, event: Event): void {

@@ -22,6 +22,14 @@
     </button>
     <button 
       class="tab-button"
+      [class.active]="activeTab === 'project'"
+      (click)="setActiveTab('project')"
+      matRipple>
+      <mat-icon>folder_special</mat-icon>
+      <span>Project Defaults</span>
+    </button>
+    <button 
+      class="tab-button"
       [class.active]="activeTab === 'general'"
       (click)="setActiveTab('general')"
       matRipple>
@@ -140,6 +148,161 @@
               matRipple>
               <mat-icon>restart_alt</mat-icon>
               <span>Reset to Default</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    }
+
+    <!-- Project Defaults Tab -->
+    @if (activeTab === 'project') {
+      <div class="tab-content">
+        
+        <!-- Info Banner -->
+        <div class="info-banner">
+          <mat-icon>info</mat-icon>
+          <p>These settings will be used as <strong>defaults</strong> when creating new projects. Each project can have its own settings.</p>
+        </div>
+        
+        <!-- Workflow Settings -->
+        <section class="settings-section">
+          <div class="section-header">
+            <h2>Workflow Settings</h2>
+            <p class="section-description">Control which steps are included in the project creation flow</p>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Enable User Stories</div>
+              <div class="setting-description">Generate user stories for each feature. Disable to create features directly without story breakdown.</div>
+            </div>
+            <mat-slide-toggle
+              [checked]="settingsService.workflowSettings().enableStories"
+              (change)="onStoriesEnabledChange($event.checked)"
+              color="primary">
+            </mat-slide-toggle>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Enable Wireframes</div>
+              <div class="setting-description">Generate wireframe previews for project pages. Disable to skip wireframe generation.</div>
+            </div>
+            <mat-slide-toggle
+              [checked]="settingsService.workflowSettings().enableWireframes"
+              (change)="onWireframesEnabledChange($event.checked)"
+              color="primary">
+            </mat-slide-toggle>
+          </div>
+        </section>
+        
+        <!-- Story Configuration -->
+        <section class="settings-section" [class.disabled-section]="!settingsService.workflowSettings().enableStories">
+          <div class="section-header">
+            <h2>Story Configuration</h2>
+            <p class="section-description">Configure how user stories are generated</p>
+            @if (!settingsService.workflowSettings().enableStories) {
+              <span class="disabled-badge">Stories Disabled</span>
+            }
+          </div>
+          
+          <div class="setting-row slider-row">
+            <div class="setting-info">
+              <div class="setting-label">Stories per Feature</div>
+              <div class="setting-description">Number of user stories to generate for each feature</div>
+            </div>
+            <div class="slider-control">
+              <span class="slider-value">{{ settingsService.storySettings().perFeature }}</span>
+              <input 
+                type="range" 
+                class="custom-slider"
+                [min]="settingsService.storySettings().minPerFeature"
+                [max]="settingsService.storySettings().maxPerFeature"
+                [value]="settingsService.storySettings().perFeature"
+                (input)="onStoriesPerFeatureChange($any($event.target).valueAsNumber)"
+                [disabled]="!settingsService.workflowSettings().enableStories">
+            </div>
+          </div>
+          
+          <div class="fields-config">
+            <h3 class="fields-title">Story Fields</h3>
+            <p class="fields-description">Select which fields to include when generating stories</p>
+            
+            <div class="fields-grid">
+              @for (field of storyFields; track field.id) {
+                <div class="field-toggle">
+                  <mat-slide-toggle
+                    [checked]="field.enabled"
+                    (change)="onStoryFieldChange(field.key, $event.checked)"
+                    [disabled]="!settingsService.workflowSettings().enableStories"
+                    color="primary">
+                    <span class="field-label">{{ field.name }}</span>
+                  </mat-slide-toggle>
+                  <span class="field-description">{{ field.description }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        </section>
+        
+        <!-- Feature Configuration -->
+        <section class="settings-section">
+          <div class="section-header">
+            <h2>Feature Configuration</h2>
+            <p class="section-description">Configure how features are generated</p>
+          </div>
+          
+          <div class="setting-row slider-row">
+            <div class="setting-info">
+              <div class="setting-label">Default Feature Count</div>
+              <div class="setting-description">Number of features to generate per batch</div>
+            </div>
+            <div class="slider-control">
+              <span class="slider-value">{{ settingsService.featureSettings().defaultCount }}</span>
+              <input 
+                type="range" 
+                class="custom-slider"
+                [min]="settingsService.featureSettings().minCount"
+                [max]="settingsService.featureSettings().maxCount"
+                [value]="settingsService.featureSettings().defaultCount"
+                (input)="onFeatureCountChange($any($event.target).valueAsNumber)">
+            </div>
+          </div>
+          
+          <div class="fields-config">
+            <h3 class="fields-title">Feature Fields</h3>
+            <p class="fields-description">Select which fields to include when generating features</p>
+            
+            <div class="fields-grid">
+              @for (field of featureFields; track field.id) {
+                <div class="field-toggle">
+                  <mat-slide-toggle
+                    [checked]="field.enabled"
+                    (change)="onFeatureFieldChange(field.key, $event.checked)"
+                    color="primary">
+                    <span class="field-label">{{ field.name }}</span>
+                  </mat-slide-toggle>
+                  <span class="field-description">{{ field.description }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        </section>
+        
+        <!-- Reset Button -->
+        <section class="settings-section">
+          <div class="section-header">
+            <h2>Reset Settings</h2>
+            <p class="section-description">Restore all project settings to their default values</p>
+          </div>
+          
+          <div class="action-buttons">
+            <button 
+              class="action-button danger"
+              (click)="resetProjectSettingsToDefaults()"
+              matRipple>
+              <mat-icon>restart_alt</mat-icon>
+              <span>Reset to Defaults</span>
             </button>
           </div>
         </section>

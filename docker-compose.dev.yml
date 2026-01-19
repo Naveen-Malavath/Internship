@@ -4,10 +4,13 @@ services:
     container_name: autoagents-backend
     ports:
       - "8000:8000"
+      # Note: Generated apps bind directly to host ports (3000-3010, 8100-8110)
+      # Don't map these here - they need to be free for the generated app containers
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
       - ./backend:/app
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket for running generated apps
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
@@ -20,7 +23,7 @@ services:
     volumes:
       - ./frontend/autoagents-app:/app
       - /app/node_modules  # Preserve node_modules inside container
-    command: sh -c "npm install && npm start -- --host 0.0.0.0"
+    command: sh -c "npm install && npx ng serve --host 0.0.0.0 --proxy-config proxy.conf.json"
     depends_on:
       - backend
     restart: unless-stopped

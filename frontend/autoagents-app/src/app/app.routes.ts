@@ -3,6 +3,7 @@ import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { ProjectsComponent } from './pages/projects/projects.component';
 import { WorkspacePageComponent } from './pages/workspace/workspace-page.component';
 import { SettingsComponent } from './pages/settings/settings.component';
+import { ProjectSettingsComponent } from './pages/project-settings/project-settings.component';
 import { PlaceholderPageComponent } from './pages/placeholder/placeholder-page.component';
 
 export const routes: Routes = [
@@ -25,6 +26,13 @@ export const routes: Routes = [
     path: 'projects',
     component: ProjectsComponent,
     title: 'Projects - AutoAgents'
+  },
+  
+  // Project Settings - per-project configuration
+  {
+    path: 'projects/:id/settings',
+    component: ProjectSettingsComponent,
+    title: 'Project Settings - AutoAgents'
   },
   
   // Workspace - project design and architecture

@@ -200,6 +200,318 @@
     }
     
     @if (currentStep() === 3) {
+      <div class="settings-section">
+        <h2 class="section-title">PROJECT SETTINGS</h2>
+        <p class="section-description">Configure how this project will be created. These settings apply only to this project.</p>
+        
+        <div class="settings-card">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">
+                <mat-icon class="setting-icon">auto_stories</mat-icon>
+                Enable User Stories
+              </div>
+              <div class="setting-description">Generate user stories for each feature. Disable to create features directly.</div>
+            </div>
+            <mat-slide-toggle
+              [checked]="projectSettings().workflow.enableStories"
+              (change)="onStoriesEnabledChange($event.checked)"
+              color="primary">
+            </mat-slide-toggle>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">
+                <mat-icon class="setting-icon">web</mat-icon>
+                Enable Wireframes
+              </div>
+              <div class="setting-description">Generate wireframe previews for project pages after creation.</div>
+            </div>
+            <mat-slide-toggle
+              [checked]="projectSettings().workflow.enableWireframes"
+              (change)="onWireframesEnabledChange($event.checked)"
+              color="primary">
+            </mat-slide-toggle>
+          </div>
+        </div>
+        
+        @if (projectSettings().workflow.enableStories) {
+          <div class="settings-card">
+            <h3 class="card-title">Story Settings</h3>
+            
+            <div class="setting-row slider-row">
+              <div class="setting-info">
+                <div class="setting-label">Stories per Feature</div>
+                <div class="setting-description">Number of user stories to generate for each feature</div>
+              </div>
+              <div class="slider-control">
+                <span class="slider-value">{{ projectSettings().stories.perFeature }}</span>
+                <input 
+                  type="range" 
+                  class="custom-slider"
+                  [min]="projectSettings().stories.minPerFeature"
+                  [max]="projectSettings().stories.maxPerFeature"
+                  [value]="projectSettings().stories.perFeature"
+                  (input)="onStoriesPerFeatureChange($any($event.target).valueAsNumber)">
+              </div>
+            </div>
+          </div>
+        }
+        
+        <div class="settings-card">
+          <h3 class="card-title">Feature Settings</h3>
+          
+          <div class="setting-row slider-row">
+            <div class="setting-info">
+              <div class="setting-label">Features per Batch</div>
+              <div class="setting-description">Number of features to generate per batch</div>
+            </div>
+            <div class="slider-control">
+              <span class="slider-value">{{ projectSettings().features.defaultCount }}</span>
+              <input 
+                type="range" 
+                class="custom-slider"
+                [min]="projectSettings().features.minCount"
+                [max]="projectSettings().features.maxCount"
+                [value]="projectSettings().features.defaultCount"
+                (input)="onFeatureCountChange($any($event.target).valueAsNumber)">
+            </div>
+          </div>
+        </div>
+        
+        <!-- Advanced Settings Toggle -->
+        <button class="advanced-toggle" (click)="toggleAdvancedSettings()">
+          <mat-icon>{{ showAdvancedSettings() ? 'expand_less' : 'expand_more' }}</mat-icon>
+          {{ showAdvancedSettings() ? 'Hide' : 'Show' }} Advanced Field Settings
+        </button>
+        
+        @if (showAdvancedSettings()) {
+          <div class="advanced-settings">
+            @if (projectSettings().workflow.enableStories) {
+              <div class="settings-card">
+                <div class="card-header-row">
+                  <div>
+                    <h3 class="card-title">Story Fields</h3>
+                    <p class="card-description">Select which fields to include when generating stories</p>
+                  </div>
+                  <button class="add-field-btn" (click)="toggleAddStoryFieldForm()">
+                    <mat-icon>{{ showAddStoryFieldForm() ? 'close' : 'add' }}</mat-icon>
+                    {{ showAddStoryFieldForm() ? 'Cancel' : 'Add Custom Field' }}
+                  </button>
+                </div>
+                
+                @if (showAddStoryFieldForm()) {
+                  <div class="add-field-form">
+                    <h4 class="form-title">Add Custom Field</h4>
+                    <div class="form-row">
+                      <div class="form-field">
+                        <label class="form-label">Field Name *</label>
+                        <input 
+                          type="text" 
+                          class="form-input"
+                          [value]="newStoryFieldName()"
+                          (input)="newStoryFieldName.set($any($event.target).value)"
+                          placeholder="Enter field name">
+                      </div>
+                      <div class="form-field">
+                        <label class="form-label">Field Type</label>
+                        <select 
+                          class="form-select"
+                          [value]="newStoryFieldType()"
+                          (change)="newStoryFieldType.set($any($event.target).value)">
+                          @for (typeConfig of fieldTypeConfig; track typeConfig.type) {
+                            <option [value]="typeConfig.type">{{ typeConfig.label }}</option>
+                          }
+                        </select>
+                      </div>
+                    </div>
+                    <div class="form-field">
+                      <label class="form-label">Description</label>
+                      <input 
+                        type="text" 
+                        class="form-input"
+                        [value]="newStoryFieldDescription()"
+                        (input)="newStoryFieldDescription.set($any($event.target).value)"
+                        placeholder="Enter field description">
+                    </div>
+                    <div class="form-checkbox">
+                      <input 
+                        type="checkbox" 
+                        id="storyFieldRequired"
+                        [checked]="newStoryFieldRequired()"
+                        (change)="newStoryFieldRequired.set($any($event.target).checked)">
+                      <label for="storyFieldRequired">Required field</label>
+                    </div>
+                    <div class="form-actions">
+                      <button class="cancel-btn" (click)="toggleAddStoryFieldForm()">Cancel</button>
+                      <button 
+                        class="add-btn" 
+                        (click)="addCustomStoryField()"
+                        [disabled]="!newStoryFieldName().trim()">
+                        <mat-icon>add</mat-icon>
+                        Add Field
+                      </button>
+                    </div>
+                  </div>
+                }
+                
+                @if (customStoryFields.length > 0) {
+                  <div class="custom-fields-list">
+                    <h4 class="list-title">Custom Fields</h4>
+                    @for (field of customStoryFields; track field.id) {
+                      <div class="custom-field-item">
+                        <div class="field-info">
+                          <mat-icon class="field-icon">text_fields</mat-icon>
+                          <div>
+                            <span class="field-name">{{ field.name }}</span>
+                            <span class="field-type-badge">{{ field.type }}</span>
+                            @if (field.required) {
+                              <span class="required-badge">Required</span>
+                            }
+                          </div>
+                        </div>
+                        <button class="remove-btn" (click)="removeCustomStoryField(field.id)">
+                          <mat-icon>delete</mat-icon>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                }
+                
+                <div class="fields-grid">
+                  @for (field of storyFields; track field.id) {
+                    <div class="field-toggle">
+                      <mat-slide-toggle
+                        [checked]="field.enabled"
+                        (change)="onStoryFieldChange(field.key, $event.checked)"
+                        color="primary">
+                        <span class="field-label">{{ field.name }}</span>
+                      </mat-slide-toggle>
+                      <span class="field-description">{{ field.description }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            
+            <div class="settings-card">
+              <div class="card-header-row">
+                <div>
+                  <h3 class="card-title">Feature Fields</h3>
+                  <p class="card-description">Select which fields to include when generating features</p>
+                </div>
+                <button class="add-field-btn" (click)="toggleAddFeatureFieldForm()">
+                  <mat-icon>{{ showAddFeatureFieldForm() ? 'close' : 'add' }}</mat-icon>
+                  {{ showAddFeatureFieldForm() ? 'Cancel' : 'Add Custom Field' }}
+                </button>
+              </div>
+              
+              @if (showAddFeatureFieldForm()) {
+                <div class="add-field-form">
+                  <h4 class="form-title">Add Custom Field</h4>
+                  <div class="form-row">
+                    <div class="form-field">
+                      <label class="form-label">Field Name *</label>
+                      <input 
+                        type="text" 
+                        class="form-input"
+                        [value]="newFeatureFieldName()"
+                        (input)="newFeatureFieldName.set($any($event.target).value)"
+                        placeholder="Enter field name">
+                    </div>
+                    <div class="form-field">
+                      <label class="form-label">Field Type</label>
+                      <select 
+                        class="form-select"
+                        [value]="newFeatureFieldType()"
+                        (change)="newFeatureFieldType.set($any($event.target).value)">
+                        @for (typeConfig of fieldTypeConfig; track typeConfig.type) {
+                          <option [value]="typeConfig.type">{{ typeConfig.label }}</option>
+                        }
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-field">
+                    <label class="form-label">Description</label>
+                    <input 
+                      type="text" 
+                      class="form-input"
+                      [value]="newFeatureFieldDescription()"
+                      (input)="newFeatureFieldDescription.set($any($event.target).value)"
+                      placeholder="Enter field description">
+                  </div>
+                  <div class="form-checkbox">
+                    <input 
+                      type="checkbox" 
+                      id="featureFieldRequired"
+                      [checked]="newFeatureFieldRequired()"
+                      (change)="newFeatureFieldRequired.set($any($event.target).checked)">
+                    <label for="featureFieldRequired">Required field</label>
+                  </div>
+                  <div class="form-actions">
+                    <button class="cancel-btn" (click)="toggleAddFeatureFieldForm()">Cancel</button>
+                    <button 
+                      class="add-btn" 
+                      (click)="addCustomFeatureField()"
+                      [disabled]="!newFeatureFieldName().trim()">
+                      <mat-icon>add</mat-icon>
+                      Add Field
+                    </button>
+                  </div>
+                </div>
+              }
+              
+              @if (customFeatureFields.length > 0) {
+                <div class="custom-fields-list">
+                  <h4 class="list-title">Custom Fields</h4>
+                  @for (field of customFeatureFields; track field.id) {
+                    <div class="custom-field-item">
+                      <div class="field-info">
+                        <mat-icon class="field-icon">text_fields</mat-icon>
+                        <div>
+                          <span class="field-name">{{ field.name }}</span>
+                          <span class="field-type-badge">{{ field.type }}</span>
+                          @if (field.required) {
+                            <span class="required-badge">Required</span>
+                          }
+                        </div>
+                      </div>
+                      <button class="remove-btn" (click)="removeCustomFeatureField(field.id)">
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    </div>
+                  }
+                </div>
+              }
+              
+              <div class="fields-grid">
+                @for (field of featureFields; track field.id) {
+                  <div class="field-toggle">
+                    <mat-slide-toggle
+                      [checked]="field.enabled"
+                      (change)="onFeatureFieldChange(field.key, $event.checked)"
+                      color="primary">
+                      <span class="field-label">{{ field.name }}</span>
+                    </mat-slide-toggle>
+                    <span class="field-description">{{ field.description }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        }
+        
+        <div class="settings-actions">
+          <button class="use-defaults-button" (click)="useDefaultSettings()">
+            <mat-icon>restore</mat-icon>
+            Use Default Settings
+          </button>
+        </div>
+      </div>
+    }
+    
+    @if (currentStep() === 4) {
       <div class="ai-assist-section">
         <h2 class="section-title">AI-ASSISTED BRIEF</h2>
         <p class="section-description">Use AI prompts to refine your executive summary, epic ideas, and risk register before the build kicks off.</p>
@@ -392,7 +704,7 @@
       </div>
     }
     
-    @if (currentStep() === 4) {
+    @if (currentStep() === 5) {
       <div class="features-section">
         <div class="features-header">
           <div class="header-left">
@@ -502,7 +814,7 @@
       </div>
     }
     
-    @if (currentStep() === 5) {
+    @if (currentStep() === 6) {
       <div class="stories-section">
         <div class="stories-header">
           <div class="header-left">
@@ -621,7 +933,16 @@
         [disabled]="currentStep() === 1">
         Previous
       </button>
-      @if (currentStep() === 5) {
+      @if (currentStep() === lastStepNumber) {
+        <button 
+          mat-raised-button 
+          class="finish-button" 
+          (click)="finishProject()">
+          <mat-icon>check_circle</mat-icon>
+          Create Project
+        </button>
+      } @else if (currentStep() === 5 && !projectSettings().workflow.enableStories) {
+        <!-- If on features step and stories disabled, show Create Project button -->
         <button 
           mat-raised-button 
           class="finish-button" 
@@ -634,11 +955,11 @@
           mat-raised-button 
           class="next-button" 
           (click)="nextStep()"
-          [disabled]="currentStep() === 3 && !projectData.executiveSummary"
-          [matTooltip]="currentStep() === 3 && !projectData.executiveSummary ? 'Generate Project Summary to continue' : ''"
+          [disabled]="currentStep() === 4 && !projectData.executiveSummary"
+          [matTooltip]="currentStep() === 4 && !projectData.executiveSummary ? 'Generate Project Summary to continue' : ''"
           matTooltipPosition="above"
           matTooltipShowDelay="300"
-          [matTooltipDisabled]="!(currentStep() === 3 && !projectData.executiveSummary)">
+          [matTooltipDisabled]="!(currentStep() === 4 && !projectData.executiveSummary)">
           Next
         </button>
       }

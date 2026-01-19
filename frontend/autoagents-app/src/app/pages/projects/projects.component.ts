@@ -3,9 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatDivider } from '@angular/material/divider';
 import { NavigationService } from '../../services/navigation.service';
 import { ProjectStateService } from '../../services/project-state.service';
 import { CreateProjectModalComponent } from '../../components/create-project-modal/create-project-modal.component';
+import { ProjectSettings, getDefaultSettings } from '../../models/settings.model';
 
 interface Project {
   id: string;
@@ -16,12 +19,13 @@ interface Project {
   lastUpdated: string;
   features: number;
   stories: number;
+  settings?: ProjectSettings;
 }
 
 @Component({
   selector: 'app-projects',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatIconModule],
+  imports: [CommonModule, FormsModule, MatIconModule, MatMenuModule, MatDivider],
   template: `
     <div class="projects-container">
       <header class="page-header">
@@ -102,9 +106,28 @@ interface Project {
 
               <div class="card-footer">
                 <span class="last-updated">Updated {{ project.lastUpdated }}</span>
-                <button class="btn-icon" (click)="openProjectMenu($event, project)">
+                <button class="btn-icon" [matMenuTriggerFor]="projectMenu" (click)="$event.stopPropagation()">
                   <mat-icon>more_vert</mat-icon>
                 </button>
+                <mat-menu #projectMenu="matMenu" class="project-menu">
+                  <button mat-menu-item (click)="openProject(project)">
+                    <mat-icon>open_in_new</mat-icon>
+                    <span>Open Project</span>
+                  </button>
+                  <button mat-menu-item (click)="openProjectSettings(project)">
+                    <mat-icon>settings</mat-icon>
+                    <span>Settings</span>
+                  </button>
+                  <button mat-menu-item (click)="duplicateProject(project)">
+                    <mat-icon>content_copy</mat-icon>
+                    <span>Duplicate</span>
+                  </button>
+                  <mat-divider></mat-divider>
+                  <button mat-menu-item class="delete-item" (click)="deleteProject(project)">
+                    <mat-icon>delete</mat-icon>
+                    <span>Delete</span>
+                  </button>
+                </mat-menu>
               </div>
             </div>
           }
@@ -467,6 +490,23 @@ interface Project {
         grid-template-columns: 1fr;
       }
     }
+
+    ::ng-deep .project-menu {
+      .mat-mdc-menu-item {
+        mat-icon {
+          margin-right: 12px;
+          color: var(--color-text-secondary);
+        }
+      }
+      
+      .delete-item {
+        color: var(--color-accent-error, #ef4444);
+        
+        mat-icon {
+          color: var(--color-accent-error, #ef4444);
+        }
+      }
+    }
   `]
 })
 export class ProjectsComponent implements OnInit {
@@ -588,16 +628,20 @@ export class ProjectsComponent implements OnInit {
       if (projectData) {
         console.log('[ProjectsComponent] Project created:', projectData);
         
+        // Generate unique project ID
+        const projectId = Date.now().toString();
+        
         // Create new project from the returned data
         const newProject: Project = {
-          id: Date.now().toString(),
+          id: projectId,
           name: projectData.projectName,
           key: projectData.projectKey,
           status: 'active',
           progress: 0,
           lastUpdated: 'Just now',
           features: projectData.features?.length || 0,
-          stories: projectData.stories?.length || 0
+          stories: projectData.stories?.length || 0,
+          settings: projectData.settings
         };
 
         // Add to projects list
@@ -617,10 +661,10 @@ export class ProjectsComponent implements OnInit {
         this.projectStateService.setCurrentProject(projectData);
         console.log('[ProjectsComponent] ✅ Project saved to state service');
         
-        // Navigate to workspace
-        console.log('[ProjectsComponent] 🚀 Navigating to workspace...');
-        console.log('[ProjectsComponent] 📍 Target route: /workspace');
-        this.navService.navigate('/workspace');
+        // Navigate to project settings page to configure the project
+        console.log('[ProjectsComponent] 🚀 Navigating to project settings...');
+        console.log('[ProjectsComponent] 📍 Target route: /projects/' + projectId + '/settings');
+        this.navService.navigate(`/projects/${projectId}/settings`);
         console.log('[ProjectsComponent] ✅ Navigation triggered');
       }
     });
@@ -634,6 +678,68 @@ export class ProjectsComponent implements OnInit {
   openProjectMenu(event: Event, project: Project): void {
     event.stopPropagation();
     console.log('[ProjectsComponent] Opening project menu for:', project.name);
-    // TODO: Implement project menu
+  }
+
+  openProjectSettings(project: Project): void {
+    console.log('[ProjectsComponent] Opening settings for:', project.name);
+    
+    // Create a minimal project data object to pass to the settings page
+    const projectData = {
+      projectName: project.name,
+      projectKey: project.key,
+      industry: '',
+      teamSize: '',
+      executiveSummary: '',
+      promptSummary: '',
+      finalPrompt: '',
+      features: [],
+      stories: [],
+      epicIdeas: [],
+      riskHighlights: [],
+      generatedRisks: '',
+      settings: project.settings || getDefaultSettings()
+    };
+    
+    // Save to state service
+    this.projectStateService.setCurrentProject(projectData);
+    
+    // Navigate to the project settings page
+    this.navService.navigate(`/projects/${project.id}/settings`);
+  }
+
+  duplicateProject(project: Project): void {
+    console.log('[ProjectsComponent] Duplicating project:', project.name);
+    
+    const newProject: Project = {
+      id: Date.now().toString(),
+      name: `${project.name} (Copy)`,
+      key: `${project.key}2`,
+      status: 'active',
+      progress: 0,
+      lastUpdated: 'Just now',
+      features: project.features,
+      stories: project.stories,
+      settings: project.settings ? JSON.parse(JSON.stringify(project.settings)) : undefined
+    };
+    
+    const updatedProjects = [...this.projects(), newProject];
+    this.projects.set(updatedProjects);
+    this.updateFilteredProjects();
+    this.navService.updateBadge('projects', updatedProjects.length);
+    
+    console.log('[ProjectsComponent] Project duplicated successfully');
+  }
+
+  deleteProject(project: Project): void {
+    console.log('[ProjectsComponent] Deleting project:', project.name);
+    
+    if (confirm(`Are you sure you want to delete "${project.name}"?`)) {
+      const updatedProjects = this.projects().filter(p => p.id !== project.id);
+      this.projects.set(updatedProjects);
+      this.updateFilteredProjects();
+      this.navService.updateBadge('projects', updatedProjects.length);
+      
+      console.log('[ProjectsComponent] Project deleted successfully');
+    }
   }
 }

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Coding Agent - Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #0a0a0a; color: #e0e0e0; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #output { margin-top: 20px; border: 1px solid #333; padding: 10px; min-height: 200px; }
+        .event { margin: 5px 0; padding: 5px; background: #1a1a1a; border-left: 3px solid #667eea; }
+    </style>
+</head>
+<body>
+    <h1>🤖 AI Coding Agent - Simple Test</h1>
+    
+    <button onclick="testBackend()">Test Backend Connection</button>
+    <button onclick="testRun()">Run Simple Task</button>
+    
+    <div id="output"></div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(msg) {
+            output.innerHTML += `<div class="event">${new Date().toLocaleTimeString()}: ${msg}</div>`;
+        }
+        
+        async function testBackend() {
+            output.innerHTML = '';
+            log('Testing backend connection...');
+            
+            try {
+                const response = await fetch('http://localhost:8000/');
+                const data = await response.json();
+                log(`✅ Backend responding: ${JSON.stringify(data)}`);
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+            }
+        }
+        
+        async function testRun() {
+            output.innerHTML = '';
+            log('Starting agent run...');
+            
+            // Connect WebSocket
+            const clientId = 'test-' + Date.now();
+            const ws = new WebSocket(`ws://localhost:8000/ws/${clientId}`);
+            
+            ws.onopen = () => {
+                log('✅ WebSocket connected');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                log(`📨 Event: ${data.type} from ${data.source}`);
+            };
+            
+            ws.onerror = (error) => {
+                log(`❌ WebSocket error: ${error}`);
+            };
+            
+            // Start agent
+            try {
+                const response = await fetch('http://localhost:8000/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: 'Create a Python file called test.py that prints Hello',
+                        max_iterations: 5
+                    })
+                });
+                
+                const result = await response.json();
+                log(`✅ Agent completed: ${JSON.stringify(result)}`);
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
