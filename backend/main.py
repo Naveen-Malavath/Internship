@@ -37,6 +37,19 @@ app.add_middleware(
 # Initialize Anthropic client
 anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
+# ============================================================================
+# STARTUP CLEANUP - Clean orphaned containers on server start
+# ============================================================================
+@app.on_event("startup")
+async def startup_cleanup():
+    """Clean up orphaned Docker containers and reset ports on server startup"""
+    print("\n" + "="*60)
+    print("[STARTUP] AutoAgents API Starting...")
+    print("[STARTUP] Running cleanup for orphaned containers...")
+    code_executor._cleanup_old_apps()
+    print("[STARTUP] Cleanup complete. Server ready.")
+    print("="*60 + "\n")
+
 # Model configurations
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 SONNET_MODEL = "claude-sonnet-4-20250514"
@@ -3827,6 +3840,83 @@ async def stop_application(request: StopAppRequest):
     except Exception as e:
         print(f"[BACKEND ERROR] Stop failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/cleanup-all-apps")
+async def cleanup_all_apps():
+    """Clean up ALL orphaned Docker containers and reset port allocations"""
+    try:
+        print("[CLEANUP-ALL] Starting full cleanup...")
+        code_executor._cleanup_old_apps()
+        return {
+            "status": "success",
+            "message": "All orphaned containers cleaned up and ports reset",
+            "used_ports": code_executor.used_ports
+        }
+    except Exception as e:
+        print(f"[CLEANUP-ALL ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/docker-status")
+async def get_docker_status():
+    """Get current Docker container status and port allocations"""
+    import subprocess
+    
+    try:
+        # Get running containers
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        containers = []
+        if result.returncode == 0 and result.stdout.strip():
+            for line in result.stdout.strip().split('\n'):
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    containers.append({
+                        "name": parts[0],
+                        "status": parts[1],
+                        "ports": parts[2] if len(parts) > 2 else ""
+                    })
+        
+        # Get memory usage
+        mem_result = subprocess.run(
+            ["free", "-h"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        memory_info = {}
+        if mem_result.returncode == 0:
+            lines = mem_result.stdout.strip().split('\n')
+            if len(lines) >= 2:
+                parts = lines[1].split()
+                if len(parts) >= 3:
+                    memory_info = {
+                        "total": parts[1],
+                        "used": parts[2],
+                        "free": parts[3] if len(parts) > 3 else "N/A"
+                    }
+        
+        return {
+            "status": "ok",
+            "running_containers": containers,
+            "container_count": len(containers),
+            "allocated_ports": code_executor.used_ports,
+            "memory": memory_info
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "allocated_ports": code_executor.used_ports
+        }
 
 
 # ============================================================================

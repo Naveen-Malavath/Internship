@@ -35,20 +35,49 @@ class CodeExecutor:
             if result.returncode == 0:
                 containers = result.stdout.strip().split('\n')
                 # Filter for generated app containers (exclude main app containers)
-                generated_containers = [c for c in containers if c and '_2025' in c and 'autoagents-' not in c]
+                # Match patterns like: project_name_20251224_013230_backend
+                generated_containers = []
+                for c in containers:
+                    if c and 'autoagents-' not in c:
+                        # Match containers with timestamp pattern _YYYYMMDD_
+                        import re
+                        if re.search(r'_20\d{6}_\d{6}', c):
+                            generated_containers.append(c)
                 
                 if generated_containers:
-                    print(f"[CLEANUP] Found {len(generated_containers)} old containers to remove")
+                    print(f"[CLEANUP] Found {len(generated_containers)} old containers to remove:")
+                    for container in generated_containers:
+                        print(f"[CLEANUP]   - {container}")
                     # Stop and remove them
                     for container in generated_containers:
-                        subprocess.run(
-                            ["docker", "rm", "-f", container],
-                            capture_output=True,
-                            timeout=10
-                        )
+                        try:
+                            subprocess.run(
+                                ["docker", "stop", container],
+                                capture_output=True,
+                                timeout=15
+                            )
+                            subprocess.run(
+                                ["docker", "rm", "-f", container],
+                                capture_output=True,
+                                timeout=10
+                            )
+                            print(f"[CLEANUP]   ✓ Removed: {container}")
+                        except Exception as e:
+                            print(f"[CLEANUP]   ✗ Failed to remove {container}: {e}")
                     print(f"[CLEANUP] Cleaned up {len(generated_containers)} containers")
                 else:
                     print(f"[CLEANUP] No old containers found")
+            
+            # Also clean up any dangling Docker resources
+            try:
+                subprocess.run(
+                    ["docker", "system", "prune", "-f"],
+                    capture_output=True,
+                    timeout=30
+                )
+                print(f"[CLEANUP] Docker system pruned")
+            except Exception as e:
+                print(f"[CLEANUP] Prune warning: {e}")
                     
             # Clear port tracking
             self.used_ports = {}
