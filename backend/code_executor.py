@@ -422,12 +422,14 @@ networks:
                 time.sleep(wait_interval)
                 elapsed += wait_interval
             
-            preview_url = f"http://localhost:{frontend_port}"
+            # Use APP_HOST env var for production, default to localhost for dev
+            app_host = os.environ.get('APP_HOST', 'localhost')
+            preview_url = f"http://{app_host}:{frontend_port}"
             
             print(f"\n{'='*80}")
             print(f"[APP START SUCCESS] Application is ready!")
             print(f"[APP START SUCCESS] Frontend URL: {preview_url}")
-            print(f"[APP START SUCCESS] Backend URL: http://localhost:{backend_port}")
+            print(f"[APP START SUCCESS] Backend URL: http://{app_host}:{backend_port}")
             print(f"{'='*80}\n")
             
             return True, preview_url
