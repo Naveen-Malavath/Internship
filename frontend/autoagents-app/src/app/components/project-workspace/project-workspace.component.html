@@ -378,8 +378,8 @@
   </div>
 }
 
-<!-- Generated App Preview Modal -->
-@if (showAppPreview()) {
+<!-- Generated App Preview Modal - Only show when generating OR has preview URL -->
+@if (showAppPreview() && (isGeneratingCode() || appPreviewUrl())) {
   <div class="app-preview-modal">
     <div class="preview-container">
       <div class="preview-header">
