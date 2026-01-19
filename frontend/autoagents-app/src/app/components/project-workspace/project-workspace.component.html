@@ -458,10 +458,11 @@
           </div>
         </div>
       } @else {
-        <!-- DEBUG: No preview URL -->
-        <div class="debug-info" style="padding: 2rem; color: #94a3b8;">
-          <p>Debug: appPreviewUrl = {{ appPreviewUrl() || 'null' }}</p>
-          <p>Debug: isGenerating = {{ isGenerating() }}</p>
+        <!-- No preview available -->
+        <div class="no-preview-message">
+          <mat-icon>preview</mat-icon>
+          <p>No preview available</p>
+          <span>Generate and run your app to see the preview</span>
         </div>
       }
     </div>
