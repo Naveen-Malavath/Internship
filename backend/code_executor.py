@@ -317,7 +317,7 @@ networks:
             # Stop any existing containers with same name FIRST
             print(f"[APP START] Stopping existing containers for this project...")
             subprocess.run(
-                ["docker", "compose", "down", "--remove-orphans"],
+                ["docker-compose", "down", "--remove-orphans"],
                 cwd=project_path,
                 capture_output=True,
                 timeout=30
@@ -353,7 +353,7 @@ networks:
             print(f"[APP START] This may take 2-3 minutes on first run...")
             
             build_result = subprocess.run(
-                ["docker", "compose", "build", "--no-cache"],
+                ["docker-compose", "build", "--no-cache"],
                 cwd=project_path,
                 capture_output=True,
                 text=True,
@@ -370,7 +370,7 @@ networks:
             print(f"[APP START] Starting containers...")
             
             start_result = subprocess.run(
-                ["docker", "compose", "up", "-d"],
+                ["docker-compose", "up", "-d"],
                 cwd=project_path,
                 capture_output=True,
                 text=True,
@@ -409,7 +409,7 @@ networks:
                 print(f"[APP START] Checking container status... ({elapsed}/{max_wait}s)")
                 
                 ps_result = subprocess.run(
-                    ["docker", "compose", "ps", "--format", "json"],
+                    ["docker-compose", "ps"],
                     cwd=project_path,
                     capture_output=True,
                     text=True
@@ -450,7 +450,7 @@ networks:
             print(f"[APP STOP] Project path: {project_path}")
             
             result = subprocess.run(
-                ["docker", "compose", "down", "-v"],  # -v removes volumes too
+                ["docker-compose", "down", "-v"],  # -v removes volumes too
                 cwd=project_path,
                 capture_output=True,
                 text=True,
