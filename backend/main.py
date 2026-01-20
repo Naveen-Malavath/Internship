@@ -16,6 +16,31 @@ load_dotenv()
 
 app = FastAPI(title="AutoAgents API")
 
+# ============================================================================
+# DATABASE & NEW ROUTERS (Organization-based multi-tenant)
+# ============================================================================
+from database.config import init_db
+from routers import (
+    auth_router,
+    organizations_router,
+    projects_router,
+    features_router,
+    stories_router,
+    designs_router,
+    wireframes_router,
+    generated_apps_router,
+)
+
+# Include new API routers
+app.include_router(auth_router)
+app.include_router(organizations_router)
+app.include_router(projects_router)
+app.include_router(features_router)
+app.include_router(stories_router)
+app.include_router(designs_router)
+app.include_router(wireframes_router)
+app.include_router(generated_apps_router)
+
 # Initialize Code Executor
 code_executor = CodeExecutor()
 
@@ -38,13 +63,20 @@ app.add_middleware(
 anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # ============================================================================
-# STARTUP CLEANUP - Clean orphaned containers on server start
+# STARTUP - Initialize database and clean orphaned containers
 # ============================================================================
 @app.on_event("startup")
 async def startup_cleanup():
-    """Clean up orphaned Docker containers and reset ports on server startup"""
+    """Initialize database and clean up orphaned Docker containers on server startup"""
     print("\n" + "="*60)
     print("[STARTUP] AutoAgents API Starting...")
+    
+    # Initialize database
+    print("[STARTUP] Initializing database...")
+    init_db()
+    print("[STARTUP] Database initialized.")
+    
+    # Clean up orphaned containers
     print("[STARTUP] Running cleanup for orphaned containers...")
     code_executor._cleanup_old_apps()
     print("[STARTUP] Cleanup complete. Server ready.")

@@ -44,3 +44,12 @@ build/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Database
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Generated apps
+backend/generated_apps/
